@@ -1644,7 +1644,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 pData->user = L"";
                                 pData->msg = wuid + L" が入室しました。";
                                 pData->b = false; pData->i = false; pData->u = false;
-                                pData->size = 12;
+                                pData->size = 9;
                                 pData->color = RGB(128, 128, 128);
                                 PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                             }
@@ -1662,7 +1662,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 pData->user = L"";
                                 pData->msg = wuid + L" が退出しました。";
                                 pData->b = false; pData->i = false; pData->u = false;
-                                pData->size = 12;
+                                pData->size = 9;
                                 pData->color = RGB(128, 128, 128);
                                 PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                             }
