@@ -2129,6 +2129,16 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             bool isPrivate = false;
             if (ShowCreateRoomDialog(hWnd, newRoom, isPrivate)) { 
                 SendLeaveRequest(g_currentRoom);
+                
+                // Close video windows and stop webcam on room change
+                g_isWebcamActive = false;
+                for (auto& pair : g_videoWindows) {
+                    if (pair.second && IsWindow(pair.second)) {
+                        SendMessage(pair.second, WM_CLOSE, 0, 0);
+                    }
+                }
+                g_videoWindows.clear();
+
                 SendJoinRequest(newRoom);
                 g_currentRoom = newRoom;
                 g_isPrivateRoom = isPrivate;
@@ -2163,6 +2173,16 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             std::wstring newRoom;
             if (ShowMoveRoomDialog(hWnd, newRoom)) { 
                 SendLeaveRequest(g_currentRoom);
+                
+                // Close video windows and stop webcam on room change
+                g_isWebcamActive = false;
+                for (auto& pair : g_videoWindows) {
+                    if (pair.second && IsWindow(pair.second)) {
+                        SendMessage(pair.second, WM_CLOSE, 0, 0);
+                    }
+                }
+                g_videoWindows.clear();
+
                 SendJoinRequest(newRoom);
                 g_currentRoom = newRoom;
                 g_isPrivateRoom = false;
