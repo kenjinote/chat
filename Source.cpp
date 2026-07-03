@@ -1391,6 +1391,16 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             DecodeJPEG(completeJpeg, wname);
                             g_videoBuffers[wname].clear();
                         }
+                        
+                        // Cleanup old incomplete frames
+                        DWORD now = GetTickCount();
+                        for (auto it = g_videoBuffers[wname].begin(); it != g_videoBuffers[wname].end(); ) {
+                            if (now - it->second.lastUpdate > 2000) {
+                                it = g_videoBuffers[wname].erase(it);
+                            } else {
+                                ++it;
+                            }
+                        }
                     }
                     else if (mhdr->payloadType == 3) {
                         std::wstring viewer = mhdr->username;
@@ -1729,6 +1739,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         localAddr.sin_port = htons(0); // Auto-assign UDP port
         localAddr.sin_addr.s_addr = INADDR_ANY;
         bind(g_sock, (sockaddr*)&localAddr, sizeof(localAddr));
+        int rcvBufSize = 2097152;
+        setsockopt(g_sock, SOL_SOCKET, SO_RCVBUF, (char*)&rcvBufSize, sizeof(rcvBufSize));
 
         g_tcpSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         sockaddr_in serverAddr = { 0 };
