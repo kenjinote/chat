@@ -47,6 +47,9 @@ SOCKET g_tcpSocket = INVALID_SOCKET;
 std::string g_serverIp = "0.0.0.0";
 uint32_t g_sessionId = 0;
 std::wstring g_username;
+int g_dpi = 96;
+inline int Scale(int x) { return MulDiv(x, g_dpi, 96); }
+
 HFONT g_hFont;
 std::set<std::wstring> g_users;
 std::set<std::wstring> g_publicRooms;
@@ -1023,14 +1026,14 @@ LRESULT CALLBACK CreateRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
     switch (msg) {
     case WM_CREATE: {
         hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-            10, 10, 260, 24, hWnd, 0, GetModuleHandle(0), 0);
+            Scale(10), Scale(10), Scale(260), Scale(24), hWnd, 0, GetModuleHandle(0), 0);
         hChk = CreateWindow(L"BUTTON", L"\x975E\x516C\x958B", 
             WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-            10, 45, 80, 24, hWnd, (HMENU)3, GetModuleHandle(0), 0);
+            Scale(10), Scale(45), Scale(80), Scale(24), hWnd, (HMENU)3, GetModuleHandle(0), 0);
         hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
-            100, 45, 80, 24, hWnd, (HMENU)1, GetModuleHandle(0), 0);
+            Scale(100), Scale(45), Scale(80), Scale(24), hWnd, (HMENU)1, GetModuleHandle(0), 0);
         hBtnCancel = CreateWindow(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            190, 45, 80, 24, hWnd, (HMENU)2, GetModuleHandle(0), 0);
+            Scale(190), Scale(45), Scale(80), Scale(24), hWnd, (HMENU)2, GetModuleHandle(0), 0);
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
         SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hChk, WM_SETFONT, (WPARAM)hFont, FALSE);
@@ -1069,14 +1072,9 @@ bool ShowCreateRoomDialog(HWND hParent, std::wstring& outResult, bool& outPrivat
     g_createBoxResult = L"";
     g_createBoxPrivate = false;
 
-    RECT parentRect;
-    GetWindowRect(hParent, &parentRect);
-    int x = parentRect.left + (parentRect.right - parentRect.left - 300) / 2;
-    int y = parentRect.top + (parentRect.bottom - parentRect.top - 115) / 2;
-
     HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"CreateRoomClass", L"\x65B0\x3057\x3044\x90E8\x5C4B\x306E\x540D\x524D\x3092\x5165\x529B",
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-        x, y, 300, 115, hParent, 0, GetModuleHandle(0), 0);
+        CW_USEDEFAULT, CW_USEDEFAULT, Scale(300), Scale(120), hParent, 0, GetModuleHandle(0), 0);
     
     EnableWindow(hParent, FALSE);
     
@@ -1105,13 +1103,13 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     switch (msg) {
     case WM_CREATE: {
         hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-            10, 10, 260, 24, hWnd, (HMENU)101, GetModuleHandle(0), 0);
+            Scale(10), Scale(10), Scale(260), Scale(24), hWnd, (HMENU)101, GetModuleHandle(0), 0);
         hList = CreateWindowEx(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_NOTIFY | LBS_HASSTRINGS,
-            10, 40, 260, 150, hWnd, (HMENU)102, GetModuleHandle(0), 0);
+            Scale(10), Scale(40), Scale(260), Scale(100), hWnd, (HMENU)102, GetModuleHandle(0), 0);
         hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
-            100, 200, 80, 24, hWnd, (HMENU)1, GetModuleHandle(0), 0);
+            Scale(100), Scale(145), Scale(80), Scale(24), hWnd, (HMENU)1, GetModuleHandle(0), 0);
         hBtnCancel = CreateWindow(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            190, 200, 80, 24, hWnd, (HMENU)2, GetModuleHandle(0), 0);
+            Scale(190), Scale(145), Scale(80), Scale(24), hWnd, (HMENU)2, GetModuleHandle(0), 0);
         
         for (const auto& r : g_publicRooms) {
             SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)r.c_str());
@@ -1179,14 +1177,9 @@ bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult) {
     g_moveBoxOK = false;
     g_moveBoxResult = L"";
 
-    RECT parentRect;
-    GetWindowRect(hParent, &parentRect);
-    int x = parentRect.left + (parentRect.right - parentRect.left - 300) / 2;
-    int y = parentRect.top + (parentRect.bottom - parentRect.top - 270) / 2;
-
     HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"MoveRoomClass", L"\x79FB\x52D5\x5148\x306E\x90E8\x5C4B\x540D\x3092\x5165\x529B\x307E\x305F\x306F\x9078\x629E",
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-        x, y, 300, 270, hParent, 0, GetModuleHandle(0), 0);
+        CW_USEDEFAULT, CW_USEDEFAULT, Scale(300), Scale(220), hParent, 0, GetModuleHandle(0), 0);
     
     EnableWindow(hParent, FALSE);
     
@@ -1692,7 +1685,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             g_isWebcamActive = true;
                             if (!g_videoWindows[g_username] || !IsWindow(g_videoWindows[g_username])) {
                                 HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", g_username.c_str(),
-                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 320, 240, NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_username.c_str());
+                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_username.c_str());
                                 g_videoWindows[g_username] = hVid;
                             } else {
                                 SetForegroundWindow(g_videoWindows[g_username]);
@@ -1714,7 +1707,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     if (cmd == 2 && hasStreamer) {
                         if (!g_videoWindows[clickedUser] || !IsWindow(g_videoWindows[clickedUser])) {
                             HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", clickedUser.c_str(),
-                                WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 320, 240, NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
+                                WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
                             g_videoWindows[clickedUser] = hVid;
                         } else {
                             SetForegroundWindow(g_videoWindows[clickedUser]);
@@ -1788,7 +1781,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
         g_username = L"User_" + std::to_wstring(GetTickCount() % 1000);
 
-        g_hFont = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
+        g_hFont = CreateFontW(Scale(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
             DEFAULT_PITCH | FF_DONTCARE, L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF");
 
@@ -2053,12 +2046,12 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         int width = LOWORD(lParam);
         int height = HIWORD(lParam);
         
-        int inputHeight = 40;
-        int btnWidth = 60;
-        int listWidth = 150;
-        int margin = 5;
-        int toolHeight = 24;
-        int roomBtnHeight = 30;
+        int inputHeight = Scale(40);
+        int btnWidth = Scale(60);
+        int listWidth = Scale(150);
+        int margin = Scale(5);
+        int toolHeight = Scale(24);
+        int roomBtnHeight = Scale(30);
 
         int topHeight = height - inputHeight - toolHeight - margin * 4;
         int logWidth = width - listWidth - margin * 3;
@@ -2074,14 +2067,14 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         MoveWindow(g_hBtnMoveRoom, margin * 2 + logWidth + halfList + margin, roomBtnY, halfList, roomBtnHeight, TRUE);
 
         int toolY = margin * 2 + topHeight;
-        MoveWindow(g_hBtnB, margin, toolY, 24, toolHeight, TRUE);
-        MoveWindow(g_hBtnI, margin + 28, toolY, 24, toolHeight, TRUE);
-        MoveWindow(g_hBtnU, margin + 56, toolY, 24, toolHeight, TRUE);
-        MoveWindow(g_hComboSize, margin + 84, toolY, 60, 200, TRUE);
-        MoveWindow(g_hBtnColor, margin + 148, toolY, 60, toolHeight, TRUE);
-        MoveWindow(g_hBtnVoice, margin + 215, toolY, 80, toolHeight, TRUE);
-        MoveWindow(g_hVolumeIndicator, margin + 300, toolY + 4, 60, toolHeight - 8, TRUE);
-        // MoveWindow(g_hBtnVideo, margin + 365, toolY, 80, toolHeight, TRUE); // Hidden until video is restored
+        MoveWindow(g_hBtnB, margin, toolY, Scale(24), toolHeight, TRUE);
+        MoveWindow(g_hBtnI, margin + Scale(28), toolY, Scale(24), toolHeight, TRUE);
+        MoveWindow(g_hBtnU, margin + Scale(56), toolY, Scale(24), toolHeight, TRUE);
+        MoveWindow(g_hComboSize, margin + Scale(84), toolY, Scale(60), Scale(200), TRUE);
+        MoveWindow(g_hBtnColor, margin + Scale(148), toolY, Scale(60), toolHeight, TRUE);
+        MoveWindow(g_hBtnVoice, margin + Scale(215), toolY, Scale(80), toolHeight, TRUE);
+        MoveWindow(g_hVolumeIndicator, margin + Scale(300), toolY + Scale(4), Scale(60), toolHeight - Scale(8), TRUE);
+        // MoveWindow(g_hBtnVideo, margin + Scale(365), toolY, Scale(80), toolHeight, TRUE); // Hidden until video is restored
 
         int bottomY = margin * 3 + topHeight + toolHeight;
         MoveWindow(g_hInput, margin, bottomY, width - btnWidth - margin * 3, inputHeight, TRUE);
@@ -2275,6 +2268,10 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
+    HDC hdcDpi = GetDC(NULL);
+    g_dpi = GetDeviceCaps(hdcDpi, LOGPIXELSX);
+    ReleaseDC(NULL, hdcDpi);
+
     INITCOMMONCONTROLSEX icex = { sizeof(INITCOMMONCONTROLSEX), ICC_STANDARD_CLASSES };
     InitCommonControlsEx(&icex);
     
@@ -2290,7 +2287,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     HWND hWnd = CreateWindow(
         L"Retro Chat", L"Retro Chat",
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
-        CW_USEDEFAULT, 0, 500, 400,
+        CW_USEDEFAULT, 0, Scale(500), Scale(400),
         0, 0, hInstance, 0);
         
     ShowWindow(hWnd, SW_SHOWDEFAULT);
