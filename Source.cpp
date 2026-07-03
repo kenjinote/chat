@@ -53,7 +53,7 @@ int g_dpi = 96;
 inline int Scale(int x) { return MulDiv(x, g_dpi, 96); }
 
 HFONT g_hFont;
-std::set<std::wstring> g_users;
+
 std::set<std::wstring> g_publicRooms;
 std::wstring g_currentRoom = L"\x30ED\x30D3\x30FC"; // "ロビー"
 bool g_isPrivateRoom = false;
@@ -1590,8 +1590,8 @@ LPSTR w2a(LPCWSTR lpszText) {
 }
 
 void UpdateUserList(const std::wstring& username) {
-    if (g_users.find(username) == g_users.end()) {
-        g_users.insert(username);
+    int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)username.c_str());
+    if (idx == LB_ERR) {
         SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)username.c_str());
     }
 }
@@ -1609,7 +1609,6 @@ void ClearLogAndUsers() {
     InvalidateRect(g_hLog, NULL, FALSE);
     
     SendMessage(g_hUserList, LB_RESETCONTENT, 0, 0);
-    g_users.clear();
 }
 
 void SetWindowTitle(HWND hWnd) {
@@ -1696,47 +1695,45 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 PostMessage(hWndParent, WM_REVERT_ROOM, 0, 0);
                             }
                             else if (type == "users") {
-                                g_users.clear();
                                 SendMessage(g_hUserList, LB_RESETCONTENT, 0, 0);
                                 auto arr = json["users"].array_items();
                                 for (auto& item : arr) {
                                     std::wstring wname = a2w(item.string_value().c_str());
-                                    g_users.insert(wname);
-                                    SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wname.c_str());
+                                    int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wname.c_str());
+                                    if (idx == LB_ERR) {
+                                        SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wname.c_str());
+                                    }
                                 }
                             }
                             else if (type == "join") {
                                 std::string uid = json["userId"].string_value();
                                 std::wstring wuid = a2w(uid.c_str());
-                                if (g_users.find(wuid) == g_users.end()) {
-                                    g_users.insert(wuid);
+                                int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wuid.c_str());
+                                if (idx == LB_ERR) {
                                     SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wuid.c_str());
+                                    MsgData* pData = new MsgData();
+                                    pData->user = L"";
+                                    pData->msg = wuid + L" が入室しました。";
+                                    pData->b = false; pData->i = false; pData->u = false;
+                                    pData->size = 9;
+                                    pData->color = RGB(128, 128, 128);
+                                    PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                                 }
-                                MsgData* pData = new MsgData();
-                                pData->user = L"";
-                                pData->msg = wuid + L" が入室しました。";
-                                pData->b = false; pData->i = false; pData->u = false;
-                                pData->size = 9;
-                                pData->color = RGB(128, 128, 128);
-                                PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                             }
                             else if (type == "leave") {
                                 std::string uid = json["userId"].string_value();
                                 std::wstring wuid = a2w(uid.c_str());
-                                if (g_users.find(wuid) != g_users.end()) {
-                                    g_users.erase(wuid);
-                                    int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wuid.c_str());
-                                    if (idx != LB_ERR) {
-                                        SendMessage(g_hUserList, LB_DELETESTRING, idx, 0);
-                                    }
+                                int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wuid.c_str());
+                                if (idx != LB_ERR) {
+                                    SendMessage(g_hUserList, LB_DELETESTRING, idx, 0);
+                                    MsgData* pData = new MsgData();
+                                    pData->user = L"";
+                                    pData->msg = wuid + L" が退出しました。";
+                                    pData->b = false; pData->i = false; pData->u = false;
+                                    pData->size = 9;
+                                    pData->color = RGB(128, 128, 128);
+                                    PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                                 }
-                                MsgData* pData = new MsgData();
-                                pData->user = L"";
-                                pData->msg = wuid + L" が退出しました。";
-                                pData->b = false; pData->i = false; pData->u = false;
-                                pData->size = 9;
-                                pData->color = RGB(128, 128, 128);
-                                PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                             }
                             else if (type == "announce") {
                                 std::string rmStr = json["rm"].string_value();
