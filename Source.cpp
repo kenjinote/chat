@@ -1091,9 +1091,14 @@ bool ShowChangeNameDialog(HWND hParent, std::wstring& outResult) {
     g_changeNameOK = false;
     g_changeNameResult = L"";
 
+    RECT rcParent;
+    GetWindowRect(hParent, &rcParent);
+
     HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"ChangeNameClass", L"\x540D\x524D\x306E\x5909\x66F4", // 名前の変更
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-        CW_USEDEFAULT, CW_USEDEFAULT, Scale(300), Scale(120), hParent, 0, GetModuleHandle(0), 0);
+        rcParent.left + (rcParent.right - rcParent.left - Scale(300)) / 2, 
+        rcParent.top + (rcParent.bottom - rcParent.top - Scale(120)) / 2, 
+        Scale(300), Scale(120), hParent, 0, GetModuleHandle(0), 0);
     
     EnableWindow(hParent, FALSE);
     
@@ -1163,9 +1168,14 @@ bool ShowCreateRoomDialog(HWND hParent, std::wstring& outResult, bool& outPrivat
     g_createBoxResult = L"";
     g_createBoxPrivate = false;
 
+    RECT rcParent;
+    GetWindowRect(hParent, &rcParent);
+
     HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"CreateRoomClass", L"\x65B0\x3057\x3044\x90E8\x5C4B\x306E\x540D\x524D\x3092\x5165\x529B",
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-        CW_USEDEFAULT, CW_USEDEFAULT, Scale(300), Scale(120), hParent, 0, GetModuleHandle(0), 0);
+        rcParent.left + (rcParent.right - rcParent.left - Scale(300)) / 2, 
+        rcParent.top + (rcParent.bottom - rcParent.top - Scale(120)) / 2, 
+        Scale(300), Scale(120), hParent, 0, GetModuleHandle(0), 0);
     
     EnableWindow(hParent, FALSE);
     
@@ -1268,9 +1278,14 @@ bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult) {
     g_moveBoxOK = false;
     g_moveBoxResult = L"";
 
+    RECT rcParent;
+    GetWindowRect(hParent, &rcParent);
+
     HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"MoveRoomClass", L"\x79FB\x52D5\x5148\x306E\x90E8\x5C4B\x540D\x3092\x5165\x529B\x307E\x305F\x306F\x9078\x629E",
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-        CW_USEDEFAULT, CW_USEDEFAULT, Scale(300), Scale(220), hParent, 0, GetModuleHandle(0), 0);
+        rcParent.left + (rcParent.right - rcParent.left - Scale(300)) / 2, 
+        rcParent.top + (rcParent.bottom - rcParent.top - Scale(220)) / 2, 
+        Scale(300), Scale(220), hParent, 0, GetModuleHandle(0), 0);
     
     EnableWindow(hParent, FALSE);
     
