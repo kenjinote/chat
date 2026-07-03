@@ -493,6 +493,54 @@ bool GetTextPositionFromPoint(float x, float y, int& outEntryIndex, int& outChar
     return false;
 }
 
+int GetCharType(wchar_t c) {
+    if (iswspace(c)) return 0; // Space
+    if (iswalnum(c)) return 1; // Alphanumeric
+    if (c >= 0x3041 && c <= 0x309F) return 2; // Hiragana
+    if (c >= 0x30A0 && c <= 0x30FF) return 3; // Katakana
+    if ((c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x3400 && c <= 0x4DBF)) return 4; // Kanji
+    return 5; // Symbols/Punctuation
+}
+
+void CopySelectedText(HWND hWnd) {
+    if (g_logSelection.startEntryIndex != -1 && g_logSelection.endEntryIndex != -1) {
+        int sEntry = g_logSelection.startEntryIndex;
+        int sChar = g_logSelection.startCharIndex;
+        int eEntry = g_logSelection.endEntryIndex;
+        int eChar = g_logSelection.endCharIndex;
+        if (sEntry > eEntry || (sEntry == eEntry && sChar > eChar)) {
+            std::swap(sEntry, eEntry);
+            std::swap(sChar, eChar);
+        }
+        std::wstring copyText;
+        for (int i = sEntry; i <= eEntry; ++i) {
+            if (i >= 0 && i < g_logEntries.size()) {
+                auto& entry = g_logEntries[i];
+                std::wstring fullText = entry.data.user.empty() ? entry.data.msg : (entry.data.user + L": " + entry.data.msg);
+                if (fullText.empty()) fullText = L" ";
+                int startC = (i == sEntry) ? sChar : 0;
+                int endC = (i == eEntry) ? eChar : (int)fullText.length();
+                if (startC < 0) startC = 0;
+                if (endC > (int)fullText.length()) endC = (int)fullText.length();
+                if (startC < endC) {
+                    copyText += fullText.substr(startC, endC - startC);
+                }
+                if (i < eEntry) copyText += L"\r\n";
+            }
+        }
+        if (!copyText.empty() && OpenClipboard(hWnd)) {
+            EmptyClipboard();
+            HGLOBAL hGlob = GlobalAlloc(GMEM_MOVEABLE, (copyText.length() + 1) * sizeof(WCHAR));
+            if (hGlob) {
+                memcpy(GlobalLock(hGlob), copyText.c_str(), (copyText.length() + 1) * sizeof(WCHAR));
+                GlobalUnlock(hGlob);
+                SetClipboardData(CF_UNICODETEXT, hGlob);
+            }
+            CloseClipboard();
+        }
+    }
+}
+
 LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     static ID2D1HwndRenderTarget* pRT = nullptr;
     switch (msg) {
@@ -730,42 +778,63 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     case WM_KEYDOWN: {
         if (wParam == 'C' && (GetKeyState(VK_CONTROL) & 0x8000)) {
-            if (g_logSelection.startEntryIndex != -1 && g_logSelection.endEntryIndex != -1) {
-                int sEntry = g_logSelection.startEntryIndex;
-                int sChar = g_logSelection.startCharIndex;
-                int eEntry = g_logSelection.endEntryIndex;
-                int eChar = g_logSelection.endCharIndex;
-                if (sEntry > eEntry || (sEntry == eEntry && sChar > eChar)) {
-                    std::swap(sEntry, eEntry);
-                    std::swap(sChar, eChar);
-                }
-                std::wstring copyText;
-                for (int i = sEntry; i <= eEntry; ++i) {
-                    if (i >= 0 && i < g_logEntries.size()) {
-                        auto& entry = g_logEntries[i];
-                        std::wstring fullText = entry.data.user.empty() ? entry.data.msg : (entry.data.user + L": " + entry.data.msg);
-                        if (fullText.empty()) fullText = L" ";
-                        int startC = (i == sEntry) ? sChar : 0;
-                        int endC = (i == eEntry) ? eChar : (int)fullText.length();
-                        if (startC < 0) startC = 0;
-                        if (endC > (int)fullText.length()) endC = (int)fullText.length();
-                        if (startC < endC) {
-                            copyText += fullText.substr(startC, endC - startC);
-                        }
-                        if (i < eEntry) copyText += L"\r\n";
+            CopySelectedText(hWnd);
+        }
+        return 0;
+    }
+    case WM_LBUTTONDBLCLK: {
+        float x = (float)GET_X_LPARAM(lParam) * 96.0f / g_dpi;
+        float y = (float)GET_Y_LPARAM(lParam) * 96.0f / g_dpi;
+        int entryIndex, charIndex;
+        if (GetTextPositionFromPoint(x, y, entryIndex, charIndex)) {
+            if (entryIndex >= 0 && entryIndex < g_logEntries.size()) {
+                auto& entry = g_logEntries[entryIndex];
+                std::wstring fullText = entry.data.user.empty() ? entry.data.msg : (entry.data.user + L": " + entry.data.msg);
+                if (!fullText.empty() && charIndex >= 0 && charIndex < fullText.length()) {
+                    int cType = GetCharType(fullText[charIndex]);
+                    int startC = charIndex;
+                    int endC = charIndex + 1;
+                    while (startC > 0 && GetCharType(fullText[startC - 1]) == cType) {
+                        startC--;
                     }
-                }
-                if (!copyText.empty() && OpenClipboard(hWnd)) {
-                    EmptyClipboard();
-                    HGLOBAL hGlob = GlobalAlloc(GMEM_MOVEABLE, (copyText.length() + 1) * sizeof(WCHAR));
-                    if (hGlob) {
-                        memcpy(GlobalLock(hGlob), copyText.c_str(), (copyText.length() + 1) * sizeof(WCHAR));
-                        GlobalUnlock(hGlob);
-                        SetClipboardData(CF_UNICODETEXT, hGlob);
+                    while (endC < fullText.length() && GetCharType(fullText[endC]) == cType) {
+                        endC++;
                     }
-                    CloseClipboard();
+                    g_logSelection.startEntryIndex = entryIndex;
+                    g_logSelection.startCharIndex = startC;
+                    g_logSelection.endEntryIndex = entryIndex;
+                    g_logSelection.endCharIndex = endC;
+                    g_logSelection.isSelecting = false;
+                    InvalidateRect(hWnd, NULL, FALSE);
                 }
             }
+        }
+        return 0;
+    }
+    case WM_CONTEXTMENU: {
+        bool hasSelection = (g_logSelection.startEntryIndex != -1 && g_logSelection.endEntryIndex != -1);
+        if (hasSelection && g_logSelection.startEntryIndex == g_logSelection.endEntryIndex && g_logSelection.startCharIndex == g_logSelection.endCharIndex) {
+            hasSelection = false;
+        }
+        HMENU hMenu = CreatePopupMenu();
+        AppendMenu(hMenu, MF_STRING | (hasSelection ? 0 : MF_GRAYED), 1001, L"コピー(C)");
+        int xPos = GET_X_LPARAM(lParam);
+        int yPos = GET_Y_LPARAM(lParam);
+        if (xPos == -1 && yPos == -1) {
+            RECT rc;
+            GetClientRect(hWnd, &rc);
+            POINT pt = { rc.left, rc.top };
+            ClientToScreen(hWnd, &pt);
+            xPos = pt.x;
+            yPos = pt.y;
+        }
+        TrackPopupMenu(hMenu, TPM_RIGHTBUTTON, xPos, yPos, 0, hWnd, NULL);
+        DestroyMenu(hMenu);
+        return 0;
+    }
+    case WM_COMMAND: {
+        if (LOWORD(wParam) == 1001) {
+            CopySelectedText(hWnd);
         }
         return 0;
     }
@@ -2063,6 +2132,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&g_pDWriteFactory));
         
         WNDCLASS d2dLogClass = { 0 };
+        d2dLogClass.style = CS_DBLCLKS;
         d2dLogClass.lpfnWndProc = D2DLogProc;
         d2dLogClass.hInstance = GetModuleHandle(0);
         d2dLogClass.lpszClassName = L"D2DLogViewClass";
