@@ -508,13 +508,16 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 D2D1::RenderTargetProperties(),
                 D2D1::HwndRenderTargetProperties(hWnd, size),
                 &pRT);
+            if (pRT) {
+                pRT->SetDpi((float)g_dpi, (float)g_dpi);
+            }
         }
         
         if (pRT) {
             RECT rc;
             GetClientRect(hWnd, &rc);
-            float width = (float)(rc.right - rc.left);
-            float viewH = (float)(rc.bottom - rc.top);
+            float width = (float)(rc.right - rc.left) * 96.0f / g_dpi;
+            float viewH = (float)(rc.bottom - rc.top) * 96.0f / g_dpi;
             if (width <= 0) width = 1;
             
             g_logTotalHeight = 0;
@@ -687,8 +690,8 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     case WM_LBUTTONDOWN: {
         SetFocus(hWnd);
-        float x = (float)GET_X_LPARAM(lParam);
-        float y = (float)GET_Y_LPARAM(lParam);
+        float x = (float)GET_X_LPARAM(lParam) * 96.0f / g_dpi;
+        float y = (float)GET_Y_LPARAM(lParam) * 96.0f / g_dpi;
         int entryIndex, charIndex;
         if (GetTextPositionFromPoint(x, y, entryIndex, charIndex)) {
             g_logSelection.startEntryIndex = entryIndex;
@@ -707,8 +710,8 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
     case WM_MOUSEMOVE: {
         if (g_logSelection.isSelecting) {
-            float x = (float)GET_X_LPARAM(lParam);
-            float y = (float)GET_Y_LPARAM(lParam);
+            float x = (float)GET_X_LPARAM(lParam) * 96.0f / g_dpi;
+            float y = (float)GET_Y_LPARAM(lParam) * 96.0f / g_dpi;
             int entryIndex, charIndex;
             if (GetTextPositionFromPoint(x, y, entryIndex, charIndex)) {
                 g_logSelection.endEntryIndex = entryIndex;
