@@ -1985,7 +1985,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
     case WM_MEASUREITEM: {
         LPMEASUREITEMSTRUCT lpmis = (LPMEASUREITEMSTRUCT)lParam;
         if (lpmis->CtlID == 1050) {
-            lpmis->itemHeight = 24;
+            lpmis->itemHeight = Scale(24);
             return TRUE;
         }
         break;
