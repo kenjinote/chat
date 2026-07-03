@@ -148,6 +148,27 @@ char g_waveInBuf[AUDIO_BUF_COUNT][AUDIO_BUF_SIZE];
 WAVEHDR g_waveOutHdr[AUDIO_OUT_BUF_COUNT];
 char g_waveOutBuf[AUDIO_OUT_BUF_COUNT][AUDIO_BUF_SIZE];
 
+void LoadSettings() {
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\RetroChat", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+        WCHAR buf[256] = { 0 };
+        DWORD type = REG_SZ;
+        DWORD cbData = sizeof(buf);
+        if (RegQueryValueExW(hKey, L"Username", NULL, &type, (LPBYTE)buf, &cbData) == ERROR_SUCCESS) {
+            if (wcslen(buf) > 0) g_username = buf;
+        }
+        RegCloseKey(hKey);
+    }
+}
+
+void SaveSettings() {
+    HKEY hKey;
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\RetroChat", 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
+        RegSetValueExW(hKey, L"Username", 0, REG_SZ, (const BYTE*)g_username.c_str(), (DWORD)((g_username.length() + 1) * sizeof(WCHAR)));
+        RegCloseKey(hKey);
+    }
+}
+
 #pragma pack(push, 1)
 struct MediaHeader {
     uint32_t sessionId;
@@ -1017,6 +1038,76 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 // Dialogs
 
+std::wstring g_changeNameResult;
+bool g_changeNameOK = false;
+
+LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    static HWND hEdit, hBtnOK, hBtnCancel;
+    switch (msg) {
+    case WM_CREATE: {
+        hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+            Scale(10), Scale(10), Scale(260), Scale(24), hWnd, 0, GetModuleHandle(0), 0);
+        hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
+            Scale(100), Scale(45), Scale(80), Scale(24), hWnd, (HMENU)1, GetModuleHandle(0), 0);
+        hBtnCancel = CreateWindow(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            Scale(190), Scale(45), Scale(80), Scale(24), hWnd, (HMENU)2, GetModuleHandle(0), 0);
+        HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+        SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, FALSE);
+        SendMessage(hBtnOK, WM_SETFONT, (WPARAM)hFont, FALSE);
+        SendMessage(hBtnCancel, WM_SETFONT, (WPARAM)hFont, FALSE);
+        
+        SetWindowTextW(hEdit, g_username.c_str());
+        return 0;
+    }
+    case WM_COMMAND: {
+        if (LOWORD(wParam) == 1) { // OK
+            WCHAR buf[256] = {0};
+            GetWindowTextW(hEdit, buf, 255);
+            g_changeNameResult = buf;
+            g_changeNameOK = true;
+            DestroyWindow(hWnd);
+        } else if (LOWORD(wParam) == 2) { // Cancel
+            DestroyWindow(hWnd);
+        }
+        return 0;
+    }
+    case WM_DESTROY:
+        EnableWindow(GetParent(hWnd), TRUE);
+        SetForegroundWindow(GetParent(hWnd));
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProc(hWnd, msg, wParam, lParam);
+}
+
+bool ShowChangeNameDialog(HWND hParent, std::wstring& outResult) {
+    WNDCLASS wc = { 0 };
+    wc.lpfnWndProc = ChangeNameProc;
+    wc.hInstance = GetModuleHandle(0);
+    wc.lpszClassName = L"ChangeNameClass";
+    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+    RegisterClass(&wc);
+
+    g_changeNameOK = false;
+    g_changeNameResult = L"";
+
+    HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"ChangeNameClass", L"\x540D\x524D\x306E\x5909\x66F4", // 名前の変更
+        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+        CW_USEDEFAULT, CW_USEDEFAULT, Scale(300), Scale(120), hParent, 0, GetModuleHandle(0), 0);
+    
+    EnableWindow(hParent, FALSE);
+    
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        if (!IsDialogMessage(hWnd, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
+    outResult = g_changeNameResult;
+    return g_changeNameOK;
+}
+
 std::wstring g_createBoxResult;
 bool g_createBoxPrivate = false;
 bool g_createBoxOK = false;
@@ -1672,6 +1763,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 if (clickedUser == g_username) {
                     HMENU hMenu = CreatePopupMenu();
                     AppendMenuW(hMenu, MF_STRING | (g_isWebcamActive ? MF_CHECKED : MF_UNCHECKED), 1, L"\x30D3\x30C7\x30AA\x914D\x4FE1");
+                    AppendMenuW(hMenu, MF_STRING, 3, L"\x540D\x524D\x5909\x66F4"); // 名前変更
                     ClientToScreen(hwnd, &pt);
                     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
                     DestroyMenu(hMenu);
@@ -1692,6 +1784,14 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             }
                         }
                         InvalidateRect(hwnd, NULL, FALSE);
+                    } else if (cmd == 3) {
+                        std::wstring newName;
+                        if (ShowChangeNameDialog(GetParent(hwnd), newName) && !newName.empty() && newName != g_username) {
+                            SendLeaveRequest(g_currentRoom);
+                            g_username = newName;
+                            SaveSettings();
+                            SendJoinRequest(g_currentRoom);
+                        }
                     }
                 } else {
                     bool hasStreamer = false;
@@ -1779,7 +1879,11 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             isConnected = false;
         }
 
-        g_username = L"User_" + std::to_wstring(GetTickCount() % 1000);
+        LoadSettings();
+        if (g_username.empty()) {
+            g_username = L"User_" + std::to_wstring(GetTickCount() % 1000);
+            SaveSettings();
+        }
 
         g_hFont = CreateFontW(Scale(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
@@ -1962,8 +2066,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             SendMessage(lpdis->hwndItem, LB_GETTEXT, lpdis->itemID, (LPARAM)szText);
             std::wstring user(szText);
 
-            int iconSize = 16;
-            int cx = rc.left + 6;
+            int iconSize = Scale(16);
+            int cx = rc.left + Scale(6);
             int cy = rc.top + (rc.bottom - rc.top - iconSize) / 2;
             
             Gdiplus::Graphics graphics(hdc);
@@ -1980,10 +2084,10 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
             if (isStreaming) {
                 // TV Cabinet (Wood color)
-                int tvW = iconSize + 8;
-                int tvH = iconSize + 6;
-                int tvX = cx - 2;
-                int tvY = cy - 3;
+                int tvW = iconSize + Scale(8);
+                int tvH = iconSize + Scale(6);
+                int tvX = cx - Scale(2);
+                int tvY = cy - Scale(3);
                 
                 Gdiplus::SolidBrush cabinetBrush(Gdiplus::Color(255, 139, 69, 19)); 
                 graphics.FillRectangle(&cabinetBrush, tvX, tvY, tvW, tvH);
@@ -1997,27 +2101,27 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 
                 // Screen Glass (Dark Blue-Cyan)
                 Gdiplus::SolidBrush screenBrush(Gdiplus::Color(255, 20, 30, 50));
-                graphics.FillRectangle(&screenBrush, tvX + 2, tvY + 2, iconSize, iconSize);
+                graphics.FillRectangle(&screenBrush, tvX + Scale(2), tvY + Scale(2), iconSize, iconSize);
                 
                 // Tiny Dials / Knobs
                 Gdiplus::SolidBrush knobBrush(Gdiplus::Color(255, 180, 180, 180));
-                graphics.FillEllipse(&knobBrush, tvX + iconSize + 4, tvY + 3, 3, 3);
-                graphics.FillEllipse(&knobBrush, tvX + iconSize + 4, tvY + 8, 3, 3);
+                graphics.FillEllipse(&knobBrush, tvX + iconSize + Scale(4), tvY + Scale(3), Scale(3), Scale(3));
+                graphics.FillEllipse(&knobBrush, tvX + iconSize + Scale(4), tvY + Scale(8), Scale(3), Scale(3));
                 
                 // Speaker grill
                 Gdiplus::Pen speakerPen(Gdiplus::Color(255, 80, 40, 10), 1.0f);
-                graphics.DrawLine(&speakerPen, tvX + iconSize + 4, tvY + 14, tvX + iconSize + 6, tvY + 14);
-                graphics.DrawLine(&speakerPen, tvX + iconSize + 4, tvY + 16, tvX + iconSize + 6, tvY + 16);
+                graphics.DrawLine(&speakerPen, tvX + iconSize + Scale(4), tvY + Scale(14), tvX + iconSize + Scale(6), tvY + Scale(14));
+                graphics.DrawLine(&speakerPen, tvX + iconSize + Scale(4), tvY + Scale(16), tvX + iconSize + Scale(6), tvY + Scale(16));
                 
                 // Antenna
                 Gdiplus::Pen antennaPen(Gdiplus::Color(255, 150, 150, 150), 1.5f);
-                int antBaseX = tvX + (iconSize + 2) / 2;
-                graphics.DrawLine(&antennaPen, antBaseX, tvY, antBaseX - 5, tvY - 6);
-                graphics.DrawLine(&antennaPen, antBaseX, tvY, antBaseX + 5, tvY - 6);
+                int antBaseX = tvX + (iconSize + Scale(2)) / 2;
+                graphics.DrawLine(&antennaPen, antBaseX, tvY, antBaseX - Scale(5), tvY - Scale(6));
+                graphics.DrawLine(&antennaPen, antBaseX, tvY, antBaseX + Scale(5), tvY - Scale(6));
                 
                 Gdiplus::SolidBrush antTip(Gdiplus::Color(255, 200, 200, 200));
-                graphics.FillEllipse(&antTip, antBaseX - 6, tvY - 7, 3, 3);
-                graphics.FillEllipse(&antTip, antBaseX + 4, tvY - 7, 3, 3);
+                graphics.FillEllipse(&antTip, antBaseX - Scale(6), tvY - Scale(7), Scale(3), Scale(3));
+                graphics.FillEllipse(&antTip, antBaseX + Scale(4), tvY - Scale(7), Scale(3), Scale(3));
             }
             
             Gdiplus::SolidBrush faceBrush(Gdiplus::Color(255, 255, 215, 0));
@@ -2027,14 +2131,14 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             graphics.DrawEllipse(&facePen, cx, cy, iconSize, iconSize);
             
             Gdiplus::SolidBrush eyeBrush(Gdiplus::Color(255, 0, 0, 0));
-            graphics.FillEllipse(&eyeBrush, cx + 4, cy + 4, 3, 3);
-            graphics.FillEllipse(&eyeBrush, cx + 9, cy + 4, 3, 3);
+            graphics.FillEllipse(&eyeBrush, cx + Scale(4), cy + Scale(4), Scale(3), Scale(3));
+            graphics.FillEllipse(&eyeBrush, cx + Scale(9), cy + Scale(4), Scale(3), Scale(3));
             
             Gdiplus::Pen mouthPen(Gdiplus::Color(255, 0, 0, 0), 1.5f);
-            graphics.DrawArc(&mouthPen, cx + 3, cy + 4, 10, 8, 20.0f, 140.0f);
+            graphics.DrawArc(&mouthPen, cx + Scale(3), cy + Scale(4), Scale(10), Scale(8), 20.0f, 140.0f);
             
             RECT rcText = rc;
-            rcText.left = rc.left + 34;
+            rcText.left = rc.left + Scale(34);
             DrawTextW(hdc, szText, -1, &rcText, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
             
             return TRUE;
