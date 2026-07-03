@@ -1303,6 +1303,12 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 serverUdp.sin_port = htons(4001);
                                 inet_pton(AF_INET, g_serverIp.c_str(), &serverUdp.sin_addr);
                                 sendto(g_sock, (char*)&hdr, sizeof(hdr), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+
+                                json11::Json getRoomsMsg = json11::Json::object {
+                                    {"type", "get_rooms"}
+                                };
+                                std::string getRoomsStr = getRoomsMsg.dump() + "\n";
+                                send(g_tcpSocket, getRoomsStr.c_str(), (int)getRoomsStr.length(), 0);
                             }
                             else if (type == "chat") {
                                 MsgData* pData = new MsgData();
@@ -1347,6 +1353,22 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     if (idx != LB_ERR) {
                                         SendMessage(g_hUserList, LB_DELETESTRING, idx, 0);
                                     }
+                                }
+                            }
+                            else if (type == "announce") {
+                                std::string rmStr = json["rm"].string_value();
+                                if (!rmStr.empty()) {
+                                    std::wstring wrm = a2w(rmStr.c_str());
+                                    if (g_publicRooms.find(wrm) == g_publicRooms.end()) {
+                                        g_publicRooms.insert(wrm);
+                                    }
+                                }
+                            }
+                            else if (type == "room_list") {
+                                g_publicRooms.clear();
+                                auto arr = json["rooms"].array_items();
+                                for (auto& item : arr) {
+                                    g_publicRooms.insert(a2w(item.string_value().c_str()));
                                 }
                             }
                         }
@@ -2160,21 +2182,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
     case WM_TIMER: {
         if (wParam == 1) {
-            if (!g_isPrivateRoom) {
-                LPSTR roomA_ptr = w2a(g_currentRoom.c_str());
-                json11::Json json = json11::Json::object {
-                    {"type", "announce"},
-                    {"rm", std::string(roomA_ptr)},
-                    {"pub", true}
-                };
-                std::string jsonStr = json.dump();
-                sockaddr_in addr;
-                addr.sin_family = AF_INET;
-                addr.sin_port = htons(PORT);
-                addr.sin_addr.s_addr = INADDR_BROADCAST;
-                sendto(g_sock, jsonStr.c_str(), (int)jsonStr.length(), 0, (sockaddr*)&addr, sizeof(addr));
-                GlobalFree(roomA_ptr);
-            }
+            // "announce" logic removed for scalability
             
             bool listChanged = false;
             DWORD now = GetTickCount();
