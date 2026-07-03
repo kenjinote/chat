@@ -1732,8 +1732,8 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                     if (pBitmap) {
                         float vW = (float)sz.first;
                         float vH = (float)sz.second;
-                        float wW = (float)rc.right;
-                        float wH = (float)rc.bottom;
+                        float wW = (float)rc.right * 96.0f / g_dpi;
+                        float wH = (float)rc.bottom * 96.0f / g_dpi;
                         float scale = min(wW / vW, wH / vH);
                         float drawW = vW * scale;
                         float drawH = vH * scale;
