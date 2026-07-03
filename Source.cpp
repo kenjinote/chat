@@ -11,6 +11,8 @@
 #include <imm.h>
 #include <gdiplus.h>
 #pragma comment(lib, "gdiplus.lib")
+#include <uxtheme.h>
+#pragma comment(lib, "uxtheme.lib")
 #include <vector>
 #include <string>
 #include <set>
@@ -437,6 +439,7 @@ struct LogEntry {
 std::vector<LogEntry> g_logEntries;
 float g_logScrollY = 0.0f;
 float g_logTotalHeight = 0.0f;
+bool g_autoScroll = true;
 
 std::wstring g_inputText;
 int g_caretPos = 0;
@@ -444,6 +447,51 @@ int g_anchorPos = 0;
 bool g_caretVisible = true;
 UINT_PTR g_caretTimer = 0;
 bool g_isDragging = false;
+
+struct SelectionState {
+    int startEntryIndex = -1;
+    int startCharIndex = -1;
+    int endEntryIndex = -1;
+    int endCharIndex = -1;
+    bool isSelecting = false;
+};
+SelectionState g_logSelection;
+
+bool GetTextPositionFromPoint(float x, float y, int& outEntryIndex, int& outCharIndex) {
+    float currentY = -g_logScrollY;
+    for (size_t i = 0; i < g_logEntries.size(); ++i) {
+        auto& entry = g_logEntries[i];
+        if (entry.pLayout) {
+            if (y >= currentY && y <= currentY + entry.height) {
+                outEntryIndex = (int)i;
+                BOOL isTrailingHit = FALSE;
+                BOOL isInside = FALSE;
+                DWRITE_HIT_TEST_METRICS metrics;
+                entry.pLayout->HitTestPoint(x, y - currentY, &isTrailingHit, &isInside, &metrics);
+                outCharIndex = metrics.textPosition + (isTrailingHit ? 1 : 0);
+                return true;
+            }
+            currentY += entry.height;
+        }
+    }
+    if (!g_logEntries.empty() && y > currentY) {
+        outEntryIndex = (int)g_logEntries.size() - 1;
+        auto& entry = g_logEntries[outEntryIndex];
+        if (entry.pLayout) {
+            BOOL isTrailingHit = FALSE, isInside = FALSE;
+            DWRITE_HIT_TEST_METRICS metrics;
+            entry.pLayout->HitTestPoint(9999.0f, 9999.0f, &isTrailingHit, &isInside, &metrics);
+            outCharIndex = metrics.textPosition + (isTrailingHit ? 1 : 0);
+            return true;
+        }
+    }
+    if (!g_logEntries.empty() && y < -g_logScrollY) {
+        outEntryIndex = 0;
+        outCharIndex = 0;
+        return true;
+    }
+    return false;
+}
 
 LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     static ID2D1HwndRenderTarget* pRT = nullptr;
@@ -473,17 +521,19 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             for (auto& entry : g_logEntries) {
                 if (!entry.pLayout) {
                     IDWriteTextFormat* pFormat = nullptr;
-                    DWRITE_FONT_WEIGHT weight = entry.data.b ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL;
-                    DWRITE_FONT_STYLE style = entry.data.i ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL;
-                    
                     HRESULT hr = g_pDWriteFactory->CreateTextFormat(
-                        L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF", NULL, weight, style, DWRITE_FONT_STRETCH_NORMAL,
-                        entry.data.size * 1.5f, L"ja-JP", &pFormat); // MS PGothic
+                        L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                        12.0f * 1.5f, L"ja-JP", &pFormat); // MS PGothic
                         
                     if (SUCCEEDED(hr) && pFormat) {
                         std::wstring fullText;
-                        if (entry.data.user.empty()) fullText = entry.data.msg;
-                        else fullText = entry.data.user + L": " + entry.data.msg;
+                        int msgStart = 0;
+                        if (entry.data.user.empty()) {
+                            fullText = entry.data.msg;
+                        } else {
+                            fullText = entry.data.user + L": " + entry.data.msg;
+                            msgStart = (int)entry.data.user.length() + 2;
+                        }
                         
                         if (fullText.empty()) fullText = L" ";
                         
@@ -491,9 +541,20 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                             fullText.c_str(), (UINT32)fullText.length(), pFormat, width, 10000.0f, &entry.pLayout);
                             
                         if (SUCCEEDED(hr) && entry.pLayout) {
-                            if (entry.data.u) {
-                                DWRITE_TEXT_RANGE range = {0, (UINT32)fullText.length()};
-                                entry.pLayout->SetUnderline(TRUE, range);
+                            DWRITE_TEXT_RANGE range = {(UINT32)msgStart, (UINT32)entry.data.msg.length()};
+                            
+                            if (entry.data.b) entry.pLayout->SetFontWeight(DWRITE_FONT_WEIGHT_BOLD, range);
+                            if (entry.data.i) entry.pLayout->SetFontStyle(DWRITE_FONT_STYLE_ITALIC, range);
+                            if (entry.data.u) entry.pLayout->SetUnderline(TRUE, range);
+                            
+                            entry.pLayout->SetFontSize(entry.data.size * 1.5f, range);
+                            
+                            ID2D1SolidColorBrush* pMsgBrush = nullptr;
+                            if (SUCCEEDED(pRT->CreateSolidColorBrush(
+                                D2D1::ColorF(GetRValue(entry.data.color)/255.0f, GetGValue(entry.data.color)/255.0f, GetBValue(entry.data.color)/255.0f), 
+                                &pMsgBrush)) && pMsgBrush) {
+                                entry.pLayout->SetDrawingEffect(pMsgBrush, range);
+                                pMsgBrush->Release();
                             }
                             
                             DWRITE_TEXT_METRICS metrics;
@@ -508,8 +569,16 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             
             float maxScroll = g_logTotalHeight - viewH;
             if (maxScroll < 0) maxScroll = 0;
-            if (g_logScrollY > maxScroll) g_logScrollY = maxScroll;
-            if (g_logScrollY < 0) g_logScrollY = 0;
+            
+            if (g_autoScroll) {
+                g_logScrollY = maxScroll;
+            } else {
+                if (g_logScrollY >= maxScroll - 1.0f) {
+                    g_logScrollY = maxScroll;
+                    g_autoScroll = true;
+                }
+                if (g_logScrollY < 0) g_logScrollY = 0;
+            }
 
             SCROLLINFO si = { sizeof(si) };
             si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
@@ -523,10 +592,50 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             pRT->Clear(D2D1::ColorF(D2D1::ColorF::White));
 
             float y = -g_logScrollY;
-            for (auto& entry : g_logEntries) {
+            for (size_t i = 0; i < g_logEntries.size(); ++i) {
+                auto& entry = g_logEntries[i];
                 if (entry.pLayout && y + entry.height > 0 && y < viewH) {
+                    
+                    int sEntry = g_logSelection.startEntryIndex;
+                    int sChar = g_logSelection.startCharIndex;
+                    int eEntry = g_logSelection.endEntryIndex;
+                    int eChar = g_logSelection.endCharIndex;
+                    if (sEntry != -1 && eEntry != -1) {
+                        if (sEntry > eEntry || (sEntry == eEntry && sChar > eChar)) {
+                            std::swap(sEntry, eEntry);
+                            std::swap(sChar, eChar);
+                        }
+                        if ((int)i >= sEntry && (int)i <= eEntry) {
+                            std::wstring fullText = entry.data.user.empty() ? entry.data.msg : (entry.data.user + L": " + entry.data.msg);
+                            if (fullText.empty()) fullText = L" ";
+                            int startC = ((int)i == sEntry) ? sChar : 0;
+                            int endC = ((int)i == eEntry) ? eChar : (int)fullText.length();
+                            if (startC < endC) {
+                                UINT32 actualHitTestCount = 0;
+                                entry.pLayout->HitTestTextRange(startC, endC - startC, 0, 0, nullptr, 0, &actualHitTestCount);
+                                if (actualHitTestCount > 0) {
+                                    std::vector<DWRITE_HIT_TEST_METRICS> hitMetrics(actualHitTestCount);
+                                    entry.pLayout->HitTestTextRange(startC, endC - startC, 0, 0, hitMetrics.data(), actualHitTestCount, &actualHitTestCount);
+                                    ID2D1SolidColorBrush* pBgBrush = nullptr;
+                                    if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.47f, 0.84f, 0.3f), &pBgBrush))) {
+                                        for (UINT32 j = 0; j < actualHitTestCount; ++j) {
+                                            D2D1_RECT_F rect = D2D1::RectF(
+                                                hitMetrics[j].left,
+                                                y + hitMetrics[j].top,
+                                                hitMetrics[j].left + hitMetrics[j].width,
+                                                y + hitMetrics[j].top + hitMetrics[j].height
+                                            );
+                                            pRT->FillRectangle(&rect, pBgBrush);
+                                        }
+                                        pBgBrush->Release();
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     ID2D1SolidColorBrush* pBrush = nullptr;
-                    if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(GetRValue(entry.data.color)/255.0f, GetGValue(entry.data.color)/255.0f, GetBValue(entry.data.color)/255.0f), &pBrush)) && pBrush) {
+                    if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Black), &pBrush)) && pBrush) {
                         pRT->DrawTextLayout(D2D1::Point2F(0, y), entry.pLayout, pBrush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
                         pBrush->Release();
                     }
@@ -537,6 +646,9 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             HRESULT hr = pRT->EndDraw();
             if (hr == D2DERR_RECREATE_TARGET) {
                 pRT->Release(); pRT = nullptr;
+                for (auto& entry : g_logEntries) {
+                    if (entry.pLayout) { entry.pLayout->Release(); entry.pLayout = nullptr; }
+                }
             }
         }
         EndPaint(hWnd, &ps);
@@ -562,13 +674,96 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             GetScrollInfo(hWnd, SB_VERT, &si);
             g_logScrollY = si.nTrackPos;
         }
+        g_autoScroll = false;
         InvalidateRect(hWnd, NULL, FALSE);
         return 0;
     }
     case WM_MOUSEWHEEL: {
         short delta = HIWORD(wParam);
         g_logScrollY -= (delta / 120.0f) * 40.0f;
+        g_autoScroll = false;
         InvalidateRect(hWnd, NULL, FALSE);
+        return 0;
+    }
+    case WM_LBUTTONDOWN: {
+        SetFocus(hWnd);
+        float x = (float)GET_X_LPARAM(lParam);
+        float y = (float)GET_Y_LPARAM(lParam);
+        int entryIndex, charIndex;
+        if (GetTextPositionFromPoint(x, y, entryIndex, charIndex)) {
+            g_logSelection.startEntryIndex = entryIndex;
+            g_logSelection.startCharIndex = charIndex;
+            g_logSelection.endEntryIndex = entryIndex;
+            g_logSelection.endCharIndex = charIndex;
+            g_logSelection.isSelecting = true;
+            SetCapture(hWnd);
+            InvalidateRect(hWnd, NULL, FALSE);
+        } else {
+            g_logSelection.startEntryIndex = -1;
+            g_logSelection.isSelecting = false;
+            InvalidateRect(hWnd, NULL, FALSE);
+        }
+        return 0;
+    }
+    case WM_MOUSEMOVE: {
+        if (g_logSelection.isSelecting) {
+            float x = (float)GET_X_LPARAM(lParam);
+            float y = (float)GET_Y_LPARAM(lParam);
+            int entryIndex, charIndex;
+            if (GetTextPositionFromPoint(x, y, entryIndex, charIndex)) {
+                g_logSelection.endEntryIndex = entryIndex;
+                g_logSelection.endCharIndex = charIndex;
+                InvalidateRect(hWnd, NULL, FALSE);
+            }
+        }
+        return 0;
+    }
+    case WM_LBUTTONUP: {
+        if (g_logSelection.isSelecting) {
+            g_logSelection.isSelecting = false;
+            ReleaseCapture();
+        }
+        return 0;
+    }
+    case WM_KEYDOWN: {
+        if (wParam == 'C' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+            if (g_logSelection.startEntryIndex != -1 && g_logSelection.endEntryIndex != -1) {
+                int sEntry = g_logSelection.startEntryIndex;
+                int sChar = g_logSelection.startCharIndex;
+                int eEntry = g_logSelection.endEntryIndex;
+                int eChar = g_logSelection.endCharIndex;
+                if (sEntry > eEntry || (sEntry == eEntry && sChar > eChar)) {
+                    std::swap(sEntry, eEntry);
+                    std::swap(sChar, eChar);
+                }
+                std::wstring copyText;
+                for (int i = sEntry; i <= eEntry; ++i) {
+                    if (i >= 0 && i < g_logEntries.size()) {
+                        auto& entry = g_logEntries[i];
+                        std::wstring fullText = entry.data.user.empty() ? entry.data.msg : (entry.data.user + L": " + entry.data.msg);
+                        if (fullText.empty()) fullText = L" ";
+                        int startC = (i == sEntry) ? sChar : 0;
+                        int endC = (i == eEntry) ? eChar : (int)fullText.length();
+                        if (startC < 0) startC = 0;
+                        if (endC > (int)fullText.length()) endC = (int)fullText.length();
+                        if (startC < endC) {
+                            copyText += fullText.substr(startC, endC - startC);
+                        }
+                        if (i < eEntry) copyText += L"\r\n";
+                    }
+                }
+                if (!copyText.empty() && OpenClipboard(hWnd)) {
+                    EmptyClipboard();
+                    HGLOBAL hGlob = GlobalAlloc(GMEM_MOVEABLE, (copyText.length() + 1) * sizeof(WCHAR));
+                    if (hGlob) {
+                        memcpy(GlobalLock(hGlob), copyText.c_str(), (copyText.length() + 1) * sizeof(WCHAR));
+                        GlobalUnlock(hGlob);
+                        SetClipboardData(CF_UNICODETEXT, hGlob);
+                    }
+                    CloseClipboard();
+                }
+            }
+        }
         return 0;
     }
     case WM_ERASEBKGND:
@@ -1335,6 +1530,10 @@ void ClearLogAndUsers() {
     }
     g_logEntries.clear();
     g_logScrollY = 0;
+    g_autoScroll = true;
+    g_logSelection.startEntryIndex = -1;
+    g_logSelection.endEntryIndex = -1;
+    g_logSelection.isSelecting = false;
     InvalidateRect(g_hLog, NULL, FALSE);
     
     SendMessage(g_hUserList, LB_RESETCONTENT, 0, 0);
@@ -1353,7 +1552,6 @@ void AppendLog(const MsgData& data) {
     LogEntry entry;
     entry.data = data;
     g_logEntries.push_back(entry);
-    g_logScrollY = 9999999.0f; 
     InvalidateRect(g_hLog, NULL, FALSE);
 }
 
@@ -1442,6 +1640,13 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     g_users.insert(wuid);
                                     SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wuid.c_str());
                                 }
+                                MsgData* pData = new MsgData();
+                                pData->user = L"";
+                                pData->msg = wuid + L" が入室しました。";
+                                pData->b = false; pData->i = false; pData->u = false;
+                                pData->size = 12;
+                                pData->color = RGB(128, 128, 128);
+                                PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                             }
                             else if (type == "leave") {
                                 std::string uid = json["userId"].string_value();
@@ -1453,6 +1658,13 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         SendMessage(g_hUserList, LB_DELETESTRING, idx, 0);
                                     }
                                 }
+                                MsgData* pData = new MsgData();
+                                pData->user = L"";
+                                pData->msg = wuid + L" が退出しました。";
+                                pData->b = false; pData->i = false; pData->u = false;
+                                pData->size = 12;
+                                pData->color = RGB(128, 128, 128);
+                                PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                             }
                             else if (type == "announce") {
                                 std::string rmStr = json["rm"].string_value();
@@ -1912,6 +2124,9 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         g_hUserList = CreateWindowEx(WS_EX_CLIENTEDGE, L"LISTBOX", L"",
             WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_SORT | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS,
             0, 0, 0, 0, hWnd, (HMENU)1050, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+            
+        SetWindowTheme(g_hLog, L" ", L" ");
+        SetWindowTheme(g_hUserList, L" ", L" ");
 
         g_hBtnCreateRoom = CreateWindow(L"BUTTON", L"\x90E8\x5C4B\x4F5C\x6210", 
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
