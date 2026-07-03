@@ -797,12 +797,12 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         if (hImc) {
                             COMPOSITIONFORM cf = { 0 };
                             cf.dwStyle = CFS_POINT;
-                            cf.ptCurrentPos.x = (LONG)cx;
-                            cf.ptCurrentPos.y = (LONG)cy;
+                            cf.ptCurrentPos.x = Scale((LONG)cx);
+                            cf.ptCurrentPos.y = Scale((LONG)cy);
                             ImmSetCompositionWindow(hImc, &cf);
 
                             LOGFONTW lf = { 0 };
-                            lf.lfHeight = -(LONG)(hm.height);
+                            lf.lfHeight = -Scale((LONG)(hm.height));
                             wcscpy_s(lf.lfFaceName, L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF");
                             ImmSetCompositionFontW(hImc, &lf);
 
