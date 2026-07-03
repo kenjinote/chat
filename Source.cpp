@@ -260,6 +260,10 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 const int MAX_PAYLOAD = 1000;
                 int totalFragments = (jpegData.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD;
                 g_videoSeq++;
+                LARGE_INTEGER freq;
+                QueryPerformanceFrequency(&freq);
+                long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay
+
                 for (int i = 0; i < totalFragments; i++) {
                     int offset = i * MAX_PAYLOAD;
                     int len = min(MAX_PAYLOAD, (int)jpegData.size() - offset);
@@ -280,6 +284,12 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     serverUdp.sin_port = htons(4001);
                     inet_pton(AF_INET, g_serverIp.c_str(), &serverUdp.sin_addr);
                     sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+
+                    LARGE_INTEGER start, current;
+                    QueryPerformanceCounter(&start);
+                    do {
+                        QueryPerformanceCounter(&current);
+                    } while (current.QuadPart - start.QuadPart < delay_counts);
                 }
                 DecodeJPEG(jpegData, g_username);
             }
