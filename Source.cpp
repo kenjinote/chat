@@ -85,6 +85,7 @@ uint16_t g_videoSeq = 0;
 
 std::map<std::wstring, DWORD> g_videoStreamers;
 std::map<std::wstring, DWORD> g_voiceUsers;
+std::map<std::wstring, int> g_voiceVolumes;
 std::mutex g_voiceMutex;
 std::mutex g_streamerMutex;
 std::map<std::wstring, HWND> g_videoWindows;
@@ -1785,6 +1786,19 @@ DWORD WINAPI RecvThread(LPVOID param) {
                     if (mhdr->payloadType == 1) { // Audio
                         PlayAudioFrame(udpBuf + sizeof(MediaHeader), res - sizeof(MediaHeader));
                         std::wstring wname = mhdr->username;
+                        
+                        int audioLen = res - sizeof(MediaHeader);
+                        short* samples = (short*)(udpBuf + sizeof(MediaHeader));
+                        int sampleCount = audioLen / 2;
+                        int maxAmp = 0;
+                        for (int i = 0; i < sampleCount; i++) {
+                            int amp = abs(samples[i]);
+                            if (amp > maxAmp) maxAmp = amp;
+                        }
+                        int volume = (maxAmp * 100) / 32767;
+                        volume = volume * 3;
+                        if (volume > 100) volume = 100;
+                        
                         bool newlySpeaking = false;
                         {
                             std::lock_guard<std::mutex> lock(g_voiceMutex);
@@ -1792,6 +1806,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 newlySpeaking = true;
                             }
                             g_voiceUsers[wname] = GetTickCount();
+                            g_voiceVolumes[wname] = volume;
                         }
                         if (newlySpeaking && g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
                     }
@@ -2334,7 +2349,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         SendJoinRequest(g_currentRoom);
         CreateThread(0, 0, RecvThread, hWnd, 0, 0);
         SetTimer(hWnd, 1, 3000, NULL);
-        SetTimer(hWnd, 2, 500, NULL);
+        SetTimer(hWnd, 2, 100, NULL);
 
         return 0;
     }
@@ -2615,30 +2630,61 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             graphics.DrawArc(&mouthPen, cx + Scale(3), cy + Scale(4), Scale(10), Scale(8), 20.0f, 140.0f);
             
             bool isVoicing = false;
+            int currentVolume = 0;
             {
                 std::lock_guard<std::mutex> lock(g_voiceMutex);
                 if (g_voiceUsers.count(user)) {
-                    if (GetTickCount() - g_voiceUsers[user] < 1000) isVoicing = true;
+                    if (GetTickCount() - g_voiceUsers[user] < 1000) {
+                        isVoicing = true;
+                        currentVolume = g_voiceVolumes[user];
+                    }
                 }
             }
-            if (user == g_username && g_isVoiceActive) isVoicing = true;
+            if (user == g_username && g_isVoiceActive) {
+                isVoicing = true;
+                currentVolume = g_currentMicVolume;
+            }
             if (isIgnored) isVoicing = false;
             
             RECT rcText = rc;
+            rcText.left = rc.left + Scale(34);
+            rcText.right = rc.right - Scale(20);
+            
             if (isVoicing) {
-                Gdiplus::SolidBrush micBrush(Gdiplus::Color(255, 50, 200, 50));
-                Gdiplus::Pen micPen(Gdiplus::Color(255, 50, 200, 50), 1.5f);
-                int micX = rc.left + Scale(28);
+                int micX = rc.right - Scale(16);
                 int micY = cy + Scale(6);
-                graphics.FillRectangle(&micBrush, micX - Scale(2), micY - Scale(4), Scale(4), Scale(6));
-                graphics.FillEllipse(&micBrush, micX - Scale(2), micY - Scale(6), Scale(4), Scale(4));
-                graphics.FillEllipse(&micBrush, micX - Scale(2), micY, Scale(4), Scale(4));
-                graphics.DrawArc(&micPen, micX - Scale(5), micY - Scale(2), Scale(10), Scale(8), 0.0f, 180.0f);
-                graphics.DrawLine(&micPen, micX, micY + Scale(6), micX, micY + Scale(8));
-                graphics.DrawLine(&micPen, micX - Scale(3), micY + Scale(8), micX + Scale(3), micY + Scale(8));
-                rcText.left = rc.left + Scale(46);
-            } else {
-                rcText.left = rc.left + Scale(34);
+                
+                int micBodyTop = micY - Scale(4);
+                int micBodyBottom = micY + Scale(2);
+                int micBodyHeight = micBodyBottom - micBodyTop;
+                int fillHeight = (micBodyHeight * currentVolume) / 100;
+                if (fillHeight > micBodyHeight) fillHeight = micBodyHeight;
+                
+                if (fillHeight > 0) {
+                    Gdiplus::Rect fillRect(micX - Scale(2), micBodyBottom - fillHeight, Scale(5), fillHeight);
+                    Gdiplus::Rect fullMicRect(micX - Scale(2), micBodyTop, Scale(5), micBodyHeight);
+                    
+                    Gdiplus::LinearGradientBrush linGrBrush(
+                        fullMicRect,
+                        Gdiplus::Color(255, 255, 0, 0),
+                        Gdiplus::Color(255, 0, 255, 0),
+                        Gdiplus::LinearGradientModeVertical);
+                        
+                    Gdiplus::Color colors[] = {
+                        Gdiplus::Color(255, 255, 0, 0),
+                        Gdiplus::Color(255, 255, 255, 0),
+                        Gdiplus::Color(255, 0, 255, 0)
+                    };
+                    Gdiplus::REAL positions[] = { 0.0f, 0.4f, 1.0f };
+                    linGrBrush.SetInterpolationColors(colors, positions, 3);
+                    graphics.FillRectangle(&linGrBrush, fillRect);
+                }
+                
+                Gdiplus::Pen blackPen(Gdiplus::Color(255, 0, 0, 0), 1.5f);
+                graphics.DrawRectangle(&blackPen, micX - Scale(2), micY - Scale(4), Scale(4), Scale(6));
+                graphics.DrawArc(&blackPen, micX - Scale(5), micY - Scale(2), Scale(10), Scale(8), 0.0f, 180.0f);
+                graphics.DrawLine(&blackPen, micX, micY + Scale(6), micX, micY + Scale(8));
+                graphics.DrawLine(&blackPen, micX - Scale(3), micY + Scale(8), micX + Scale(3), micY + Scale(8));
             }
             
             HFONT hOldFont = NULL;
@@ -2807,14 +2853,31 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 for (auto it = g_voiceUsers.begin(); it != g_voiceUsers.end(); ) {
                     if (now - it->second > 1000) {
                         listChanged = true;
+                        g_voiceVolumes.erase(it->first);
                         it = g_voiceUsers.erase(it);
                     } else {
+                        if (g_hUserList) {
+                            int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)it->first.c_str());
+                            if (idx != LB_ERR) {
+                                RECT rc;
+                                SendMessage(g_hUserList, LB_GETITEMRECT, idx, (LPARAM)&rc);
+                                InvalidateRect(g_hUserList, &rc, FALSE);
+                            }
+                        }
                         ++it;
                     }
                 }
             }
             if (listChanged && g_hUserList) {
                 InvalidateRect(g_hUserList, NULL, FALSE);
+            }
+            if (g_isVoiceActive && g_hUserList) {
+                int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)g_username.c_str());
+                if (idx != LB_ERR) {
+                    RECT rc;
+                    SendMessage(g_hUserList, LB_GETITEMRECT, idx, (LPARAM)&rc);
+                    InvalidateRect(g_hUserList, &rc, FALSE);
+                }
             }
         }
         return 0;
