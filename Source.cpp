@@ -1342,7 +1342,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Black), &pCaretBrush)) && pCaretBrush) {
                             D2D1_ANTIALIAS_MODE oldMode = pRT->GetAntialiasMode();
                             pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
-                            pRT->DrawLine(D2D1::Point2F(cx, cy), D2D1::Point2F(cx, cy + hm.height), pCaretBrush, 2.0f);
+                            pRT->DrawLine(D2D1::Point2F(cx, cy), D2D1::Point2F(cx, cy + hm.height), pCaretBrush, 2.0f * 96.0f / g_dpi);
                             pRT->SetAntialiasMode(oldMode);
                             pCaretBrush->Release();
                         }
