@@ -1,4 +1,397 @@
+#pragma code_page(65001)
+#include <windows.h>
 #include "resource.h"
 
 IDI_APP_ICON ICON "app.ico"
 IDI_TV ICON "tv.ico"
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "Lobby"
+    IDS_CHANGE_NAME_TITLE "Change Name"
+    IDS_MOVE_ROOM_TITLE "Enter or Select Room"
+    IDS_PRIVATE "Private"
+    IDS_VIDEO_STREAM "Video Stream"
+    IDS_WATCH_VIDEO "Watch Video"
+    IDS_IGNORE "Ignore"
+    IDS_TALK "Talk"
+    IDS_SEND "Send"
+    IDS_JOINED_NETWORK "Joined network"
+    IDS_SERVER_NOT_FOUND "Server not found. May be under maintenance."
+    IDS_MOVED_TO "Moved to %s"
+    IDS_RETURNED_TO_LOBBY "Returned to Lobby"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "Move Room"
+    IDS_VIEWING_COUNT " (Viewing: %d)"
+    IDS_ENTERED " entered."
+    IDS_LEFT " left."
+END
+
+LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "ロビー"
+    IDS_CHANGE_NAME_TITLE "名前の変更"
+    IDS_MOVE_ROOM_TITLE "移動先の部屋名を入力または選択"
+    IDS_PRIVATE "非公開"
+    IDS_VIDEO_STREAM "ビデオ配信"
+    IDS_WATCH_VIDEO "ビデオを視聴"
+    IDS_IGNORE "無視する"
+    IDS_TALK "話す"
+    IDS_SEND "発言"
+    IDS_JOINED_NETWORK "ネットワークに参加しました"
+    IDS_SERVER_NOT_FOUND "サーバーが見つかりません。メンテナンスの可能性があります。"
+    IDS_MOVED_TO "%s に移動しました"
+    IDS_RETURNED_TO_LOBBY "ロビーに戻りました"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "部屋移動"
+    IDS_VIEWING_COUNT " (視聴中: %d人)"
+    IDS_ENTERED " が入室しました。"
+    IDS_LEFT " が退出しました。"
+END
+
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "大厅"
+    IDS_CHANGE_NAME_TITLE "更改名称"
+    IDS_MOVE_ROOM_TITLE "输入或选择房间"
+    IDS_PRIVATE "私密"
+    IDS_VIDEO_STREAM "视频推流"
+    IDS_WATCH_VIDEO "观看视频"
+    IDS_IGNORE "忽略"
+    IDS_TALK "说话"
+    IDS_SEND "发送"
+    IDS_JOINED_NETWORK "已加入网络"
+    IDS_SERVER_NOT_FOUND "找不到服务器。可能在维护中。"
+    IDS_MOVED_TO "已移动到 %s"
+    IDS_RETURNED_TO_LOBBY "已返回大厅"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "移动房间"
+    IDS_VIEWING_COUNT " (观看中: %d人)"
+    IDS_ENTERED " 已进入。"
+    IDS_LEFT " 已退出。"
+END
+
+LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "로비"
+    IDS_CHANGE_NAME_TITLE "이름 변경"
+    IDS_MOVE_ROOM_TITLE "방 이름 입력 또는 선택"
+    IDS_PRIVATE "비공개"
+    IDS_VIDEO_STREAM "비디오 스트리밍"
+    IDS_WATCH_VIDEO "비디오 시청"
+    IDS_IGNORE "무시하기"
+    IDS_TALK "말하기"
+    IDS_SEND "보내기"
+    IDS_JOINED_NETWORK "네트워크에 참여했습니다"
+    IDS_SERVER_NOT_FOUND "서버를 찾을 수 없습니다. 유지보수 중일 수 있습니다."
+    IDS_MOVED_TO "%s(으)로 이동했습니다"
+    IDS_RETURNED_TO_LOBBY "로비로 돌아왔습니다"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "방 이동"
+    IDS_VIEWING_COUNT " (시청 중: %d명)"
+    IDS_ENTERED " (이)가 입장했습니다."
+    IDS_LEFT " (이)가 퇴장했습니다."
+END
+
+LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "大廳"
+    IDS_CHANGE_NAME_TITLE "更改名稱"
+    IDS_MOVE_ROOM_TITLE "輸入或選擇房間"
+    IDS_PRIVATE "私密"
+    IDS_VIDEO_STREAM "視訊串流"
+    IDS_WATCH_VIDEO "觀看視訊"
+    IDS_IGNORE "忽略"
+    IDS_TALK "說話"
+    IDS_SEND "發送"
+    IDS_JOINED_NETWORK "已加入網路"
+    IDS_SERVER_NOT_FOUND "找不到伺服器。可能在維護中。"
+    IDS_MOVED_TO "已移動到 %s"
+    IDS_RETURNED_TO_LOBBY "已返回大廳"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "移動房間"
+    IDS_VIEWING_COUNT " (觀看中: %d人)"
+    IDS_ENTERED " 已進入。"
+    IDS_LEFT " 已退出。"
+END
+
+LANGUAGE LANG_FRENCH, SUBLANG_FRENCH
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "Accueil"
+    IDS_CHANGE_NAME_TITLE "Changer de nom"
+    IDS_MOVE_ROOM_TITLE "Entrez ou selectionnez un salon"
+    IDS_PRIVATE "Prive"
+    IDS_VIDEO_STREAM "Diffuser la video"
+    IDS_WATCH_VIDEO "Regarder la video"
+    IDS_IGNORE "Ignorer"
+    IDS_TALK "Parler"
+    IDS_SEND "Envoyer"
+    IDS_JOINED_NETWORK "A rejoint le reseau"
+    IDS_SERVER_NOT_FOUND "Serveur introuvable. Peut-etre en maintenance."
+    IDS_MOVED_TO "Deplace vers %s"
+    IDS_RETURNED_TO_LOBBY "De retour a l'accueil"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "Changer de salon"
+    IDS_VIEWING_COUNT " (Visionnage : %d)"
+    IDS_ENTERED " est entre(e)."
+    IDS_LEFT " est parti(e)."
+END
+
+LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "Lobby"
+    IDS_CHANGE_NAME_TITLE "Name andern"
+    IDS_MOVE_ROOM_TITLE "Raum eingeben oder auswahlen"
+    IDS_PRIVATE "Privat"
+    IDS_VIDEO_STREAM "Video-Stream"
+    IDS_WATCH_VIDEO "Video ansehen"
+    IDS_IGNORE "Ignorieren"
+    IDS_TALK "Sprechen"
+    IDS_SEND "Senden"
+    IDS_JOINED_NETWORK "Dem Netzwerk beigetreten"
+    IDS_SERVER_NOT_FOUND "Server nicht gefunden. Moglicherweise unter Wartung."
+    IDS_MOVED_TO "Verschoben nach %s"
+    IDS_RETURNED_TO_LOBBY "Zuruck in der Lobby"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "Raum wechseln"
+    IDS_VIEWING_COUNT " (Zuschauer: %d)"
+    IDS_ENTERED " ist beigetreten."
+    IDS_LEFT " hat den Raum verlassen."
+END
+
+LANGUAGE LANG_SPANISH, SUBLANG_SPANISH_MODERN
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "Sala principal"
+    IDS_CHANGE_NAME_TITLE "Cambiar nombre"
+    IDS_MOVE_ROOM_TITLE "Ingresar o seleccionar sala"
+    IDS_PRIVATE "Privado"
+    IDS_VIDEO_STREAM "Transmitir video"
+    IDS_WATCH_VIDEO "Ver video"
+    IDS_IGNORE "Ignorar"
+    IDS_TALK "Hablar"
+    IDS_SEND "Enviar"
+    IDS_JOINED_NETWORK "Se unio a la red"
+    IDS_SERVER_NOT_FOUND "Servidor no encontrado. Puede estar en mantenimiento."
+    IDS_MOVED_TO "Movido a %s"
+    IDS_RETURNED_TO_LOBBY "Regreso a la Sala principal"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "Cambiar de sala"
+    IDS_VIEWING_COUNT " (Viendo: %d)"
+    IDS_ENTERED " ha entrado."
+    IDS_LEFT " ha salido."
+END
+
+LANGUAGE LANG_HINDI, SUBLANG_DEFAULT
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "लॉबी"
+    IDS_CHANGE_NAME_TITLE "नाम बदलें"
+    IDS_MOVE_ROOM_TITLE "कमरा दर्ज करें या चुनें"
+    IDS_PRIVATE "निजी"
+    IDS_VIDEO_STREAM "वीडियो स्ट्रीम"
+    IDS_WATCH_VIDEO "वीडियो देखें"
+    IDS_IGNORE "अनदेखा करें"
+    IDS_TALK "बोलें"
+    IDS_SEND "भेजें"
+    IDS_JOINED_NETWORK "नेटवर्क से जुड़ गए"
+    IDS_SERVER_NOT_FOUND "सर्वर नहीं मिला। शायद रखरखाव चल रहा है।"
+    IDS_MOVED_TO "कमरे में चले गए: %s"
+    IDS_RETURNED_TO_LOBBY "लॉबी में वापस लौट आए"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "कमरा बदलें"
+    IDS_VIEWING_COUNT " (देख रहे हैं: %d)"
+    IDS_ENTERED " प्रवेश किया।"
+    IDS_LEFT " छोड़ दिया।"
+END
+
+LANGUAGE LANG_PORTUGUESE, SUBLANG_DEFAULT
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "Lobby"
+    IDS_CHANGE_NAME_TITLE "Mudar Nome"
+    IDS_MOVE_ROOM_TITLE "Entrar ou Selecionar Sala"
+    IDS_PRIVATE "Privado"
+    IDS_VIDEO_STREAM "Transmissão de Vídeo"
+    IDS_WATCH_VIDEO "Assistir Vídeo"
+    IDS_IGNORE "Ignorar"
+    IDS_TALK "Falar"
+    IDS_SEND "Enviar"
+    IDS_JOINED_NETWORK "Entrou na rede"
+    IDS_SERVER_NOT_FOUND "Servidor não encontrado. Pode estar em manutenção."
+    IDS_MOVED_TO "Movido para %s"
+    IDS_RETURNED_TO_LOBBY "Retornou ao Lobby"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "Mudar Sala"
+    IDS_VIEWING_COUNT " (Assistindo: %d)"
+    IDS_ENTERED " entrou."
+    IDS_LEFT " saiu."
+END
+
+LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "Лобби"
+    IDS_CHANGE_NAME_TITLE "Изменить имя"
+    IDS_MOVE_ROOM_TITLE "Войти или выбрать комнату"
+    IDS_PRIVATE "Приватный"
+    IDS_VIDEO_STREAM "Видеотрансляция"
+    IDS_WATCH_VIDEO "Смотреть видео"
+    IDS_IGNORE "Игнорировать"
+    IDS_TALK "Говорить"
+    IDS_SEND "Отправить"
+    IDS_JOINED_NETWORK "Присоединился к сети"
+    IDS_SERVER_NOT_FOUND "Сервер не найден. Возможно, идет обслуживание."
+    IDS_MOVED_TO "Перемещен в %s"
+    IDS_RETURNED_TO_LOBBY "Вернулся в Лобби"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "Сменить комнату"
+    IDS_VIEWING_COUNT " (Смотрят: %d)"
+    IDS_ENTERED " вошел(ла)."
+    IDS_LEFT " вышел(ла)."
+END
+
+LANGUAGE LANG_ARABIC, SUBLANG_DEFAULT
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "الردهة"
+    IDS_CHANGE_NAME_TITLE "تغيير الاسم"
+    IDS_MOVE_ROOM_TITLE "إدخال أو تحديد غرفة"
+    IDS_PRIVATE "خاص"
+    IDS_VIDEO_STREAM "بث الفيديو"
+    IDS_WATCH_VIDEO "مشاهدة الفيديو"
+    IDS_IGNORE "تجاهل"
+    IDS_TALK "تحدث"
+    IDS_SEND "إرسال"
+    IDS_JOINED_NETWORK "انضم إلى الشبكة"
+    IDS_SERVER_NOT_FOUND "الخادم غير موجود. قد يكون تحت الصيانة."
+    IDS_MOVED_TO "انتقل إلى %s"
+    IDS_RETURNED_TO_LOBBY "عاد إلى الردهة"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "تغيير الغرفة"
+    IDS_VIEWING_COUNT " (يشاهد: %d)"
+    IDS_ENTERED " دخل."
+    IDS_LEFT " غادر."
+END
+
+LANGUAGE LANG_BENGALI, SUBLANG_DEFAULT
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "লবি"
+    IDS_CHANGE_NAME_TITLE "নাম পরিবর্তন"
+    IDS_MOVE_ROOM_TITLE "রুম লিখুন বা নির্বাচন করুন"
+    IDS_PRIVATE "ব্যক্তিগত"
+    IDS_VIDEO_STREAM "ভিডিও স্ট্রিম"
+    IDS_WATCH_VIDEO "ভিডিও দেখুন"
+    IDS_IGNORE "উপেক্ষা করুন"
+    IDS_TALK "কথা বলুন"
+    IDS_SEND "পাঠান"
+    IDS_JOINED_NETWORK "নেটওয়ার্কে যোগ দিয়েছেন"
+    IDS_SERVER_NOT_FOUND "সার্ভার পাওয়া যায়নি। সম্ভবত রক্ষণাবেক্ষণ চলছে।"
+    IDS_MOVED_TO "%s-এ স্থানান্তরিত"
+    IDS_RETURNED_TO_LOBBY "লবিতে ফিরে এসেছে"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "রুম পরিবর্তন করুন"
+    IDS_VIEWING_COUNT " (দেখছেন: %d)"
+    IDS_ENTERED " প্রবেশ করেছে।"
+    IDS_LEFT " চলে গেছে।"
+END
+
+LANGUAGE LANG_INDONESIAN, SUBLANG_DEFAULT
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "Lobi"
+    IDS_CHANGE_NAME_TITLE "Ubah Nama"
+    IDS_MOVE_ROOM_TITLE "Masukkan atau Pilih Ruangan"
+    IDS_PRIVATE "Pribadi"
+    IDS_VIDEO_STREAM "Siaran Video"
+    IDS_WATCH_VIDEO "Tonton Video"
+    IDS_IGNORE "Abaikan"
+    IDS_TALK "Bicara"
+    IDS_SEND "Kirim"
+    IDS_JOINED_NETWORK "Bergabung dengan jaringan"
+    IDS_SERVER_NOT_FOUND "Server tidak ditemukan. Mungkin sedang dalam perbaikan."
+    IDS_MOVED_TO "Pindah ke %s"
+    IDS_RETURNED_TO_LOBBY "Kembali ke Lobi"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "Pindah Ruangan"
+    IDS_VIEWING_COUNT " (Menonton: %d)"
+    IDS_ENTERED " masuk."
+    IDS_LEFT " keluar."
+END
+
+LANGUAGE LANG_ITALIAN, SUBLANG_DEFAULT
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "Lobby"
+    IDS_CHANGE_NAME_TITLE "Cambia Nome"
+    IDS_MOVE_ROOM_TITLE "Inserisci o Seleziona Stanza"
+    IDS_PRIVATE "Privato"
+    IDS_VIDEO_STREAM "Trasmetti Video"
+    IDS_WATCH_VIDEO "Guarda Video"
+    IDS_IGNORE "Ignora"
+    IDS_TALK "Parla"
+    IDS_SEND "Invia"
+    IDS_JOINED_NETWORK "Unito alla rete"
+    IDS_SERVER_NOT_FOUND "Server non trovato. Potrebbe essere in manutenzione."
+    IDS_MOVED_TO "Spostato in %s"
+    IDS_RETURNED_TO_LOBBY "Tornato nella Lobby"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "Cambia Stanza"
+    IDS_VIEWING_COUNT " (In visione: %d)"
+    IDS_ENTERED " è entrato/a."
+    IDS_LEFT " è uscito/a."
+END
+
+LANGUAGE LANG_TURKISH, SUBLANG_DEFAULT
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "Lobi"
+    IDS_CHANGE_NAME_TITLE "İsmi Değiştir"
+    IDS_MOVE_ROOM_TITLE "Oda Gir veya Seç"
+    IDS_PRIVATE "Özel"
+    IDS_VIDEO_STREAM "Video Yayını"
+    IDS_WATCH_VIDEO "Video İzle"
+    IDS_IGNORE "Yoksay"
+    IDS_TALK "Konuş"
+    IDS_SEND "Gönder"
+    IDS_JOINED_NETWORK "Ağa katıldı"
+    IDS_SERVER_NOT_FOUND "Sunucu bulunamadı. Bakımda olabilir."
+    IDS_MOVED_TO "%s odasına taşındı"
+    IDS_RETURNED_TO_LOBBY "Lobiye döndü"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "Oda Değiştir"
+    IDS_VIEWING_COUNT " (İzleyen: %d)"
+    IDS_ENTERED " katıldı."
+    IDS_LEFT " ayrıldı."
+END
+
+LANGUAGE LANG_VIETNAMESE, SUBLANG_DEFAULT
+STRINGTABLE
+BEGIN
+    IDS_LOBBY "Sảnh"
+    IDS_CHANGE_NAME_TITLE "Đổi tên"
+    IDS_MOVE_ROOM_TITLE "Nhập hoặc chọn phòng"
+    IDS_PRIVATE "Riêng tư"
+    IDS_VIDEO_STREAM "Phát Video"
+    IDS_WATCH_VIDEO "Xem Video"
+    IDS_IGNORE "Bỏ qua"
+    IDS_TALK "Nói"
+    IDS_SEND "Gửi"
+    IDS_JOINED_NETWORK "Đã tham gia mạng"
+    IDS_SERVER_NOT_FOUND "Không tìm thấy máy chủ. Có thể đang bảo trì."
+    IDS_MOVED_TO "Đã chuyển đến %s"
+    IDS_RETURNED_TO_LOBBY "Đã quay lại Sảnh"
+    IDS_WINDOW_TITLE "Retro Chat"
+    IDS_MOVE_ROOM_BTN "Chuyển phòng"
+    IDS_VIEWING_COUNT " (Đang xem: %d)"
+    IDS_ENTERED " đã vào."
+    IDS_LEFT " đã rời."
+END

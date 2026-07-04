@@ -32,50 +32,13 @@
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "imm32.lib")
 
-bool g_isEnglish = false;
+#include "resource.h"
 
-void InitLanguage() {
-    LANGID langId = GetUserDefaultUILanguage();
-    if (PRIMARYLANGID(langId) == LANG_ENGLISH) {
-        g_isEnglish = true;
-    }
-}
-
-enum StringID {
-    STR_LOBBY,
-    STR_CHANGE_NAME_TITLE,
-    STR_MOVE_ROOM_TITLE,
-    STR_PRIVATE,
-    STR_VIDEO_STREAM,
-    STR_WATCH_VIDEO,
-    STR_IGNORE,
-    STR_TALK,
-    STR_SEND,
-    STR_JOINED_NETWORK,
-    STR_SERVER_NOT_FOUND,
-    STR_MOVED_TO,
-    STR_RETURNED_TO_LOBBY,
-    STR_WINDOW_TITLE,
-    STR_MOVE_ROOM_BTN
-};
-
-std::wstring GetString(StringID id) {
-    switch (id) {
-        case STR_LOBBY: return g_isEnglish ? L"Lobby" : L"\x30ED\x30D3\x30FC";
-        case STR_CHANGE_NAME_TITLE: return g_isEnglish ? L"Change Name" : L"\x540D\x524D\x306E\x5909\x66F4";
-        case STR_MOVE_ROOM_TITLE: return g_isEnglish ? L"Enter or Select Room" : L"\x79FB\x52D5\x5148\x306E\x90E8\x5C4B\x540D\x3092\x5165\x529B\x307E\x305F\x306F\x9078\x629E";
-        case STR_PRIVATE: return g_isEnglish ? L"Private" : L"\x975E\x516C\x958B";
-        case STR_VIDEO_STREAM: return g_isEnglish ? L"Video Stream" : L"\x30D3\x30C7\x30AA\x914D\x4FE1";
-        case STR_WATCH_VIDEO: return g_isEnglish ? L"Watch Video" : L"\x30D3\x30C7\x30AA\x3092\x8996\x8074";
-        case STR_IGNORE: return g_isEnglish ? L"Ignore" : L"\x7121\x8996\x3059\x308B";
-        case STR_TALK: return g_isEnglish ? L"Talk" : L"\x8A71\x3059";
-        case STR_SEND: return g_isEnglish ? L"Send" : L"\x767A\x8A00";
-        case STR_JOINED_NETWORK: return g_isEnglish ? L"Joined network" : L"\x30CD\x30C3\x30C8\x30EF\x30FC\x30AF\x306B\x53C2\x52A0\x3057\x307E\x3057\x305F";
-        case STR_SERVER_NOT_FOUND: return g_isEnglish ? L"Server not found. May be under maintenance." : L"\x30B5\x30FC\x30D0\x30FC\x304C\x898B\x3064\x304B\x308A\x307E\x305B\x3093\x3002\x30E1\x30F3\x30C6\x30CA\x30F3\x30B9\x306E\x53EF\x80FD\x6027\x304C\x3042\x308A\x307E\x3059";
-        case STR_MOVED_TO: return g_isEnglish ? L"Moved to " : L"\x306B\x79FB\x52D5\x3057\x307E\x3057\x305F";
-        case STR_RETURNED_TO_LOBBY: return g_isEnglish ? L"Returned to Lobby" : L"\x30ED\x30D3\x30FC\x306B\x623B\x308A\x307E\x3057\x305F";
-        case STR_WINDOW_TITLE: return g_isEnglish ? L"Retro Chat" : L"Retro Chat";
-        case STR_MOVE_ROOM_BTN: return g_isEnglish ? L"Move Room" : L"\x90E8\x5C4B\x79FB\x52D5";
+std::wstring GetString(UINT id) {
+    WCHAR buffer[512];
+    int len = LoadStringW(GetModuleHandle(NULL), id, buffer, 512);
+    if (len > 0) {
+        return std::wstring(buffer, len);
     }
     return L"";
 }
@@ -165,7 +128,7 @@ HFONT g_hFontI_btn;
 HFONT g_hFontU_btn;
 
 std::map<std::wstring, int> g_publicRooms;
-std::wstring g_currentRoom = L""; // Initialized in wWinMain
+std::wstring g_currentRoom = L"";
 bool g_isPrivateRoom = false;
 
 ID2D1Factory* g_pD2DFactory = nullptr;
@@ -1646,6 +1609,8 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         size_t pos = dispName.find(L'#');
         if (pos != std::wstring::npos) dispName = dispName.substr(0, pos);
         SetWindowTextW(hEdit, dispName.c_str());
+        SetFocus(hEdit);
+        SendMessage(hEdit, EM_SETSEL, 0, -1);
         return 0;
     }
     case WM_COMMAND: {
@@ -1690,7 +1655,7 @@ bool ShowChangeNameDialog(HWND hParent, std::wstring& outResult) {
     RECT rcParent;
     GetWindowRect(hParent, &rcParent);
 
-    HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"ChangeNameClass", GetString(STR_CHANGE_NAME_TITLE).c_str(),
+    HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"ChangeNameClass", GetString(IDS_CHANGE_NAME_TITLE).c_str(),
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
         rcParent.left + (rcParent.right - rcParent.left - Scale(300)) / 2, 
         rcParent.top + (rcParent.bottom - rcParent.top - Scale(120)) / 2, 
@@ -1725,7 +1690,7 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             Scale(10), Scale(10), Scale(260), Scale(24), hWnd, (HMENU)101, GetModuleHandle(0), 0);
         hList = CreateWindowEx(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_NOTIFY | LBS_HASSTRINGS,
             Scale(10), Scale(40), Scale(260), Scale(100), hWnd, (HMENU)102, GetModuleHandle(0), 0);
-        hChk = CreateWindow(L"BUTTON", GetString(STR_PRIVATE).c_str(), 
+        hChk = CreateWindow(L"BUTTON", GetString(IDS_PRIVATE).c_str(), 
             WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
             Scale(10), Scale(145), Scale(80), Scale(24), hWnd, (HMENU)103, GetModuleHandle(0), 0);
         hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
@@ -1817,7 +1782,7 @@ bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult, bool& outPrivate)
     RECT rcParent;
     GetWindowRect(hParent, &rcParent);
 
-    HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"MoveRoomClass", L"\x79FB\x52D5\x5148\x306E\x90E8\x5C4B\x540D\x3092\x5165\x529B\x307E\x305F\x306F\x9078\x629E",
+    HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"MoveRoomClass", GetString(IDS_MOVE_ROOM_TITLE).c_str(),
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
         rcParent.left + (rcParent.right - rcParent.left - Scale(300)) / 2, 
         rcParent.top + (rcParent.bottom - rcParent.top - Scale(220)) / 2, 
@@ -1882,7 +1847,7 @@ void ClearLogAndUsers() {
 }
 
 void SetWindowTitle(HWND hWnd) {
-    std::wstring title = GetString(STR_WINDOW_TITLE) + L" - [" + g_currentRoom + L"]" + (g_isPrivateRoom ? L" (" + GetString(STR_PRIVATE) + L")" : L"");
+    std::wstring title = GetString(IDS_WINDOW_TITLE) + L" - [" + g_currentRoom + L"]" + (g_isPrivateRoom ? L" (" + GetString(IDS_PRIVATE) + L")" : L"");
     SetWindowText(hWnd, title.c_str());
 }
 
@@ -1995,7 +1960,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wuid.c_str());
                                     MsgData* pData = new MsgData();
                                     pData->user = wuid;
-                                    pData->msg = L" が入室しました。";
+                                    pData->msg = GetString(IDS_ENTERED);
                                     pData->b = false; pData->i = false; pData->u = false;
                                     pData->size = 9;
                                     pData->color = RGB(128, 128, 128);
@@ -2037,7 +2002,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     SendMessage(g_hUserList, LB_DELETESTRING, idx, 0);
                                     MsgData* pData = new MsgData();
                                     pData->user = wuid;
-                                    pData->msg = L" が退出しました。";
+                                    pData->msg = GetString(IDS_LEFT);
                                     pData->b = false; pData->i = false; pData->u = false;
                                     pData->size = 9;
                                     pData->color = RGB(128, 128, 128);
@@ -2328,7 +2293,9 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             for (auto& pair : g_videoViewers[*pUser]) {
                 if (now - pair.second < 5000) count++;
             }
-            std::wstring title = *pUser + L" (\x8996\x8074\x4E2D: " + std::to_wstring(count) + L"\x4EBA)";
+            WCHAR viewBuf[256];
+            swprintf_s(viewBuf, GetString(IDS_VIEWING_COUNT).c_str(), count);
+            std::wstring title = *pUser + viewBuf;
             SetWindowTextW(hwnd, title.c_str());
         }
         return 0;
@@ -2406,8 +2373,8 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 
                 if (clickedUser == g_username) {
                     HMENU hMenu = CreatePopupMenu();
-                    AppendMenuW(hMenu, MF_STRING | (g_isWebcamActive ? MF_CHECKED : MF_UNCHECKED), 1, GetString(STR_VIDEO_STREAM).c_str());
-                    AppendMenuW(hMenu, MF_STRING, 3, L"\x540D\x524D\x5909\x66F4"); // 名前変更
+                    AppendMenuW(hMenu, MF_STRING | (g_isWebcamActive ? MF_CHECKED : MF_UNCHECKED), 1, GetString(IDS_VIDEO_STREAM).c_str());
+                    AppendMenuW(hMenu, MF_STRING, 3, GetString(IDS_CHANGE_NAME_TITLE).c_str()); 
                     ClientToScreen(hwnd, &pt);
                     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
                     DestroyMenu(hMenu);
@@ -2457,8 +2424,8 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                         isIgnored = (g_ignoredUsers.count(clickedUser) > 0);
                     }
                     HMENU hMenu = CreatePopupMenu();
-                    AppendMenuW(hMenu, MF_STRING | (hasStreamer ? 0 : MF_GRAYED), 2, GetString(STR_WATCH_VIDEO).c_str());
-                    AppendMenuW(hMenu, MF_STRING | (isIgnored ? MF_CHECKED : MF_UNCHECKED), 4, GetString(STR_IGNORE).c_str());
+                    AppendMenuW(hMenu, MF_STRING | (hasStreamer ? 0 : MF_GRAYED), 2, GetString(IDS_WATCH_VIDEO).c_str());
+                    AppendMenuW(hMenu, MF_STRING | (isIgnored ? MF_CHECKED : MF_UNCHECKED), 4, GetString(IDS_IGNORE).c_str());
                     ClientToScreen(hwnd, &pt);
                     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
                     DestroyMenu(hMenu);
@@ -2594,7 +2561,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         g_hBtnMoveRoom = CreateWindow(L"BUTTON", L"", 
             WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
             0, 0, 0, 0, hWnd, (HMENU)1008, ((LPCREATESTRUCT)lParam)->hInstance, 0);
-        g_hBtnVoice = CreateWindow(L"BUTTON", GetString(STR_TALK).c_str(), 
+        g_hBtnVoice = CreateWindow(L"BUTTON", GetString(IDS_TALK).c_str(), 
             WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
             0, 0, 0, 0, hWnd, (HMENU)1009, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
@@ -2624,7 +2591,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             WS_CHILD | WS_VISIBLE,
             0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
-        g_hSendBtn = CreateWindow(L"BUTTON", GetString(STR_SEND).c_str(), 
+        g_hSendBtn = CreateWindow(L"BUTTON", GetString(IDS_SEND).c_str(), 
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             0, 0, 0, 0, hWnd, (HMENU)1001, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
@@ -2663,10 +2630,10 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             std::wstring dispName = g_username;
             size_t pos = dispName.find(L'#');
             if (pos != std::wstring::npos) dispName = dispName.substr(0, pos);
-            sysMsg.msg = GetString(STR_JOINED_NETWORK) + L" (" + dispName + L")";
+            sysMsg.msg = GetString(IDS_JOINED_NETWORK) + L" (" + dispName + L")";
             sysMsg.color = RGB(128,128,128);
         } else {
-            sysMsg.msg = GetString(STR_SERVER_NOT_FOUND);
+            sysMsg.msg = GetString(IDS_SERVER_NOT_FOUND);
             sysMsg.color = RGB(255,0,0);
         }
         sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
@@ -2735,7 +2702,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, RGB(0,0,0));
             HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
-            std::wstring talkStr = GetString(STR_TALK);
+            std::wstring talkStr = GetString(IDS_TALK);
             LPCWSTR text = talkStr.c_str();
             RECT rcText = rc;
             rcText.left += Scale(28);
@@ -2756,7 +2723,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             GdiFlush(); // Ensure GDI background is drawn before GDI+ draws on top
 
             HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
-            std::wstring moveStr = GetString(STR_MOVE_ROOM_BTN);
+            std::wstring moveStr = GetString(IDS_MOVE_ROOM_BTN);
             LPCWSTR text = moveStr.c_str();
             SIZE size;
             GetTextExtentPoint32(hdc, text, lstrlen(text), &size);
@@ -3272,7 +3239,9 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 SetWindowTitle(hWnd);
                 MsgData sysMsg;
                 sysMsg.user = L"";
-                sysMsg.msg = g_isEnglish ? (GetString(STR_MOVED_TO) + g_currentRoom) : (g_currentRoom + GetString(STR_MOVED_TO)); 
+                WCHAR moveBuf[512];
+                swprintf_s(moveBuf, GetString(IDS_MOVED_TO).c_str(), g_currentRoom.c_str());
+                sysMsg.msg = moveBuf;
                 sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
                 sysMsg.size = 9; sysMsg.color = RGB(128,128,128);
                 AppendLog(sysMsg);
@@ -3376,13 +3345,13 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
     case WM_REVERT_ROOM: {
         SendLeaveRequest(g_currentRoom);
-        g_currentRoom = L"\x30ED\x30D3\x30FC"; // "ロビー"
+        g_currentRoom = GetString(IDS_LOBBY);
         SendJoinRequest(g_currentRoom);
         ClearLogAndUsers();
         SetWindowTitle(hWnd);
         MsgData sysMsg;
         sysMsg.user = L"";
-        sysMsg.msg = L"\x30ED\x30D3\x30FC\x306B\x623B\x308A\x307E\x3057\x305F"; 
+        sysMsg.msg = GetString(IDS_RETURNED_TO_LOBBY);
         sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
         sysMsg.size = 9; sysMsg.color = RGB(255,0,0);
         AppendLog(sysMsg);
@@ -3417,8 +3386,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 #include "resource.h"
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
-    InitLanguage();
-    g_currentRoom = GetString(STR_LOBBY);
+    SetThreadUILanguage(0);
+    g_currentRoom = GetString(IDS_LOBBY);
     
     HDC hdcDpi = GetDC(NULL);
     g_dpi = GetDeviceCaps(hdcDpi, LOGPIXELSX);
@@ -3441,7 +3410,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
     HWND hWnd = CreateWindow(
-        L"Retro Chat", GetString(STR_WINDOW_TITLE).c_str(),
+        L"Retro Chat", GetString(IDS_WINDOW_TITLE).c_str(),
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         CW_USEDEFAULT, 0, Scale(500), Scale(400),
         0, 0, hInstance, 0);
