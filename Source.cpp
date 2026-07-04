@@ -1710,6 +1710,11 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wname.c_str());
                                     }
                                 }
+                                // Ensure local user is always in the list
+                                int localIdx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)g_username.c_str());
+                                if (localIdx == LB_ERR) {
+                                    SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)g_username.c_str());
+                                }
                             }
                             else if (type == "join") {
                                 std::string uid = json["userId"].string_value();
@@ -2474,7 +2479,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
                 
                 int cx = rc.left + (rc.right - rc.left) / 2;
-                int cy = rc.top + (rc.bottom - rc.top) / 2;
+                int cy = rc.top + (rc.bottom - rc.top) / 2 - 1;
                 
                 Gdiplus::SolidBrush palBrush(Gdiplus::Color(255, 245, 225, 170));
                 graphics.FillEllipse(&palBrush, cx - Scale(10), cy - Scale(7), Scale(20), Scale(14));
@@ -2535,8 +2540,13 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             return TRUE;
         }
         else if (lpdis->CtlID == 1050 && lpdis->itemID != (UINT)-1) {
-            HDC hdc = lpdis->hDC;
+            HDC hdcOriginal = lpdis->hDC;
             RECT rc = lpdis->rcItem;
+            
+            HDC hdc = CreateCompatibleDC(hdcOriginal);
+            HBITMAP hMemBmp = CreateCompatibleBitmap(hdcOriginal, rc.right - rc.left, rc.bottom - rc.top);
+            HBITMAP hOldBmp = (HBITMAP)SelectObject(hdc, hMemBmp);
+            SetWindowOrgEx(hdc, rc.left, rc.top, NULL);
             
             WCHAR szText[256] = {0};
             SendMessage(lpdis->hwndItem, LB_GETTEXT, lpdis->itemID, (LPARAM)szText);
@@ -2561,8 +2571,13 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             int cx = rc.left + Scale(2);
             int cy = rc.top + (rc.bottom - rc.top - iconSize) / 2;
             
-            Gdiplus::Graphics graphics(hdc);
-            graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+            RECT rcText = rc;
+            rcText.left = rc.left + Scale(26);
+            rcText.right = rc.right - Scale(12);
+            
+            { // Start GDI+ scope
+                Gdiplus::Graphics graphics(hdc);
+                graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
             
             bool isStreaming = false;
             {
@@ -2648,10 +2663,6 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             }
             if (isIgnored) isVoicing = false;
             
-            RECT rcText = rc;
-            rcText.left = rc.left + Scale(26);
-            rcText.right = rc.right - Scale(12);
-            
             if (isVoicing) {
                 int micX = rc.right - Scale(8);
                 int micY = cy + Scale(6);
@@ -2706,6 +2717,10 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                     graphics.ResetClip();
                 }
             }
+            } // End GDI+ scope
+            
+            HFONT hListFont = (HFONT)SendMessage(lpdis->hwndItem, WM_GETFONT, 0, 0);
+            HFONT hOldMemFont = (HFONT)SelectObject(hdc, hListFont);
             
             HFONT hOldFont = NULL;
             if (user == g_username) {
@@ -2715,6 +2730,13 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             if (hOldFont) {
                 SelectObject(hdc, hOldFont);
             }
+            
+            SelectObject(hdc, hOldMemFont);
+            
+            BitBlt(hdcOriginal, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, hdc, rc.left, rc.top, SRCCOPY);
+            SelectObject(hdc, hOldBmp);
+            DeleteObject(hMemBmp);
+            DeleteDC(hdc);
             
             return TRUE;
         }
