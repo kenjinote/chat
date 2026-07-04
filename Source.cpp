@@ -2939,7 +2939,19 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
     case WM_TIMER: {
         if (wParam == 1) {
-            // "announce" logic removed for scalability
+            // Keep UDP NAT mapping alive with heartbeat
+            if (g_sessionId != 0 && g_sock != INVALID_SOCKET) {
+                MediaHeader hdr = {0};
+                hdr.sessionId = g_sessionId;
+                hdr.payloadType = 255;
+                sockaddr_in serverUdp = {0};
+                serverUdp.sin_family = AF_INET;
+                serverUdp.sin_port = htons(4001);
+                if (g_isServerUdpAddrResolved) {
+                    serverUdp.sin_addr = g_serverUdpAddr;
+                    sendto(g_sock, (char*)&hdr, sizeof(hdr), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                }
+            }
             
             bool listChanged = false;
             DWORD now = GetTickCount();
