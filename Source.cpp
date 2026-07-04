@@ -59,7 +59,7 @@ bool ResolveIP(const std::string& host, IN_ADDR& outAddr) {
     return false;
 }
 
-std::string g_serverIp = "chat-vm-a-2026.japaneast.cloudapp.azure.com";
+std::string g_serverIp = "chat-lb-2026.japaneast.cloudapp.azure.com";
 IN_ADDR g_serverUdpAddr = {0};
 bool g_isServerUdpAddrResolved = false;
 
