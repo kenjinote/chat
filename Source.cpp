@@ -459,6 +459,7 @@ struct MsgData {
     bool u;
     int size;
     COLORREF color;
+    bool isSystemEvent = false;
 };
 
 struct LogEntry {
@@ -616,8 +617,13 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         if (displayUser.empty()) {
                             fullText = entry.data.msg;
                         } else {
-                            fullText = displayUser + L": " + entry.data.msg;
-                            msgStart = (int)displayUser.length() + 2;
+                            if (entry.data.isSystemEvent) {
+                                fullText = displayUser + entry.data.msg;
+                                msgStart = (int)displayUser.length();
+                            } else {
+                                fullText = displayUser + L": " + entry.data.msg;
+                                msgStart = (int)displayUser.length() + 2;
+                            }
                         }
                         
                         if (fullText.empty()) fullText = L" ";
@@ -643,7 +649,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                             }
                             
                             if (msgStart > 0) {
-                                DWRITE_TEXT_RANGE userRange = {0, (UINT32)msgStart - 2};
+                                DWRITE_TEXT_RANGE userRange = {0, (UINT32)(entry.data.isSystemEvent ? msgStart : msgStart - 2)};
                                 size_t hash = 0;
                                 for (wchar_t c : entry.data.user) hash = hash * 31 + c;
                                 COLORREF palette[] = {
@@ -719,7 +725,16 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                             size_t hashPos = displayUser.find(L'#');
                             if (hashPos != std::wstring::npos) displayUser = displayUser.substr(0, hashPos);
 
-                            std::wstring fullText = displayUser.empty() ? entry.data.msg : (displayUser + L": " + entry.data.msg);
+                            std::wstring fullText;
+                            if (displayUser.empty()) {
+                                fullText = entry.data.msg;
+                            } else {
+                                if (entry.data.isSystemEvent) {
+                                    fullText = displayUser + entry.data.msg;
+                                } else {
+                                    fullText = displayUser + L": " + entry.data.msg;
+                                }
+                            }
                             if (fullText.empty()) fullText = L" ";
                             startC = ((int)i == sEntry) ? sChar : 0;
                             endC = ((int)i == eEntry) ? eChar : (int)fullText.length();
@@ -773,9 +788,20 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         size_t hashPos = displayUser.find(L'#');
                         if (hashPos != std::wstring::npos) displayUser = displayUser.substr(0, hashPos);
 
-                        std::wstring fullText = displayUser.empty() ? entry.data.msg : (displayUser + L": " + entry.data.msg);
+                        std::wstring fullText;
+                        int msgStart = 0;
+                        if (displayUser.empty()) {
+                            fullText = entry.data.msg;
+                        } else {
+                            if (entry.data.isSystemEvent) {
+                                fullText = displayUser + entry.data.msg;
+                                msgStart = (int)displayUser.length();
+                            } else {
+                                fullText = displayUser + L": " + entry.data.msg;
+                                msgStart = (int)displayUser.length() + 2;
+                            }
+                        }
                         if (fullText.empty()) fullText = L" ";
-                        int msgStart = displayUser.empty() ? 0 : (int)displayUser.length() + 2;
 
                         DWRITE_TEXT_RANGE fullRange = { 0, (UINT32)fullText.length() };
                         entry.pLayout->SetDrawingEffect(nullptr, fullRange);
@@ -792,7 +818,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         }
                         
                         if (msgStart > 0) {
-                            DWRITE_TEXT_RANGE userRange = {0, (UINT32)msgStart - 2};
+                            DWRITE_TEXT_RANGE userRange = {0, (UINT32)(entry.data.isSystemEvent ? msgStart : msgStart - 2)};
                             size_t hash = 0;
                             for (wchar_t c : entry.data.user) hash = hash * 31 + c;
                             COLORREF palette[] = {
@@ -1840,11 +1866,12 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 if (idx == LB_ERR) {
                                     SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wuid.c_str());
                                     MsgData* pData = new MsgData();
-                                    pData->user = L"";
-                                    pData->msg = wuid + L" が入室しました。";
+                                    pData->user = wuid;
+                                    pData->msg = L" が入室しました。";
                                     pData->b = false; pData->i = false; pData->u = false;
                                     pData->size = 9;
                                     pData->color = RGB(128, 128, 128);
+                                    pData->isSystemEvent = true;
                                     PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                                 }
                             }
@@ -1881,11 +1908,12 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 if (idx != LB_ERR) {
                                     SendMessage(g_hUserList, LB_DELETESTRING, idx, 0);
                                     MsgData* pData = new MsgData();
-                                    pData->user = L"";
-                                    pData->msg = wuid + L" が退出しました。";
+                                    pData->user = wuid;
+                                    pData->msg = L" が退出しました。";
                                     pData->b = false; pData->i = false; pData->u = false;
                                     pData->size = 9;
                                     pData->color = RGB(128, 128, 128);
+                                    pData->isSystemEvent = true;
                                     PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                                 }
                             }
