@@ -609,11 +609,15 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (SUCCEEDED(hr) && pFormat) {
                         std::wstring fullText;
                         int msgStart = 0;
-                        if (entry.data.user.empty()) {
+                        std::wstring displayUser = entry.data.user;
+                        size_t hashPos = displayUser.find(L'#');
+                        if (hashPos != std::wstring::npos) displayUser = displayUser.substr(0, hashPos);
+
+                        if (displayUser.empty()) {
                             fullText = entry.data.msg;
                         } else {
-                            fullText = entry.data.user + L": " + entry.data.msg;
-                            msgStart = (int)entry.data.user.length() + 2;
+                            fullText = displayUser + L": " + entry.data.msg;
+                            msgStart = (int)displayUser.length() + 2;
                         }
                         
                         if (fullText.empty()) fullText = L" ";
@@ -636,6 +640,27 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                                 &pMsgBrush)) && pMsgBrush) {
                                 entry.pLayout->SetDrawingEffect(pMsgBrush, range);
                                 pMsgBrush->Release();
+                            }
+                            
+                            if (msgStart > 0) {
+                                DWRITE_TEXT_RANGE userRange = {0, (UINT32)msgStart - 2};
+                                size_t hash = 0;
+                                for (wchar_t c : entry.data.user) hash = hash * 31 + c;
+                                COLORREF palette[] = {
+                                    RGB(200, 50, 50), RGB(50, 150, 50), RGB(50, 50, 200),
+                                    RGB(180, 180, 50), RGB(180, 50, 180), RGB(50, 180, 180),
+                                    RGB(255, 128, 0), RGB(128, 0, 255), RGB(0, 128, 255),
+                                    RGB(128, 200, 0), RGB(255, 0, 128), RGB(0, 200, 128)
+                                };
+                                COLORREF uCol = palette[hash % 12];
+                                ID2D1SolidColorBrush* pUserBrush = nullptr;
+                                if (SUCCEEDED(pRT->CreateSolidColorBrush(
+                                    D2D1::ColorF(GetRValue(uCol)/255.0f, GetGValue(uCol)/255.0f, GetBValue(uCol)/255.0f), 
+                                    &pUserBrush)) && pUserBrush) {
+                                    entry.pLayout->SetDrawingEffect(pUserBrush, userRange);
+                                    entry.pLayout->SetFontWeight(DWRITE_FONT_WEIGHT_BOLD, userRange);
+                                    pUserBrush->Release();
+                                }
                             }
                             
                             DWRITE_TEXT_METRICS metrics;
@@ -690,7 +715,11 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         }
                         if ((int)i >= sEntry && (int)i <= eEntry) {
                             isSelected = true;
-                            std::wstring fullText = entry.data.user.empty() ? entry.data.msg : (entry.data.user + L": " + entry.data.msg);
+                            std::wstring displayUser = entry.data.user;
+                            size_t hashPos = displayUser.find(L'#');
+                            if (hashPos != std::wstring::npos) displayUser = displayUser.substr(0, hashPos);
+
+                            std::wstring fullText = displayUser.empty() ? entry.data.msg : (displayUser + L": " + entry.data.msg);
                             if (fullText.empty()) fullText = L" ";
                             startC = ((int)i == sEntry) ? sChar : 0;
                             endC = ((int)i == eEntry) ? eChar : (int)fullText.length();
@@ -740,9 +769,13 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     }
 
                     if (isSelected && startC < endC) {
-                        std::wstring fullText = entry.data.user.empty() ? entry.data.msg : (entry.data.user + L": " + entry.data.msg);
+                        std::wstring displayUser = entry.data.user;
+                        size_t hashPos = displayUser.find(L'#');
+                        if (hashPos != std::wstring::npos) displayUser = displayUser.substr(0, hashPos);
+
+                        std::wstring fullText = displayUser.empty() ? entry.data.msg : (displayUser + L": " + entry.data.msg);
                         if (fullText.empty()) fullText = L" ";
-                        int msgStart = entry.data.user.empty() ? 0 : (int)entry.data.user.length() + 2;
+                        int msgStart = displayUser.empty() ? 0 : (int)displayUser.length() + 2;
 
                         DWRITE_TEXT_RANGE fullRange = { 0, (UINT32)fullText.length() };
                         entry.pLayout->SetDrawingEffect(nullptr, fullRange);
@@ -755,6 +788,27 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                                 &pMsgBrush)) && pMsgBrush) {
                                 entry.pLayout->SetDrawingEffect(pMsgBrush, msgRange);
                                 pMsgBrush->Release();
+                            }
+                        }
+                        
+                        if (msgStart > 0) {
+                            DWRITE_TEXT_RANGE userRange = {0, (UINT32)msgStart - 2};
+                            size_t hash = 0;
+                            for (wchar_t c : entry.data.user) hash = hash * 31 + c;
+                            COLORREF palette[] = {
+                                RGB(200, 50, 50), RGB(50, 150, 50), RGB(50, 50, 200),
+                                RGB(180, 180, 50), RGB(180, 50, 180), RGB(50, 180, 180),
+                                RGB(255, 128, 0), RGB(128, 0, 255), RGB(0, 128, 255),
+                                RGB(128, 200, 0), RGB(255, 0, 128), RGB(0, 200, 128)
+                            };
+                            COLORREF uCol = palette[hash % 12];
+                            ID2D1SolidColorBrush* pUserBrush = nullptr;
+                            if (SUCCEEDED(pRT->CreateSolidColorBrush(
+                                D2D1::ColorF(GetRValue(uCol)/255.0f, GetGValue(uCol)/255.0f, GetBValue(uCol)/255.0f), 
+                                &pUserBrush)) && pUserBrush) {
+                                entry.pLayout->SetDrawingEffect(pUserBrush, userRange);
+                                entry.pLayout->SetFontWeight(DWRITE_FONT_WEIGHT_BOLD, userRange);
+                                pUserBrush->Release();
                             }
                         }
                     }
@@ -1434,14 +1488,24 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         SendMessage(hBtnOK, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hBtnCancel, WM_SETFONT, (WPARAM)hFont, FALSE);
         
-        SetWindowTextW(hEdit, g_username.c_str());
+        std::wstring dispName = g_username;
+        size_t pos = dispName.find(L'#');
+        if (pos != std::wstring::npos) dispName = dispName.substr(0, pos);
+        SetWindowTextW(hEdit, dispName.c_str());
         return 0;
     }
     case WM_COMMAND: {
         if (LOWORD(wParam) == 1) { // OK
             WCHAR buf[256] = {0};
             GetWindowTextW(hEdit, buf, 255);
-            g_changeNameResult = buf;
+            std::wstring newName = buf;
+            if (!newName.empty() && newName.find(L'#') == std::wstring::npos) {
+                srand(GetTickCount());
+                wchar_t tag[16];
+                swprintf_s(tag, L"#%04d", rand() % 10000);
+                newName += tag;
+            }
+            g_changeNameResult = newName;
             g_changeNameOK = true;
             DestroyWindow(hWnd);
         } else if (LOWORD(wParam) == 2) { // Cancel
@@ -1785,13 +1849,10 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 }
                             }
                             else if (type == "redirect") {
-                                // Close current connection and reconnect to new endpoint
-                                std::string endpoint = json["endpoint"].string_value();
-                                size_t colonPos = endpoint.find(':');
-                                if (colonPos != std::string::npos) {
-                                    std::string newIp = endpoint.substr(0, colonPos);
-                                    int newPort = std::stoi(endpoint.substr(colonPos + 1));
-                                    
+                                std::string newIp = json["ip"].string_value();
+                                int newPort = json["port"].int_value();
+                                
+                                if (!newIp.empty() && newPort > 0) {
                                     closesocket(g_tcpSocket);
                                     g_tcpSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
                                     
@@ -1803,7 +1864,6 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     g_isServerUdpAddrResolved = false; // Force re-resolve for UDP
     
                                     if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
-                                        // Send join request again automatically
                                         json11::Json joinMsg = json11::Json::object {
                                             {"type", "join"},
                                             {"userId", w2a(g_username.c_str())},
@@ -1811,7 +1871,6 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         };
                                         std::string joinStr = joinMsg.dump() + "\n";
                                         send(g_tcpSocket, joinStr.c_str(), (int)joinStr.length(), 0);
-                                        PostMessage(hWndParent, WM_REVERT_ROOM, 0, 0); 
                                     }
                                 }
                             }
@@ -2337,8 +2396,16 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         LoadSettings();
         if (g_username.empty()) {
             g_username = L"User_" + std::to_wstring(GetTickCount() % 1000);
-            SaveSettings();
         }
+        
+        // Ensure the username has a #XXXX tag to distinguish duplicates
+        if (g_username.find(L'#') == std::wstring::npos) {
+            srand(GetTickCount());
+            wchar_t tag[16];
+            swprintf_s(tag, L"#%04d", rand() % 10000);
+            g_username += tag;
+        }
+        SaveSettings();
 
         g_hFont = CreateFontW(Scale(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
@@ -2645,12 +2712,25 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 isIgnored = (g_ignoredUsers.count(user) > 0);
             }
 
+            COLORREF userColor = GetSysColor(COLOR_WINDOWTEXT);
+            if (!isIgnored) {
+                size_t hash = 0;
+                for (wchar_t c : user) hash = hash * 31 + c;
+                COLORREF palette[] = {
+                    RGB(200, 50, 50), RGB(50, 150, 50), RGB(50, 50, 200),
+                    RGB(180, 180, 50), RGB(180, 50, 180), RGB(50, 180, 180),
+                    RGB(255, 128, 0), RGB(128, 0, 255), RGB(0, 128, 255),
+                    RGB(128, 200, 0), RGB(255, 0, 128), RGB(0, 200, 128)
+                };
+                userColor = palette[hash % 12];
+            }
+
             if (lpdis->itemState & ODS_SELECTED) {
                 FillRect(hdc, &rc, (HBRUSH)(COLOR_HIGHLIGHT + 1));
                 SetTextColor(hdc, isIgnored ? RGB(180, 180, 180) : GetSysColor(COLOR_HIGHLIGHTTEXT));
             } else {
                 FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
-                SetTextColor(hdc, isIgnored ? RGB(140, 140, 140) : GetSysColor(COLOR_WINDOWTEXT));
+                SetTextColor(hdc, isIgnored ? RGB(140, 140, 140) : userColor);
             }
             SetBkMode(hdc, TRANSPARENT);
 
@@ -2813,7 +2893,12 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             if (user == g_username) {
                 hOldFont = (HFONT)SelectObject(hdc, g_hFontBold);
             }
-            DrawTextW(hdc, szText, -1, &rcText, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+            
+            std::wstring displayUser = user;
+            size_t hashPos = displayUser.find(L'#');
+            if (hashPos != std::wstring::npos) displayUser = displayUser.substr(0, hashPos);
+            
+            DrawTextW(hdc, displayUser.c_str(), -1, &rcText, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
             if (hOldFont) {
                 SelectObject(hdc, hOldFont);
             }
