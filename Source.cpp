@@ -38,7 +38,7 @@
 
 HWND g_hLog, g_hInput, g_hSendBtn, g_hUserList;
 HWND g_hBtnB, g_hBtnI, g_hBtnU, g_hComboSize, g_hBtnColor;
-HWND g_hBtnCreateRoom, g_hBtnMoveRoom;
+HWND g_hBtnMoveRoom;
 HWND g_hBtnVoice, g_hBtnVideo, g_hVolumeIndicator;
 int g_currentMicVolume = 0;
 COLORREF g_currentColor = RGB(0, 0, 0);
@@ -53,8 +53,11 @@ int g_dpi = 96;
 inline int Scale(int x) { return MulDiv(x, g_dpi, 96); }
 
 HFONT g_hFont;
+HFONT g_hFontBold;
+HFONT g_hFontI_btn;
+HFONT g_hFontU_btn;
 
-std::set<std::wstring> g_publicRooms;
+std::map<std::wstring, int> g_publicRooms;
 std::wstring g_currentRoom = L"\x30ED\x30D3\x30FC"; // "ロビー"
 bool g_isPrivateRoom = false;
 
@@ -81,6 +84,8 @@ bool g_isWebcamActive = false;
 uint16_t g_videoSeq = 0;
 
 std::map<std::wstring, DWORD> g_videoStreamers;
+std::map<std::wstring, DWORD> g_voiceUsers;
+std::mutex g_voiceMutex;
 std::mutex g_streamerMutex;
 std::map<std::wstring, HWND> g_videoWindows;
 std::map<std::wstring, std::vector<uint8_t>> g_videoPixelsMap;
@@ -95,7 +100,8 @@ struct VideoFrameBuffer {
 };
 std::map<std::wstring, std::map<uint16_t, VideoFrameBuffer>> g_videoBuffers;
 
-
+std::set<std::wstring> g_ignoredUsers;
+std::mutex g_ignoredMutex;
 
 void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& username) {
     IStream* pStream = NULL;
@@ -647,6 +653,8 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 auto& entry = g_logEntries[i];
                 if (entry.pLayout && y + entry.height > 0 && y < viewH) {
                     
+                    bool isSelected = false;
+                    int startC = 0, endC = 0;
                     int sEntry = g_logSelection.startEntryIndex;
                     int sChar = g_logSelection.startCharIndex;
                     int eEntry = g_logSelection.endEntryIndex;
@@ -657,18 +665,23 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                             std::swap(sChar, eChar);
                         }
                         if ((int)i >= sEntry && (int)i <= eEntry) {
+                            isSelected = true;
                             std::wstring fullText = entry.data.user.empty() ? entry.data.msg : (entry.data.user + L": " + entry.data.msg);
                             if (fullText.empty()) fullText = L" ";
-                            int startC = ((int)i == sEntry) ? sChar : 0;
-                            int endC = ((int)i == eEntry) ? eChar : (int)fullText.length();
+                            startC = ((int)i == sEntry) ? sChar : 0;
+                            endC = ((int)i == eEntry) ? eChar : (int)fullText.length();
                             if (startC < endC) {
                                 UINT32 actualHitTestCount = 0;
                                 entry.pLayout->HitTestTextRange(startC, endC - startC, 0, 0, nullptr, 0, &actualHitTestCount);
                                 if (actualHitTestCount > 0) {
                                     std::vector<DWRITE_HIT_TEST_METRICS> hitMetrics(actualHitTestCount);
                                     entry.pLayout->HitTestTextRange(startC, endC - startC, 0, 0, hitMetrics.data(), actualHitTestCount, &actualHitTestCount);
+                                    DWORD hlColor = GetSysColor(COLOR_HIGHLIGHT);
+                                    float r = GetRValue(hlColor) / 255.0f;
+                                    float g = GetGValue(hlColor) / 255.0f;
+                                    float b = GetBValue(hlColor) / 255.0f;
                                     ID2D1SolidColorBrush* pBgBrush = nullptr;
-                                    if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.47f, 0.84f, 0.3f), &pBgBrush))) {
+                                    if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(r, g, b, 1.0f), &pBgBrush))) {
                                         for (UINT32 j = 0; j < actualHitTestCount; ++j) {
                                             D2D1_RECT_F rect = D2D1::RectF(
                                                 hitMetrics[j].left,
@@ -680,6 +693,17 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                                         }
                                         pBgBrush->Release();
                                     }
+
+                                    DWORD hlText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+                                    float tr = GetRValue(hlText) / 255.0f;
+                                    float tg = GetGValue(hlText) / 255.0f;
+                                    float tb = GetBValue(hlText) / 255.0f;
+                                    ID2D1SolidColorBrush* pTextBrush = nullptr;
+                                    if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(tr, tg, tb, 1.0f), &pTextBrush)) && pTextBrush) {
+                                        DWRITE_TEXT_RANGE selRange = { (UINT32)startC, (UINT32)(endC - startC) };
+                                        entry.pLayout->SetDrawingEffect(pTextBrush, selRange);
+                                        pTextBrush->Release();
+                                    }
                                 }
                             }
                         }
@@ -689,6 +713,26 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Black), &pBrush)) && pBrush) {
                         pRT->DrawTextLayout(D2D1::Point2F(0, y), entry.pLayout, pBrush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
                         pBrush->Release();
+                    }
+
+                    if (isSelected && startC < endC) {
+                        std::wstring fullText = entry.data.user.empty() ? entry.data.msg : (entry.data.user + L": " + entry.data.msg);
+                        if (fullText.empty()) fullText = L" ";
+                        int msgStart = entry.data.user.empty() ? 0 : (int)entry.data.user.length() + 2;
+
+                        DWRITE_TEXT_RANGE fullRange = { 0, (UINT32)fullText.length() };
+                        entry.pLayout->SetDrawingEffect(nullptr, fullRange);
+
+                        if (msgStart < fullText.length()) {
+                            DWRITE_TEXT_RANGE msgRange = { (UINT32)msgStart, (UINT32)entry.data.msg.length() };
+                            ID2D1SolidColorBrush* pMsgBrush = nullptr;
+                            if (SUCCEEDED(pRT->CreateSolidColorBrush(
+                                D2D1::ColorF(GetRValue(entry.data.color)/255.0f, GetGValue(entry.data.color)/255.0f, GetBValue(entry.data.color)/255.0f), 
+                                &pMsgBrush)) && pMsgBrush) {
+                                entry.pLayout->SetDrawingEffect(pMsgBrush, msgRange);
+                                pMsgBrush->Release();
+                            }
+                        }
                     }
                 }
                 y += entry.height;
@@ -1034,8 +1078,12 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                             pLayout->HitTestTextRange(selStart, selLen, 5, 5, hitTestMetrics, actualHitTestCount, &actualHitTestCount);
                         }
                         
+                        DWORD hlColor = GetSysColor(COLOR_HIGHLIGHT);
+                        float r = GetRValue(hlColor) / 255.0f;
+                        float g = GetGValue(hlColor) / 255.0f;
+                        float b = GetBValue(hlColor) / 255.0f;
                         ID2D1SolidColorBrush* pSelBrush = nullptr;
-                        if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(0.6f, 0.8f, 1.0f, 1.0f), &pSelBrush)) && pSelBrush) {
+                        if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(r, g, b, 1.0f), &pSelBrush)) && pSelBrush) {
                             for (UINT32 i = 0; i < actualHitTestCount; i++) {
                                 D2D1_RECT_F rect = D2D1::RectF(
                                     hitTestMetrics[i].left,
@@ -1046,6 +1094,17 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                                 pRT->FillRectangle(rect, pSelBrush);
                             }
                             pSelBrush->Release();
+                        }
+
+                        DWORD hlText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+                        float tr = GetRValue(hlText) / 255.0f;
+                        float tg = GetGValue(hlText) / 255.0f;
+                        float tb = GetBValue(hlText) / 255.0f;
+                        ID2D1SolidColorBrush* pTextBrush = nullptr;
+                        if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(tr, tg, tb, 1.0f), &pTextBrush)) && pTextBrush) {
+                            DWRITE_TEXT_RANGE selRange = { (UINT32)selStart, (UINT32)selLen };
+                            pLayout->SetDrawingEffect(pTextBrush, selRange);
+                            pTextBrush->Release();
                         }
                         delete[] hitTestMetrics;
                     }
@@ -1380,112 +1439,42 @@ bool ShowChangeNameDialog(HWND hParent, std::wstring& outResult) {
     return g_changeNameOK;
 }
 
-std::wstring g_createBoxResult;
-bool g_createBoxPrivate = false;
-bool g_createBoxOK = false;
 
-LRESULT CALLBACK CreateRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    static HWND hEdit, hChk, hBtnOK, hBtnCancel;
-    switch (msg) {
-    case WM_CREATE: {
-        hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-            Scale(10), Scale(10), Scale(260), Scale(24), hWnd, 0, GetModuleHandle(0), 0);
-        hChk = CreateWindow(L"BUTTON", L"\x975E\x516C\x958B", 
-            WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-            Scale(10), Scale(45), Scale(80), Scale(24), hWnd, (HMENU)3, GetModuleHandle(0), 0);
-        hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
-            Scale(100), Scale(45), Scale(80), Scale(24), hWnd, (HMENU)1, GetModuleHandle(0), 0);
-        hBtnCancel = CreateWindow(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            Scale(190), Scale(45), Scale(80), Scale(24), hWnd, (HMENU)2, GetModuleHandle(0), 0);
-        HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
-        SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, FALSE);
-        SendMessage(hChk, WM_SETFONT, (WPARAM)hFont, FALSE);
-        SendMessage(hBtnOK, WM_SETFONT, (WPARAM)hFont, FALSE);
-        SendMessage(hBtnCancel, WM_SETFONT, (WPARAM)hFont, FALSE);
-        SetFocus(hEdit);
-        return 0;
-    }
-    case WM_COMMAND:
-        if (LOWORD(wParam) == 1) { 
-            int len = GetWindowTextLength(hEdit);
-            std::vector<WCHAR> buf(len + 1);
-            GetWindowText(hEdit, buf.data(), len + 1);
-            g_createBoxResult = buf.data();
-            g_createBoxPrivate = SendMessage(hChk, BM_GETCHECK, 0, 0) == BST_CHECKED;
-            g_createBoxOK = true;
-            DestroyWindow(hWnd);
-        } else if (LOWORD(wParam) == 2) { 
-            g_createBoxOK = false;
-            DestroyWindow(hWnd);
-        }
-        break;
-    }
-    return DefWindowProc(hWnd, msg, wParam, lParam);
-}
-
-bool ShowCreateRoomDialog(HWND hParent, std::wstring& outResult, bool& outPrivate) {
-    WNDCLASS wc = { 0 };
-    wc.lpfnWndProc = CreateRoomProc;
-    wc.hInstance = GetModuleHandle(0);
-    wc.lpszClassName = L"CreateRoomClass";
-    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
-    RegisterClass(&wc);
-
-    g_createBoxOK = false;
-    g_createBoxResult = L"";
-    g_createBoxPrivate = false;
-
-    RECT rcParent;
-    GetWindowRect(hParent, &rcParent);
-
-    HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"CreateRoomClass", L"\x65B0\x3057\x3044\x90E8\x5C4B\x306E\x540D\x524D\x3092\x5165\x529B",
-        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-        rcParent.left + (rcParent.right - rcParent.left - Scale(300)) / 2, 
-        rcParent.top + (rcParent.bottom - rcParent.top - Scale(120)) / 2, 
-        Scale(300), Scale(120), hParent, 0, GetModuleHandle(0), 0);
-    
-    EnableWindow(hParent, FALSE);
-    
-    MSG msg;
-    while (IsWindow(hWnd) && GetMessage(&msg, 0, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
-    }
-    
-    EnableWindow(hParent, TRUE);
-    SetForegroundWindow(hParent);
-    
-    if (g_createBoxOK && !g_createBoxResult.empty()) {
-        outResult = g_createBoxResult;
-        outPrivate = g_createBoxPrivate;
-    }
-    return g_createBoxOK && !g_createBoxResult.empty();
-}
 
 std::wstring g_moveBoxResult;
+bool g_moveBoxPrivate = false;
 bool g_moveBoxOK = false;
 bool g_ignoreEditChange = false;
 
 LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
-    static HWND hEdit, hList, hBtnOK, hBtnCancel;
+    static HWND hEdit, hList, hChk, hBtnOK, hBtnCancel;
+    static std::vector<std::wstring> s_roomNames;
     switch (msg) {
     case WM_CREATE: {
         hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
             Scale(10), Scale(10), Scale(260), Scale(24), hWnd, (HMENU)101, GetModuleHandle(0), 0);
         hList = CreateWindowEx(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_NOTIFY | LBS_HASSTRINGS,
             Scale(10), Scale(40), Scale(260), Scale(100), hWnd, (HMENU)102, GetModuleHandle(0), 0);
+        hChk = CreateWindow(L"BUTTON", L"\x975E\x516C\x958B", 
+            WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+            Scale(10), Scale(145), Scale(80), Scale(24), hWnd, (HMENU)103, GetModuleHandle(0), 0);
         hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
             Scale(100), Scale(145), Scale(80), Scale(24), hWnd, (HMENU)1, GetModuleHandle(0), 0);
         hBtnCancel = CreateWindow(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             Scale(190), Scale(145), Scale(80), Scale(24), hWnd, (HMENU)2, GetModuleHandle(0), 0);
         
+        s_roomNames.clear();
         for (const auto& r : g_publicRooms) {
-            SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)r.c_str());
+            std::wstring display = r.first + L" (" + std::to_wstring(r.second) + L")";
+            int idx = (int)SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)display.c_str());
+            s_roomNames.push_back(r.first);
+            SendMessage(hList, LB_SETITEMDATA, idx, (LPARAM)(s_roomNames.size() - 1));
         }
 
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
         SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hList, WM_SETFONT, (WPARAM)hFont, FALSE);
+        SendMessage(hChk, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hBtnOK, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hBtnCancel, WM_SETFONT, (WPARAM)hFont, FALSE);
         SetFocus(hEdit);
@@ -1499,6 +1488,7 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             std::vector<WCHAR> buf(len + 1);
             GetWindowText(hEdit, buf.data(), len + 1);
             g_moveBoxResult = buf.data();
+            g_moveBoxPrivate = SendMessage(hChk, BM_GETCHECK, 0, 0) == BST_CHECKED;
             g_moveBoxOK = true;
             DestroyWindow(hWnd);
         } else if (id == 2) { // Cancel
@@ -1507,12 +1497,12 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         } else if (id == 102 && code == LBN_SELCHANGE) {
             int sel = (int)SendMessage(hList, LB_GETCURSEL, 0, 0);
             if (sel != LB_ERR) {
-                int len = (int)SendMessage(hList, LB_GETTEXTLEN, sel, 0);
-                std::vector<WCHAR> buf(len + 1);
-                SendMessage(hList, LB_GETTEXT, sel, (LPARAM)buf.data());
-                g_ignoreEditChange = true;
-                SetWindowText(hEdit, buf.data());
-                g_ignoreEditChange = false;
+                int dataIdx = (int)SendMessage(hList, LB_GETITEMDATA, sel, 0);
+                if (dataIdx >= 0 && dataIdx < (int)s_roomNames.size()) {
+                    g_ignoreEditChange = true;
+                    SetWindowText(hEdit, s_roomNames[dataIdx].c_str());
+                    g_ignoreEditChange = false;
+                }
             }
         } else if (id == 101 && code == EN_CHANGE) {
             if (g_ignoreEditChange) break;
@@ -1522,19 +1512,27 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             std::wstring search = buf.data();
             
             SendMessage(hList, LB_RESETCONTENT, 0, 0);
+            s_roomNames.clear();
             for (const auto& r : g_publicRooms) {
-                if (search.empty() || r.find(search) != std::wstring::npos) {
-                    SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)r.c_str());
+                if (search.empty() || r.first.find(search) != std::wstring::npos) {
+                    std::wstring display = r.first + L" (" + std::to_wstring(r.second) + L")";
+                    int idx = (int)SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)display.c_str());
+                    s_roomNames.push_back(r.first);
+                    SendMessage(hList, LB_SETITEMDATA, idx, (LPARAM)(s_roomNames.size() - 1));
                 }
             }
         }
         break;
     }
+    case WM_CLOSE:
+        g_moveBoxOK = false;
+        DestroyWindow(hWnd);
+        return 0;
     }
     return DefWindowProc(hWnd, msg, wParam, lParam);
 }
 
-bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult) {
+bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult, bool& outPrivate) {
     WNDCLASS wc = { 0 };
     wc.lpfnWndProc = MoveRoomProc;
     wc.hInstance = GetModuleHandle(0);
@@ -1544,6 +1542,7 @@ bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult) {
 
     g_moveBoxOK = false;
     g_moveBoxResult = L"";
+    g_moveBoxPrivate = false;
 
     RECT rcParent;
     GetWindowRect(hParent, &rcParent);
@@ -1567,6 +1566,7 @@ bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult) {
     
     if (g_moveBoxOK && !g_moveBoxResult.empty()) {
         outResult = g_moveBoxResult;
+        outPrivate = g_moveBoxPrivate;
     }
     return g_moveBoxOK && !g_moveBoxResult.empty();
 }
@@ -1618,6 +1618,10 @@ void SetWindowTitle(HWND hWnd) {
 
 void AppendLog(const MsgData& data) {
     if (!data.user.empty()) {
+        {
+            std::lock_guard<std::mutex> lock(g_ignoredMutex);
+            if (g_ignoredUsers.count(data.user) > 0) return;
+        }
         UpdateUserList(data.user);
     }
     LogEntry entry;
@@ -1740,7 +1744,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 if (!rmStr.empty()) {
                                     std::wstring wrm = a2w(rmStr.c_str());
                                     if (g_publicRooms.find(wrm) == g_publicRooms.end()) {
-                                        g_publicRooms.insert(wrm);
+                                        g_publicRooms[wrm] = 1;
                                     }
                                 }
                             }
@@ -1748,7 +1752,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 g_publicRooms.clear();
                                 auto arr = json["rooms"].array_items();
                                 for (auto& item : arr) {
-                                    g_publicRooms.insert(a2w(item.string_value().c_str()));
+                                    std::string name = item["name"].string_value();
+                                    int count = item["count"].int_value();
+                                    g_publicRooms[a2w(name.c_str())] = count;
                                 }
                             }
                         }
@@ -1766,8 +1772,27 @@ DWORD WINAPI RecvThread(LPVOID param) {
                 int res = recvfrom(g_sock, udpBuf, sizeof(udpBuf), 0, (sockaddr*)&from, &fromlen);
                 if (res >= sizeof(MediaHeader)) {
                     MediaHeader* mhdr = (MediaHeader*)udpBuf;
+                    
+                    bool isIgnored = false;
+                    {
+                        std::wstring fromUser = mhdr->username;
+                        std::lock_guard<std::mutex> lock(g_ignoredMutex);
+                        isIgnored = (g_ignoredUsers.count(fromUser) > 0);
+                    }
+                    if (isIgnored) continue;
+
                     if (mhdr->payloadType == 1) { // Audio
                         PlayAudioFrame(udpBuf + sizeof(MediaHeader), res - sizeof(MediaHeader));
+                        std::wstring wname = mhdr->username;
+                        bool newlySpeaking = false;
+                        {
+                            std::lock_guard<std::mutex> lock(g_voiceMutex);
+                            if (g_voiceUsers.find(wname) == g_voiceUsers.end() || (GetTickCount() - g_voiceUsers[wname] > 1000)) {
+                                newlySpeaking = true;
+                            }
+                            g_voiceUsers[wname] = GetTickCount();
+                        }
+                        if (newlySpeaking && g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
                     }
                     else if (mhdr->payloadType == 2) {
                         std::wstring wname = mhdr->username;
@@ -2083,9 +2108,17 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     } else if (cmd == 3) {
                         std::wstring newName;
                         if (ShowChangeNameDialog(GetParent(hwnd), newName) && !newName.empty() && newName != g_username) {
+                            std::wstring oldName = g_username;
                             SendLeaveRequest(g_currentRoom);
                             g_username = newName;
                             SaveSettings();
+                            
+                            int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)oldName.c_str());
+                            if (idx != LB_ERR) {
+                                SendMessage(g_hUserList, LB_DELETESTRING, idx, 0);
+                            }
+                            UpdateUserList(newName);
+                            
                             SendJoinRequest(g_currentRoom);
                         }
                     }
@@ -2095,8 +2128,14 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                         std::lock_guard<std::mutex> lock(g_streamerMutex);
                         hasStreamer = (g_videoStreamers.count(clickedUser) > 0 && (GetTickCount() - g_videoStreamers[clickedUser] < 5000));
                     }
+                    bool isIgnored = false;
+                    {
+                        std::lock_guard<std::mutex> lock(g_ignoredMutex);
+                        isIgnored = (g_ignoredUsers.count(clickedUser) > 0);
+                    }
                     HMENU hMenu = CreatePopupMenu();
                     AppendMenuW(hMenu, MF_STRING | (hasStreamer ? 0 : MF_GRAYED), 2, L"\x30D3\x30C7\x30AA\x3092\x8996\x8074");
+                    AppendMenuW(hMenu, MF_STRING | (isIgnored ? MF_CHECKED : MF_UNCHECKED), 4, L"\x7121\x8996\x3059\x308B");
                     ClientToScreen(hwnd, &pt);
                     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
                     DestroyMenu(hMenu);
@@ -2108,6 +2147,17 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                         } else {
                             SetForegroundWindow(g_videoWindows[clickedUser]);
                         }
+                    } else if (cmd == 4) {
+                        std::lock_guard<std::mutex> lock(g_ignoredMutex);
+                        if (g_ignoredUsers.count(clickedUser) > 0) {
+                            g_ignoredUsers.erase(clickedUser);
+                        } else {
+                            g_ignoredUsers.insert(clickedUser);
+                            if (g_videoWindows[clickedUser] && IsWindow(g_videoWindows[clickedUser])) {
+                                DestroyWindow(g_videoWindows[clickedUser]);
+                            }
+                        }
+                        InvalidateRect(hwnd, NULL, FALSE);
                     }
                 }
             }
@@ -2185,6 +2235,15 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         g_hFont = CreateFontW(Scale(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
             DEFAULT_PITCH | FF_DONTCARE, L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF");
+        g_hFontBold = CreateFontW(Scale(14), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
+            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+            DEFAULT_PITCH | FF_DONTCARE, L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF");
+        g_hFontI_btn = CreateFontW(Scale(14), 0, 0, 0, FW_NORMAL, TRUE, FALSE, FALSE, SHIFTJIS_CHARSET,
+            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+            DEFAULT_PITCH | FF_DONTCARE, L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF");
+        g_hFontU_btn = CreateFontW(Scale(14), 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE, SHIFTJIS_CHARSET,
+            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+            DEFAULT_PITCH | FF_DONTCARE, L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF");
 
         // UI Creation
         g_hLog = CreateWindowEx(WS_EX_CLIENTEDGE, L"D2DLogViewClass", L"",
@@ -2192,20 +2251,18 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
         g_hUserList = CreateWindowEx(WS_EX_CLIENTEDGE, L"LISTBOX", L"",
-            WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_SORT | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS,
+            WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_SORT | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT,
             0, 0, 0, 0, hWnd, (HMENU)1050, ((LPCREATESTRUCT)lParam)->hInstance, 0);
             
         SetWindowTheme(g_hLog, L" ", L" ");
         SetWindowTheme(g_hUserList, L" ", L" ");
 
-        g_hBtnCreateRoom = CreateWindow(L"BUTTON", L"\x90E8\x5C4B\x4F5C\x6210", 
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            0, 0, 0, 0, hWnd, (HMENU)1007, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
-        g_hBtnMoveRoom = CreateWindow(L"BUTTON", L"\x90E8\x5C4B\x79FB\x52D5", 
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+
+        g_hBtnMoveRoom = CreateWindow(L"BUTTON", L"", 
+            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
             0, 0, 0, 0, hWnd, (HMENU)1008, ((LPCREATESTRUCT)lParam)->hInstance, 0);
-        g_hBtnVoice = CreateWindow(L"BUTTON", L"\x30DC\x30A4\x30B9", 
+        g_hBtnVoice = CreateWindow(L"BUTTON", L"\x8A71\x3059", 
             WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
             0, 0, 0, 0, hWnd, (HMENU)1009, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
@@ -2240,23 +2297,21 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         g_hComboSize = CreateWindow(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST,
             0, 0, 0, 0, hWnd, (HMENU)1006, ((LPCREATESTRUCT)lParam)->hInstance, 0);
         
-        g_hBtnColor = CreateWindow(L"BUTTON", L"\x8272", 
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        g_hBtnColor = CreateWindow(L"BUTTON", L"", 
+            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
             0, 0, 0, 0, hWnd, (HMENU)1002, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
-        const WCHAR* sizes[] = { L"10", L"12", L"14", L"16", L"18", L"20", L"24" };
+        const WCHAR* sizes[] = { L"8", L"9", L"10", L"11", L"12", L"14", L"16", L"18", L"20", L"22", L"24", L"28", L"32" };
         for (auto sz : sizes) SendMessage(g_hComboSize, CB_ADDSTRING, 0, (LPARAM)sz);
-        SendMessage(g_hComboSize, CB_SETCURSEL, 1, 0);
+        SendMessage(g_hComboSize, CB_SETCURSEL, 4, 0);
 
         SendMessage(g_hUserList, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-        SendMessage(g_hBtnCreateRoom, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-        SendMessage(g_hBtnMoveRoom, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+
         SendMessage(g_hSendBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-        SendMessage(g_hBtnB, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-        SendMessage(g_hBtnI, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-        SendMessage(g_hBtnU, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        SendMessage(g_hBtnB, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+        SendMessage(g_hBtnI, WM_SETFONT, (WPARAM)g_hFontI_btn, TRUE);
+        SendMessage(g_hBtnU, WM_SETFONT, (WPARAM)g_hFontU_btn, TRUE);
         SendMessage(g_hComboSize, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-        SendMessage(g_hBtnColor, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
         UpdateInputFormat();
         SetWindowTitle(hWnd);
@@ -2264,20 +2319,21 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         MsgData sysMsg;
         sysMsg.user = L"";
         if (isConnected) {
-            sysMsg.msg = L"--- \x30CD\x30C3\x30C8\x30EF\x30FC\x30AF\x306B\x53C2\x52A0\x3057\x307E\x3057\x305F (" + g_username + L") ---";
+            sysMsg.msg = L"\x30CD\x30C3\x30C8\x30EF\x30FC\x30AF\x306B\x53C2\x52A0\x3057\x307E\x3057\x305F (" + g_username + L")";
             sysMsg.color = RGB(128,128,128);
         } else {
-            sysMsg.msg = L"--- \x30B5\x30FC\x30D0\x30FC\x304C\x898B\x3064\x304B\x308A\x307E\x305B\x3093\x3002\x30E1\x30F3\x30C6\x30CA\x30F3\x30B9\x306E\x53EF\x80FD\x6027\x304C\x3042\x308A\x307E\x3059 ---";
+            sysMsg.msg = L"\x30B5\x30FC\x30D0\x30FC\x304C\x898B\x3064\x304B\x308A\x307E\x305B\x3093\x3002\x30E1\x30F3\x30C6\x30CA\x30F3\x30B9\x306E\x53EF\x80FD\x6027\x304C\x3042\x308A\x307E\x3059";
             sysMsg.color = RGB(255,0,0);
         }
         sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
-        sysMsg.size = 12;
+        sysMsg.size = 9;
         AppendLog(sysMsg);
 
         // Send initial join after all UI controls are fully created
         SendJoinRequest(g_currentRoom);
         CreateThread(0, 0, RecvThread, hWnd, 0, 0);
         SetTimer(hWnd, 1, 3000, NULL);
+        SetTimer(hWnd, 2, 500, NULL);
 
         return 0;
     }
@@ -2305,12 +2361,123 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             }
             UINT edge = ((lpdis->itemState & ODS_SELECTED) || g_isVoiceActive) ? EDGE_SUNKEN : EDGE_RAISED;
             DrawEdge(hdc, &rc, edge, BF_RECT);
+            
+            if (lpdis->itemState & ODS_FOCUS) {
+                RECT rcFocus = rc;
+                InflateRect(&rcFocus, -4, -4);
+                DrawFocusRect(hdc, &rcFocus);
+            }
+
+            GdiFlush(); // Ensure GDI background is drawn before GDI+ draws on top
+
+            {
+                Gdiplus::Graphics graphics(hdc);
+                graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+                int cx = rc.left + Scale(14);
+                int cy = rc.top + (rc.bottom - rc.top) / 2 - Scale(2);
+
+                Gdiplus::SolidBrush micBrush(Gdiplus::Color(255, 0, 0, 0));
+                Gdiplus::Pen micPen(Gdiplus::Color(255, 0, 0, 0), 1.5f);
+                
+                graphics.FillRectangle(&micBrush, cx - Scale(2), cy - Scale(4), Scale(4), Scale(6));
+                graphics.FillEllipse(&micBrush, cx - Scale(2), cy - Scale(6), Scale(4), Scale(4));
+                graphics.FillEllipse(&micBrush, cx - Scale(2), cy, Scale(4), Scale(4));
+                graphics.DrawArc(&micPen, cx - Scale(5), cy - Scale(2), Scale(10), Scale(8), 0.0f, 180.0f);
+                graphics.DrawLine(&micPen, cx, cy + Scale(6), cx, cy + Scale(9));
+                graphics.DrawLine(&micPen, cx - Scale(3), cy + Scale(9), cx + Scale(3), cy + Scale(9));
+            }
+
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, RGB(0,0,0));
             HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
-            LPCWSTR text = L"\x30DC\x30A4\x30B9";
-            DrawTextW(hdc, text, -1, &rc, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+            LPCWSTR text = L"\x8A71\x3059";
+            RECT rcText = rc;
+            rcText.left += Scale(28);
+            DrawTextW(hdc, text, -1, &rcText, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
             SelectObject(hdc, hOldFont);
+            return TRUE;
+        }
+        else if (lpdis->CtlID == 1008) {
+            HDC hdc = lpdis->hDC;
+            RECT rc = lpdis->rcItem;
+            FillRect(hdc, &rc, (HBRUSH)(COLOR_BTNFACE + 1));
+            UINT edge = (lpdis->itemState & ODS_SELECTED) ? EDGE_SUNKEN : EDGE_RAISED;
+            DrawEdge(hdc, &rc, edge, BF_RECT);
+            if (lpdis->itemState & ODS_FOCUS) {
+                RECT rcFocus = rc; InflateRect(&rcFocus, -4, -4); DrawFocusRect(hdc, &rcFocus);
+            }
+
+            GdiFlush(); // Ensure GDI background is drawn before GDI+ draws on top
+
+            HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
+            LPCWSTR text = L"\x90E8\x5C4B\x79FB\x52D5";
+            SIZE size;
+            GetTextExtentPoint32(hdc, text, lstrlen(text), &size);
+            int iconWidth = Scale(16);
+            int gap = Scale(6);
+            int blockWidth = iconWidth + gap + size.cx;
+            int startX = rc.left + (rc.right - rc.left - blockWidth) / 2;
+            int cx = startX + iconWidth / 2;
+            int cy = rc.top + (rc.bottom - rc.top) / 2;
+
+            {
+                Gdiplus::Graphics graphics(hdc);
+                graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+                
+                Gdiplus::Pen pen(Gdiplus::Color(255, 0, 0, 0), 1.5f);
+                Gdiplus::SolidBrush knobBrush(Gdiplus::Color(255, 0, 0, 0));
+                graphics.DrawRectangle(&pen, cx - Scale(6), cy - Scale(6), Scale(8), Scale(12));
+                graphics.FillEllipse(&knobBrush, cx - Scale(2), cy - Scale(1), Scale(2), Scale(2));
+                graphics.DrawLine(&pen, cx + Scale(2), cy, cx + Scale(8), cy);
+                graphics.DrawLine(&pen, cx + Scale(8), cy, cx + Scale(5), cy - Scale(3));
+                graphics.DrawLine(&pen, cx + Scale(8), cy, cx + Scale(5), cy + Scale(3));
+            }
+
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(0,0,0));
+            RECT rcText = rc;
+            rcText.left = startX + iconWidth + gap;
+            DrawTextW(hdc, text, -1, &rcText, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
+            SelectObject(hdc, hOldFont);
+            return TRUE;
+        }
+        else if (lpdis->CtlID == 1002) {
+            HDC hdc = lpdis->hDC;
+            RECT rc = lpdis->rcItem;
+            FillRect(hdc, &rc, (HBRUSH)(COLOR_BTNFACE + 1));
+            UINT edge = (lpdis->itemState & ODS_SELECTED) ? EDGE_SUNKEN : EDGE_RAISED;
+            DrawEdge(hdc, &rc, edge, BF_RECT);
+            if (lpdis->itemState & ODS_FOCUS) {
+                RECT rcFocus = rc; InflateRect(&rcFocus, -4, -4); DrawFocusRect(hdc, &rcFocus);
+            }
+            
+            GdiFlush(); // Ensure GDI background is drawn before GDI+ draws on top
+
+            {
+                Gdiplus::Graphics graphics(hdc);
+                graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+                
+                int cx = rc.left + (rc.right - rc.left) / 2;
+                int cy = rc.top + (rc.bottom - rc.top) / 2;
+                
+                Gdiplus::SolidBrush palBrush(Gdiplus::Color(255, 245, 225, 170));
+                graphics.FillEllipse(&palBrush, cx - Scale(10), cy - Scale(7), Scale(20), Scale(14));
+
+                COLORREF btnFace = GetSysColor(COLOR_BTNFACE);
+                Gdiplus::SolidBrush bgBrush(Gdiplus::Color(255, GetRValue(btnFace), GetGValue(btnFace), GetBValue(btnFace)));
+                graphics.FillEllipse(&bgBrush, cx + Scale(3), cy - Scale(3), Scale(6), Scale(6));
+
+                Gdiplus::SolidBrush yellow(Gdiplus::Color(255, 240, 200, 40));
+                Gdiplus::SolidBrush red(Gdiplus::Color(255, 230, 50, 50));
+                Gdiplus::SolidBrush blue(Gdiplus::Color(255, 50, 150, 230));
+                Gdiplus::SolidBrush brown(Gdiplus::Color(255, 150, 80, 30));
+
+                graphics.FillEllipse(&yellow, cx - Scale(2), cy - Scale(5), Scale(4), Scale(4));
+                graphics.FillEllipse(&red, cx - Scale(6), cy - Scale(3), Scale(4), Scale(4));
+                graphics.FillEllipse(&blue, cx - Scale(7), cy + Scale(1), Scale(4), Scale(4));
+                graphics.FillEllipse(&brown, cx - Scale(3), cy + Scale(3), Scale(4), Scale(4));
+            }
+            
             return TRUE;
         }
         else if (lpdis->CtlID == 1051) {
@@ -2346,25 +2513,33 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 }
             }
             
-            FrameRect(hdc, &rc, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            HBRUSH hGrayBrush = CreateSolidBrush(RGB(180, 180, 180));
+            FrameRect(hdc, &rc, hGrayBrush);
+            DeleteObject(hGrayBrush);
             return TRUE;
         }
         else if (lpdis->CtlID == 1050 && lpdis->itemID != (UINT)-1) {
             HDC hdc = lpdis->hDC;
             RECT rc = lpdis->rcItem;
             
-            if (lpdis->itemState & ODS_SELECTED) {
-                FillRect(hdc, &rc, (HBRUSH)(COLOR_HIGHLIGHT + 1));
-                SetTextColor(hdc, GetSysColor(COLOR_HIGHLIGHTTEXT));
-            } else {
-                FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
-                SetTextColor(hdc, GetSysColor(COLOR_WINDOWTEXT));
-            }
-            SetBkMode(hdc, TRANSPARENT);
-            
             WCHAR szText[256] = {0};
             SendMessage(lpdis->hwndItem, LB_GETTEXT, lpdis->itemID, (LPARAM)szText);
             std::wstring user(szText);
+
+            bool isIgnored = false;
+            {
+                std::lock_guard<std::mutex> lock(g_ignoredMutex);
+                isIgnored = (g_ignoredUsers.count(user) > 0);
+            }
+
+            if (lpdis->itemState & ODS_SELECTED) {
+                FillRect(hdc, &rc, (HBRUSH)(COLOR_HIGHLIGHT + 1));
+                SetTextColor(hdc, isIgnored ? RGB(180, 180, 180) : GetSysColor(COLOR_HIGHLIGHTTEXT));
+            } else {
+                FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
+                SetTextColor(hdc, isIgnored ? RGB(140, 140, 140) : GetSysColor(COLOR_WINDOWTEXT));
+            }
+            SetBkMode(hdc, TRANSPARENT);
 
             int iconSize = Scale(16);
             int cx = rc.left + Scale(6);
@@ -2381,6 +2556,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 }
             }
             if (user == g_username && g_isWebcamActive) isStreaming = true;
+            if (isIgnored) isStreaming = false;
 
             if (isStreaming) {
                 // TV Cabinet (Wood color)
@@ -2424,10 +2600,10 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 graphics.FillEllipse(&antTip, antBaseX + Scale(4), tvY - Scale(7), Scale(3), Scale(3));
             }
             
-            Gdiplus::SolidBrush faceBrush(Gdiplus::Color(255, 255, 215, 0));
+            Gdiplus::SolidBrush faceBrush(isIgnored ? Gdiplus::Color(255, 180, 180, 180) : Gdiplus::Color(255, 255, 215, 0));
             graphics.FillEllipse(&faceBrush, cx, cy, iconSize, iconSize);
             
-            Gdiplus::Pen facePen(Gdiplus::Color(255, 200, 150, 0), 1.0f);
+            Gdiplus::Pen facePen(isIgnored ? Gdiplus::Color(255, 120, 120, 120) : Gdiplus::Color(255, 200, 150, 0), 1.0f);
             graphics.DrawEllipse(&facePen, cx, cy, iconSize, iconSize);
             
             Gdiplus::SolidBrush eyeBrush(Gdiplus::Color(255, 0, 0, 0));
@@ -2437,9 +2613,41 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             Gdiplus::Pen mouthPen(Gdiplus::Color(255, 0, 0, 0), 1.5f);
             graphics.DrawArc(&mouthPen, cx + Scale(3), cy + Scale(4), Scale(10), Scale(8), 20.0f, 140.0f);
             
+            bool isVoicing = false;
+            {
+                std::lock_guard<std::mutex> lock(g_voiceMutex);
+                if (g_voiceUsers.count(user)) {
+                    if (GetTickCount() - g_voiceUsers[user] < 1000) isVoicing = true;
+                }
+            }
+            if (user == g_username && g_isVoiceActive) isVoicing = true;
+            if (isIgnored) isVoicing = false;
+            
             RECT rcText = rc;
-            rcText.left = rc.left + Scale(34);
+            if (isVoicing) {
+                Gdiplus::SolidBrush micBrush(Gdiplus::Color(255, 50, 200, 50));
+                Gdiplus::Pen micPen(Gdiplus::Color(255, 50, 200, 50), 1.5f);
+                int micX = rc.left + Scale(28);
+                int micY = cy + Scale(6);
+                graphics.FillRectangle(&micBrush, micX - Scale(2), micY - Scale(4), Scale(4), Scale(6));
+                graphics.FillEllipse(&micBrush, micX - Scale(2), micY - Scale(6), Scale(4), Scale(4));
+                graphics.FillEllipse(&micBrush, micX - Scale(2), micY, Scale(4), Scale(4));
+                graphics.DrawArc(&micPen, micX - Scale(5), micY - Scale(2), Scale(10), Scale(8), 0.0f, 180.0f);
+                graphics.DrawLine(&micPen, micX, micY + Scale(6), micX, micY + Scale(8));
+                graphics.DrawLine(&micPen, micX - Scale(3), micY + Scale(8), micX + Scale(3), micY + Scale(8));
+                rcText.left = rc.left + Scale(46);
+            } else {
+                rcText.left = rc.left + Scale(34);
+            }
+            
+            HFONT hOldFont = NULL;
+            if (user == g_username) {
+                hOldFont = (HFONT)SelectObject(hdc, g_hFontBold);
+            }
             DrawTextW(hdc, szText, -1, &rcText, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+            if (hOldFont) {
+                SelectObject(hdc, hOldFont);
+            }
             
             return TRUE;
         }
@@ -2467,18 +2675,17 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
         int halfList = (listWidth - margin) / 2;
         int roomBtnY = margin * 2 + listHeight;
-        MoveWindow(g_hBtnCreateRoom, margin * 2 + logWidth, roomBtnY, halfList, roomBtnHeight, TRUE);
-        MoveWindow(g_hBtnMoveRoom, margin * 2 + logWidth + halfList + margin, roomBtnY, halfList, roomBtnHeight, TRUE);
+        MoveWindow(g_hBtnMoveRoom, margin * 2 + logWidth, roomBtnY, listWidth, roomBtnHeight, TRUE);
 
         int toolY = margin * 2 + topHeight;
         MoveWindow(g_hBtnB, margin, toolY, Scale(24), toolHeight, TRUE);
         MoveWindow(g_hBtnI, margin + Scale(28), toolY, Scale(24), toolHeight, TRUE);
         MoveWindow(g_hBtnU, margin + Scale(56), toolY, Scale(24), toolHeight, TRUE);
-        MoveWindow(g_hComboSize, margin + Scale(84), toolY, Scale(60), Scale(200), TRUE);
-        MoveWindow(g_hBtnColor, margin + Scale(148), toolY, Scale(60), toolHeight, TRUE);
-        MoveWindow(g_hBtnVoice, margin + Scale(215), toolY, Scale(80), toolHeight, TRUE);
-        MoveWindow(g_hVolumeIndicator, margin + Scale(300), toolY + Scale(4), Scale(60), toolHeight - Scale(8), TRUE);
-        // MoveWindow(g_hBtnVideo, margin + Scale(365), toolY, Scale(80), toolHeight, TRUE); // Hidden until video is restored
+        MoveWindow(g_hComboSize, margin + Scale(84), toolY, Scale(60), Scale(400), TRUE);
+        MoveWindow(g_hBtnColor, margin + Scale(148), toolY, Scale(32), toolHeight, TRUE);
+        MoveWindow(g_hBtnVoice, margin + Scale(186), toolY, Scale(70), toolHeight, TRUE);
+        MoveWindow(g_hVolumeIndicator, margin + Scale(261), toolY, Scale(50), toolHeight, TRUE);
+        // MoveWindow(g_hBtnVideo, margin + Scale(315), toolY, Scale(80), toolHeight, TRUE); // Hidden until video is restored
 
         int bottomY = margin * 3 + topHeight + toolHeight;
         MoveWindow(g_hInput, margin, bottomY, width - btnWidth - margin * 3, inputHeight, TRUE);
@@ -2521,37 +2728,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             UpdateInputFormat();
             SetFocus(g_hInput);
         }
-        else if (id == 1007 && code == BN_CLICKED) {
-            std::wstring newRoom;
-            bool isPrivate = false;
-            if (ShowCreateRoomDialog(hWnd, newRoom, isPrivate)) { 
-                SendLeaveRequest(g_currentRoom);
-                
-                // Close video windows and stop webcam on room change
-                g_isWebcamActive = false;
-                for (auto& pair : g_videoWindows) {
-                    if (pair.second && IsWindow(pair.second)) {
-                        SendMessage(pair.second, WM_CLOSE, 0, 0);
-                    }
-                }
-                g_videoWindows.clear();
 
-                SendJoinRequest(newRoom);
-                g_currentRoom = newRoom;
-                g_isPrivateRoom = isPrivate;
-                if (!isPrivate) {
-                    g_publicRooms.insert(newRoom);
-                }
-                ClearLogAndUsers();
-                SetWindowTitle(hWnd);
-                MsgData sysMsg;
-                sysMsg.user = L"";
-                sysMsg.msg = L"--- " + g_currentRoom + L"\x306B\x79FB\x52D5\x3057\x307E\x3057\x305F ---"; 
-                sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
-                sysMsg.size = 12; sysMsg.color = RGB(128,128,128);
-                AppendLog(sysMsg);
-            }
-        }
         else if (id == 1009 && code == BN_CLICKED) {
             g_isVoiceActive = !g_isVoiceActive;
             if (g_isVoiceActive) {
@@ -2568,7 +2745,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         }
         else if (id == 1008 && code == BN_CLICKED) {
             std::wstring newRoom;
-            if (ShowMoveRoomDialog(hWnd, newRoom)) { 
+            bool isPrivate = false;
+            if (ShowMoveRoomDialog(hWnd, newRoom, isPrivate)) { 
                 SendLeaveRequest(g_currentRoom);
                 
                 // Close video windows and stop webcam on room change
@@ -2582,15 +2760,17 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
                 SendJoinRequest(newRoom);
                 g_currentRoom = newRoom;
-                g_isPrivateRoom = false;
-                g_publicRooms.insert(newRoom);
+                g_isPrivateRoom = isPrivate;
+                if (!isPrivate) {
+                    g_publicRooms[newRoom] = (std::max)(1, g_publicRooms[newRoom]);
+                }
                 ClearLogAndUsers();
                 SetWindowTitle(hWnd);
                 MsgData sysMsg;
                 sysMsg.user = L"";
-                sysMsg.msg = L"--- " + g_currentRoom + L"\x306B\x79FB\x52D5\x3057\x307E\x3057\x305F ---"; 
+                sysMsg.msg = g_currentRoom + L"\x306B\x79FB\x52D5\x3057\x307E\x3057\x305F"; 
                 sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
-                sysMsg.size = 12; sysMsg.color = RGB(128,128,128);
+                sysMsg.size = 9; sysMsg.color = RGB(128,128,128);
                 AppendLog(sysMsg);
             }
         }
@@ -2618,6 +2798,24 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 InvalidateRect(g_hUserList, NULL, FALSE);
             }
         }
+        else if (wParam == 2) {
+            bool listChanged = false;
+            DWORD now = GetTickCount();
+            {
+                std::lock_guard<std::mutex> lock(g_voiceMutex);
+                for (auto it = g_voiceUsers.begin(); it != g_voiceUsers.end(); ) {
+                    if (now - it->second > 1000) {
+                        listChanged = true;
+                        it = g_voiceUsers.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+            }
+            if (listChanged && g_hUserList) {
+                InvalidateRect(g_hUserList, NULL, FALSE);
+            }
+        }
         return 0;
     }
 
@@ -2633,7 +2831,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
     case WM_NEW_ROOM: {
         std::wstring* pRm = (std::wstring*)lParam;
         if (pRm) {
-            g_publicRooms.insert(*pRm);
+            g_publicRooms[*pRm] = (std::max)(1, g_publicRooms[*pRm]);
             delete pRm;
         }
         return 0;
@@ -2651,9 +2849,9 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         SetWindowTitle(hWnd);
         MsgData sysMsg;
         sysMsg.user = L"";
-        sysMsg.msg = L"--- \x30ED\x30D3\x30FC\x306B\x623B\x308A\x307E\x3057\x305F ---"; 
+        sysMsg.msg = L"\x30ED\x30D3\x30FC\x306B\x623B\x308A\x307E\x3057\x305F"; 
         sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
-        sysMsg.size = 12; sysMsg.color = RGB(255,0,0);
+        sysMsg.size = 9; sysMsg.color = RGB(255,0,0);
         AppendLog(sysMsg);
         return 0;
     }
@@ -2663,6 +2861,9 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         closesocket(g_sock);
         WSACleanup();
         DeleteObject(g_hFont);
+        DeleteObject(g_hFontBold);
+        DeleteObject(g_hFontI_btn);
+        DeleteObject(g_hFontU_btn);
         if (g_pDWriteFactory) g_pDWriteFactory->Release();
         if (g_pD2DFactory) g_pD2DFactory->Release();
         PostQuitMessage(0);
@@ -2670,6 +2871,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
     }
     return DefWindowProc(hWnd, msg, wParam, lParam);
 }
+
+#include "resource.h"
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     HDC hdcDpi = GetDC(NULL);
@@ -2683,11 +2886,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     WNDCLASS wc = {
         CS_HREDRAW | CS_VREDRAW,
         WndProc, 0, 0, hInstance,
-        0, LoadCursor(0, IDC_ARROW),
+        LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON)), LoadCursor(0, IDC_ARROW),
         (HBRUSH)(COLOR_BTNFACE + 1), 0, L"Retro Chat"
     };
     RegisterClass(&wc);
     
+    ULONG_PTR gdiplusToken;
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
     HWND hWnd = CreateWindow(
         L"Retro Chat", L"Retro Chat",
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
@@ -2696,10 +2903,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         
     ShowWindow(hWnd, SW_SHOWDEFAULT);
     UpdateWindow(hWnd);
-    
-    ULONG_PTR gdiplusToken;
-    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-    Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
     while (GetMessage(&msg, 0, 0, 0)) {
         TranslateMessage(&msg);
