@@ -567,6 +567,7 @@ std::wstring g_inputText;
 int g_caretPos = 0;
 int g_anchorPos = 0;
 bool g_caretVisible = true;
+bool g_isIMEComposing = false;
 UINT_PTR g_caretTimer = 0;
 bool g_isDragging = false;
 
@@ -1234,6 +1235,14 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         g_caretVisible = false;
         InvalidateRect(hWnd, NULL, FALSE);
         return 0;
+    case WM_IME_STARTCOMPOSITION:
+        g_isIMEComposing = true;
+        InvalidateRect(hWnd, NULL, FALSE);
+        break;
+    case WM_IME_ENDCOMPOSITION:
+        g_isIMEComposing = false;
+        InvalidateRect(hWnd, NULL, FALSE);
+        break;
     case WM_PAINT: {
         PAINTSTRUCT ps;
         BeginPaint(hWnd, &ps);
@@ -1309,7 +1318,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(GetRValue(g_currentColor)/255.0f, GetGValue(g_currentColor)/255.0f, GetBValue(g_currentColor)/255.0f), &pBrush)) && pBrush) {
                     pRT->DrawTextLayout(D2D1::Point2F(5, 5), pLayout, pBrush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
                     
-                    if (g_caretVisible && GetFocus() == hWnd) {
+                    if (g_caretVisible && GetFocus() == hWnd && !g_isIMEComposing) {
                         float cx = 5, cy = 5;
                         DWRITE_HIT_TEST_METRICS hm = {0};
                         if (g_inputText.length() == 0) {
@@ -1331,7 +1340,10 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         
                         ID2D1SolidColorBrush* pCaretBrush = nullptr;
                         if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Black), &pCaretBrush)) && pCaretBrush) {
-                            pRT->DrawLine(D2D1::Point2F(cx, cy), D2D1::Point2F(cx, cy + hm.height), pCaretBrush, 1.0f);
+                            D2D1_ANTIALIAS_MODE oldMode = pRT->GetAntialiasMode();
+                            pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+                            pRT->DrawLine(D2D1::Point2F(cx, cy), D2D1::Point2F(cx, cy + hm.height), pCaretBrush, 2.0f);
+                            pRT->SetAntialiasMode(oldMode);
                             pCaretBrush->Release();
                         }
 
@@ -3122,7 +3134,12 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         MoveWindow(g_hBtnI, margin + Scale(28), toolY, Scale(24), toolHeight, TRUE);
         MoveWindow(g_hBtnU, margin + Scale(56), toolY, Scale(24), toolHeight, TRUE);
         MoveWindow(g_hComboSize, margin + Scale(84), toolY, Scale(60), Scale(400), TRUE);
-        SendMessage(g_hComboSize, CB_SETITEMHEIGHT, (WPARAM)-1, toolHeight - Scale(6));
+        RECT rcCombo;
+        GetWindowRect(g_hComboSize, &rcCombo);
+        int currentHeight = rcCombo.bottom - rcCombo.top;
+        int currentItemHeight = SendMessage(g_hComboSize, CB_GETITEMHEIGHT, (WPARAM)-1, 0);
+        int nonItemHeight = currentHeight - currentItemHeight;
+        SendMessage(g_hComboSize, CB_SETITEMHEIGHT, (WPARAM)-1, toolHeight - nonItemHeight);
         MoveWindow(g_hBtnColor, margin + Scale(148), toolY, Scale(32), toolHeight, TRUE);
         MoveWindow(g_hBtnVoice, margin + Scale(186), toolY, Scale(70), toolHeight, TRUE);
         MoveWindow(g_hVolumeIndicator, margin + Scale(261), toolY, Scale(70), toolHeight, TRUE);
