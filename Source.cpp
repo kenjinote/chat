@@ -46,7 +46,20 @@ COLORREF g_currentColor = RGB(0, 0, 0);
 
 SOCKET g_sock = INVALID_SOCKET;
 SOCKET g_tcpSocket = INVALID_SOCKET;
-std::string g_serverIp = "0.0.0.0";
+
+// Helper function to resolve DNS names to IP addresses
+bool ResolveIP(const std::string& host, IN_ADDR& outAddr) {
+    addrinfo hints = {0}, *res = nullptr;
+    hints.ai_family = AF_INET;
+    if (getaddrinfo(host.c_str(), nullptr, &hints, &res) == 0 && res != nullptr) {
+        outAddr = ((sockaddr_in*)res->ai_addr)->sin_addr;
+        freeaddrinfo(res);
+        return true;
+    }
+    return false;
+}
+
+std::string g_serverIp = "chat-sfu-a-2026.japaneast.azurecontainer.io";
 uint32_t g_sessionId = 0;
 std::wstring g_username;
 int g_dpi = 96;
@@ -315,7 +328,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     sockaddr_in serverUdp = {0};
                     serverUdp.sin_family = AF_INET;
                     serverUdp.sin_port = htons(4001);
-                    inet_pton(AF_INET, g_serverIp.c_str(), &serverUdp.sin_addr);
+                    ResolveIP(g_serverIp, serverUdp.sin_addr);
                     sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
 
                     LARGE_INTEGER start, current;
@@ -372,7 +385,7 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
             sockaddr_in serverUdp = {0};
             serverUdp.sin_family = AF_INET;
             serverUdp.sin_port = htons(4001);
-            inet_pton(AF_INET, g_serverIp.c_str(), &serverUdp.sin_addr);
+            ResolveIP(g_serverIp, serverUdp.sin_addr);
             
             sendto(g_sock, udpPkt, sizeof(MediaHeader) + pHdr->dwBytesRecorded, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
         }
@@ -1675,7 +1688,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 sockaddr_in serverUdp = {0};
                                 serverUdp.sin_family = AF_INET;
                                 serverUdp.sin_port = htons(4001);
-                                inet_pton(AF_INET, g_serverIp.c_str(), &serverUdp.sin_addr);
+                                ResolveIP(g_serverIp, serverUdp.sin_addr);
                                 sendto(g_sock, (char*)&hdr, sizeof(hdr), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
 
                                 json11::Json getRoomsMsg = json11::Json::object {
@@ -1729,6 +1742,37 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     pData->size = 9;
                                     pData->color = RGB(128, 128, 128);
                                     PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
+                                }
+                            }
+                            else if (type == "redirect") {
+                                // Close current connection and reconnect to new IP/Port
+                                std::string newIp = json["ip"].string_value();
+                                int newPort = json["port"].int_value();
+                                
+                                closesocket(g_tcpSocket);
+                                g_tcpSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+                                
+                                sockaddr_in serverAddr;
+                                serverAddr.sin_family = AF_INET;
+                                serverAddr.sin_port = htons(newPort);
+                                ResolveIP(newIp, serverAddr.sin_addr);
+
+                                if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
+                                    // Send join request again automatically
+                                    json11::Json joinMsg = json11::Json::object {
+                                        {"type", "join"},
+                                        {"userId", w2a(g_username.c_str())},
+                                        {"roomName", w2a(g_currentRoom.c_str())}
+                                    };
+                                    std::string joinStr = joinMsg.dump() + "\n";
+                                    send(g_tcpSocket, joinStr.c_str(), (int)joinStr.length(), 0);
+                                    // The existing receive thread will terminate because recv returns <= 0.
+                                    // We need to restart the TCP loop.
+                                    // Actually, a simpler way is to restart the client or just post a reconnect message.
+                                    // Since we are in the recv loop thread, if we close socket, this thread exits.
+                                    // The main thread should spawn a new thread.
+                                    // Let's just post a message to main thread to handle reconnect!
+                                    PostMessage(hWndParent, WM_REVERT_ROOM, 0, 0); 
                                 }
                             }
                             else if (type == "leave") {
@@ -2016,7 +2060,7 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             sockaddr_in serverUdp = {0};
             serverUdp.sin_family = AF_INET;
             serverUdp.sin_port = htons(4001);
-            inet_pton(AF_INET, g_serverIp.c_str(), &serverUdp.sin_addr);
+            ResolveIP(g_serverIp, serverUdp.sin_addr);
             sendto(g_sock, pkt, sizeof(hdr) + (int)targetA.length(), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
             
             g_videoViewers[*pUser][g_username] = GetTickCount();
@@ -2239,7 +2283,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         sockaddr_in serverAddr = { 0 };
         serverAddr.sin_family = AF_INET;
         serverAddr.sin_port = htons(4000);
-        inet_pton(AF_INET, g_serverIp.c_str(), &serverAddr.sin_addr);
+        ResolveIP(g_serverIp, serverAddr.sin_addr);
         
         bool isConnected = true;
         if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
