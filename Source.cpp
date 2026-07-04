@@ -2558,7 +2558,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             SetBkMode(hdc, TRANSPARENT);
 
             int iconSize = Scale(16);
-            int cx = rc.left + Scale(6);
+            int cx = rc.left + Scale(2);
             int cy = rc.top + (rc.bottom - rc.top - iconSize) / 2;
             
             Gdiplus::Graphics graphics(hdc);
@@ -2576,7 +2576,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
             if (isStreaming) {
                 // TV Cabinet (Wood color)
-                int tvW = iconSize + Scale(8);
+                int tvW = iconSize + Scale(5);
                 int tvH = iconSize + Scale(6);
                 int tvX = cx - Scale(2);
                 int tvY = cy - Scale(3);
@@ -2595,15 +2595,17 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 Gdiplus::SolidBrush screenBrush(Gdiplus::Color(255, 20, 30, 50));
                 graphics.FillRectangle(&screenBrush, tvX + Scale(2), tvY + Scale(2), iconSize, iconSize);
                 
+                int panelX = tvX + iconSize + Scale(2);
+                
                 // Tiny Dials / Knobs
                 Gdiplus::SolidBrush knobBrush(Gdiplus::Color(255, 180, 180, 180));
-                graphics.FillEllipse(&knobBrush, tvX + iconSize + Scale(4), tvY + Scale(3), Scale(3), Scale(3));
-                graphics.FillEllipse(&knobBrush, tvX + iconSize + Scale(4), tvY + Scale(8), Scale(3), Scale(3));
+                graphics.FillEllipse(&knobBrush, panelX, tvY + Scale(3), Scale(2), Scale(2));
+                graphics.FillEllipse(&knobBrush, panelX, tvY + Scale(8), Scale(2), Scale(2));
                 
                 // Speaker grill
                 Gdiplus::Pen speakerPen(Gdiplus::Color(255, 80, 40, 10), 1.0f);
-                graphics.DrawLine(&speakerPen, tvX + iconSize + Scale(4), tvY + Scale(14), tvX + iconSize + Scale(6), tvY + Scale(14));
-                graphics.DrawLine(&speakerPen, tvX + iconSize + Scale(4), tvY + Scale(16), tvX + iconSize + Scale(6), tvY + Scale(16));
+                graphics.DrawLine(&speakerPen, panelX, tvY + Scale(14), panelX + Scale(2), tvY + Scale(14));
+                graphics.DrawLine(&speakerPen, panelX, tvY + Scale(16), panelX + Scale(2), tvY + Scale(16));
                 
                 // Antenna
                 Gdiplus::Pen antennaPen(Gdiplus::Color(255, 150, 150, 150), 1.5f);
@@ -2647,44 +2649,62 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             if (isIgnored) isVoicing = false;
             
             RECT rcText = rc;
-            rcText.left = rc.left + Scale(34);
-            rcText.right = rc.right - Scale(20);
+            rcText.left = rc.left + Scale(26);
+            rcText.right = rc.right - Scale(12);
             
             if (isVoicing) {
-                int micX = rc.right - Scale(16);
+                int micX = rc.right - Scale(8);
                 int micY = cy + Scale(6);
                 
-                int micBodyTop = micY - Scale(4);
-                int micBodyBottom = micY + Scale(2);
-                int micBodyHeight = micBodyBottom - micBodyTop;
-                int fillHeight = (micBodyHeight * currentVolume) / 100;
-                if (fillHeight > micBodyHeight) fillHeight = micBodyHeight;
+                int micTop = micY - Scale(6);
+                int micBottom = micY + Scale(8);
+                int totalHeight = micBottom - micTop;
+                int fillHeight = (totalHeight * currentVolume) / 100;
+                if (fillHeight > totalHeight) fillHeight = totalHeight;
                 
-                if (fillHeight > 0) {
-                    Gdiplus::Rect fillRect(micX - Scale(2), micBodyBottom - fillHeight, Scale(5), fillHeight);
-                    Gdiplus::Rect fullMicRect(micX - Scale(2), micBodyTop, Scale(5), micBodyHeight);
+                Gdiplus::Rect fullMicRect(micX - Scale(6), micTop, Scale(12), totalHeight);
+                Gdiplus::LinearGradientBrush linGrBrush(
+                    fullMicRect,
+                    Gdiplus::Color(255, 255, 0, 0),
+                    Gdiplus::Color(255, 0, 255, 0),
+                    Gdiplus::LinearGradientModeVertical);
                     
-                    Gdiplus::LinearGradientBrush linGrBrush(
-                        fullMicRect,
-                        Gdiplus::Color(255, 255, 0, 0),
-                        Gdiplus::Color(255, 0, 255, 0),
-                        Gdiplus::LinearGradientModeVertical);
-                        
-                    Gdiplus::Color colors[] = {
-                        Gdiplus::Color(255, 255, 0, 0),
-                        Gdiplus::Color(255, 255, 255, 0),
-                        Gdiplus::Color(255, 0, 255, 0)
-                    };
-                    Gdiplus::REAL positions[] = { 0.0f, 0.4f, 1.0f };
-                    linGrBrush.SetInterpolationColors(colors, positions, 3);
-                    graphics.FillRectangle(&linGrBrush, fillRect);
+                Gdiplus::Color colors[] = {
+                    Gdiplus::Color(255, 230, 20, 20),    // Red
+                    Gdiplus::Color(255, 255, 140, 0),    // Orange
+                    Gdiplus::Color(255, 240, 220, 0),    // Yellow
+                    Gdiplus::Color(255, 20, 200, 20)     // Green
+                };
+                Gdiplus::REAL positions[] = { 0.0f, 0.3f, 0.6f, 1.0f };
+                linGrBrush.SetInterpolationColors(colors, positions, 4);
+                
+                Gdiplus::Pen gradientPen(&linGrBrush, 1.5f);
+                Gdiplus::Pen blackPen(Gdiplus::Color(255, 40, 40, 40), 1.5f);
+                Gdiplus::SolidBrush blackBrush(Gdiplus::Color(255, 40, 40, 40));
+                
+                auto DrawMic = [&](Gdiplus::Pen* pen, Gdiplus::Brush* brush) {
+                    graphics.FillRectangle(brush, micX - Scale(2), micY - Scale(4), Scale(4), Scale(6));
+                    graphics.FillEllipse(brush, micX - Scale(2), micY - Scale(6), Scale(4), Scale(4));
+                    graphics.FillEllipse(brush, micX - Scale(2), micY, Scale(4), Scale(4));
+                    graphics.DrawArc(pen, micX - Scale(5), micY - Scale(2), Scale(10), Scale(8), 0.0f, 180.0f);
+                    graphics.DrawLine(pen, micX, micY + Scale(6), micX, micY + Scale(8));
+                    graphics.DrawLine(pen, micX - Scale(3), micY + Scale(8), micX + Scale(3), micY + Scale(8));
+                };
+                
+                int blackHeight = totalHeight - fillHeight;
+                if (blackHeight > 0) {
+                    Gdiplus::Rect blackClip(micX - Scale(10), micTop, Scale(20), blackHeight);
+                    graphics.SetClip(blackClip);
+                    DrawMic(&blackPen, &blackBrush);
+                    graphics.ResetClip();
                 }
                 
-                Gdiplus::Pen blackPen(Gdiplus::Color(255, 0, 0, 0), 1.5f);
-                graphics.DrawRectangle(&blackPen, micX - Scale(2), micY - Scale(4), Scale(4), Scale(6));
-                graphics.DrawArc(&blackPen, micX - Scale(5), micY - Scale(2), Scale(10), Scale(8), 0.0f, 180.0f);
-                graphics.DrawLine(&blackPen, micX, micY + Scale(6), micX, micY + Scale(8));
-                graphics.DrawLine(&blackPen, micX - Scale(3), micY + Scale(8), micX + Scale(3), micY + Scale(8));
+                if (fillHeight > 0) {
+                    Gdiplus::Rect gradientClip(micX - Scale(10), micBottom - fillHeight, Scale(20), fillHeight);
+                    graphics.SetClip(gradientClip);
+                    DrawMic(&gradientPen, &linGrBrush);
+                    graphics.ResetClip();
+                }
             }
             
             HFONT hOldFont = NULL;
@@ -2786,6 +2806,16 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 InvalidateRect(g_hVolumeIndicator, NULL, FALSE);
             }
             InvalidateRect(g_hBtnVoice, NULL, FALSE);
+            
+            // ユーザリスト上の自分のマイクアイコンを再描画
+            if (g_hUserList) {
+                int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)g_username.c_str());
+                if (idx != LB_ERR) {
+                    RECT rc;
+                    SendMessage(g_hUserList, LB_GETITEMRECT, idx, (LPARAM)&rc);
+                    InvalidateRect(g_hUserList, &rc, FALSE);
+                }
+            }
         }
         else if (id == 1010 && code == BN_CLICKED) {
             // Video toggle (TODO)
