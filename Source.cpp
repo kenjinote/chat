@@ -1948,7 +1948,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                 sockaddr_in from;
                 int fromlen = sizeof(from);
                 int res = recvfrom(g_sock, udpBuf, sizeof(udpBuf), 0, (sockaddr*)&from, &fromlen);
-                if (res >= sizeof(MediaHeader)) {
+                if (res != SOCKET_ERROR && res >= (int)sizeof(MediaHeader)) {
                     MediaHeader* mhdr = (MediaHeader*)udpBuf;
                     
                     bool isIgnored = false;
@@ -2522,7 +2522,10 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         MsgData sysMsg;
         sysMsg.user = L"";
         if (isConnected) {
-            sysMsg.msg = L"\x30CD\x30C3\x30C8\x30EF\x30FC\x30AF\x306B\x53C2\x52A0\x3057\x307E\x3057\x305F (" + g_username + L")";
+            std::wstring dispName = g_username;
+            size_t pos = dispName.find(L'#');
+            if (pos != std::wstring::npos) dispName = dispName.substr(0, pos);
+            sysMsg.msg = L"\x30CD\x30C3\x30C8\x30EF\x30FC\x30AF\x306B\x53C2\x52A0\x3057\x307E\x3057\x305F (" + dispName + L")";
             sysMsg.color = RGB(128,128,128);
         } else {
             sysMsg.msg = L"\x30B5\x30FC\x30D0\x30FC\x304C\x898B\x3064\x304B\x308A\x307E\x305B\x3093\x3002\x30E1\x30F3\x30C6\x30CA\x30F3\x30B9\x306E\x53EF\x80FD\x6027\x304C\x3042\x308A\x307E\x3059";
