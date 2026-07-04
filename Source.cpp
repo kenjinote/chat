@@ -1314,6 +1314,34 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         InvalidateRect(hWnd, NULL, FALSE);
         return 0;
     }
+    case WM_CONTEXTMENU: {
+        HMENU hMenu = CreatePopupMenu();
+        AppendMenuW(hMenu, MF_STRING, 1, L"切り取り(T)");
+        AppendMenuW(hMenu, MF_STRING, 2, L"コピー(C)");
+        AppendMenuW(hMenu, MF_STRING, 3, L"貼り付け(P)");
+        AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+        AppendMenuW(hMenu, MF_STRING, 4, L"すべて選択(A)");
+        AppendMenuW(hMenu, MF_STRING, 5, L"削除(D)");
+        
+        POINT pt;
+        pt.x = GET_X_LPARAM(lParam);
+        pt.y = GET_Y_LPARAM(lParam);
+        
+        int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hWnd, NULL);
+        DestroyMenu(hMenu);
+        
+        if (cmd == 1) SendMessage(hWnd, WM_CUT, 0, 0);
+        else if (cmd == 2) SendMessage(hWnd, WM_COPY, 0, 0);
+        else if (cmd == 3) SendMessage(hWnd, WM_PASTE, 0, 0);
+        else if (cmd == 4) {
+            g_anchorPos = 0;
+            g_caretPos = (int)g_inputText.length();
+            InvalidateRect(hWnd, NULL, FALSE);
+        } else if (cmd == 5) {
+            SendMessage(hWnd, WM_KEYDOWN, VK_DELETE, 0);
+        }
+        return 0;
+    }
     case WM_PASTE: {
         if (OpenClipboard(hWnd)) {
             HANDLE hData = GetClipboardData(CF_UNICODETEXT);
@@ -1757,36 +1785,34 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 }
                             }
                             else if (type == "redirect") {
-                                // Close current connection and reconnect to new IP/Port
-                                std::string newIp = json["ip"].string_value();
-                                int newPort = json["port"].int_value();
-                                
-                                closesocket(g_tcpSocket);
-                                g_tcpSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-                                
-                                sockaddr_in serverAddr;
-                                serverAddr.sin_family = AF_INET;
-                                serverAddr.sin_port = htons(newPort);
-                                ResolveIP(newIp, serverAddr.sin_addr);
-                                g_serverIp = newIp; // Update global server IP
-                                g_isServerUdpAddrResolved = false; // Force re-resolve for UDP
-
-                                if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
-                                    // Send join request again automatically
-                                    json11::Json joinMsg = json11::Json::object {
-                                        {"type", "join"},
-                                        {"userId", w2a(g_username.c_str())},
-                                        {"roomName", w2a(g_currentRoom.c_str())}
-                                    };
-                                    std::string joinStr = joinMsg.dump() + "\n";
-                                    send(g_tcpSocket, joinStr.c_str(), (int)joinStr.length(), 0);
-                                    // The existing receive thread will terminate because recv returns <= 0.
-                                    // We need to restart the TCP loop.
-                                    // Actually, a simpler way is to restart the client or just post a reconnect message.
-                                    // Since we are in the recv loop thread, if we close socket, this thread exits.
-                                    // The main thread should spawn a new thread.
-                                    // Let's just post a message to main thread to handle reconnect!
-                                    PostMessage(hWndParent, WM_REVERT_ROOM, 0, 0); 
+                                // Close current connection and reconnect to new endpoint
+                                std::string endpoint = json["endpoint"].string_value();
+                                size_t colonPos = endpoint.find(':');
+                                if (colonPos != std::string::npos) {
+                                    std::string newIp = endpoint.substr(0, colonPos);
+                                    int newPort = std::stoi(endpoint.substr(colonPos + 1));
+                                    
+                                    closesocket(g_tcpSocket);
+                                    g_tcpSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+                                    
+                                    sockaddr_in serverAddr;
+                                    serverAddr.sin_family = AF_INET;
+                                    serverAddr.sin_port = htons(newPort);
+                                    ResolveIP(newIp, serverAddr.sin_addr);
+                                    g_serverIp = newIp; // Update global server IP
+                                    g_isServerUdpAddrResolved = false; // Force re-resolve for UDP
+    
+                                    if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
+                                        // Send join request again automatically
+                                        json11::Json joinMsg = json11::Json::object {
+                                            {"type", "join"},
+                                            {"userId", w2a(g_username.c_str())},
+                                            {"roomName", w2a(g_currentRoom.c_str())}
+                                        };
+                                        std::string joinStr = joinMsg.dump() + "\n";
+                                        send(g_tcpSocket, joinStr.c_str(), (int)joinStr.length(), 0);
+                                        PostMessage(hWndParent, WM_REVERT_ROOM, 0, 0); 
+                                    }
                                 }
                             }
                             else if (type == "leave") {
