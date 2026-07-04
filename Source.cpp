@@ -364,6 +364,7 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
             mhdr->payloadType = 1;
             mhdr->flags = 0;
             mhdr->timestamp = GetTickCount();
+            wcsncpy_s(mhdr->username, 32, g_username.c_str(), _TRUNCATE);
             
             memcpy(udpPkt + sizeof(MediaHeader), pHdr->lpData, pHdr->dwBytesRecorded);
             
