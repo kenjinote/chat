@@ -60,6 +60,9 @@ bool ResolveIP(const std::string& host, IN_ADDR& outAddr) {
 }
 
 std::string g_serverIp = "chat-sfu-a-2026.japaneast.azurecontainer.io";
+IN_ADDR g_serverUdpAddr = {0};
+bool g_isServerUdpAddrResolved = false;
+
 uint32_t g_sessionId = 0;
 std::wstring g_username;
 int g_dpi = 96;
@@ -328,7 +331,10 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     sockaddr_in serverUdp = {0};
                     serverUdp.sin_family = AF_INET;
                     serverUdp.sin_port = htons(4001);
-                    ResolveIP(g_serverIp, serverUdp.sin_addr);
+                    if (!g_isServerUdpAddrResolved) {
+                        g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                    }
+                    serverUdp.sin_addr = g_serverUdpAddr;
                     sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
 
                     LARGE_INTEGER start, current;
@@ -385,7 +391,10 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
             sockaddr_in serverUdp = {0};
             serverUdp.sin_family = AF_INET;
             serverUdp.sin_port = htons(4001);
-            ResolveIP(g_serverIp, serverUdp.sin_addr);
+            if (!g_isServerUdpAddrResolved) {
+                g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+            }
+            serverUdp.sin_addr = g_serverUdpAddr;
             
             sendto(g_sock, udpPkt, sizeof(MediaHeader) + pHdr->dwBytesRecorded, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
         }
@@ -1688,7 +1697,10 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 sockaddr_in serverUdp = {0};
                                 serverUdp.sin_family = AF_INET;
                                 serverUdp.sin_port = htons(4001);
-                                ResolveIP(g_serverIp, serverUdp.sin_addr);
+                                if (!g_isServerUdpAddrResolved) {
+                        g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                    }
+                    serverUdp.sin_addr = g_serverUdpAddr;
                                 sendto(g_sock, (char*)&hdr, sizeof(hdr), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
 
                                 json11::Json getRoomsMsg = json11::Json::object {
@@ -1756,6 +1768,8 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 serverAddr.sin_family = AF_INET;
                                 serverAddr.sin_port = htons(newPort);
                                 ResolveIP(newIp, serverAddr.sin_addr);
+                                g_serverIp = newIp; // Update global server IP
+                                g_isServerUdpAddrResolved = false; // Force re-resolve for UDP
 
                                 if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
                                     // Send join request again automatically
@@ -2060,7 +2074,10 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             sockaddr_in serverUdp = {0};
             serverUdp.sin_family = AF_INET;
             serverUdp.sin_port = htons(4001);
-            ResolveIP(g_serverIp, serverUdp.sin_addr);
+            if (!g_isServerUdpAddrResolved) {
+                g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+            }
+            serverUdp.sin_addr = g_serverUdpAddr;
             sendto(g_sock, pkt, sizeof(hdr) + (int)targetA.length(), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
             
             g_videoViewers[*pUser][g_username] = GetTickCount();
