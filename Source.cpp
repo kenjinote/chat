@@ -21,8 +21,9 @@
 #include "json11.hpp"
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")
-
-
+#include <mmdeviceapi.h>
+#include <audiopolicy.h>
+#pragma comment(lib, "ole32.lib")
 
 
 #pragma comment(lib, "ws2_32.lib")
@@ -30,6 +31,54 @@
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "imm32.lib")
+
+bool g_isEnglish = false;
+
+void InitLanguage() {
+    LANGID langId = GetUserDefaultUILanguage();
+    if (PRIMARYLANGID(langId) == LANG_ENGLISH) {
+        g_isEnglish = true;
+    }
+}
+
+enum StringID {
+    STR_LOBBY,
+    STR_CHANGE_NAME_TITLE,
+    STR_MOVE_ROOM_TITLE,
+    STR_PRIVATE,
+    STR_VIDEO_STREAM,
+    STR_WATCH_VIDEO,
+    STR_IGNORE,
+    STR_TALK,
+    STR_SEND,
+    STR_JOINED_NETWORK,
+    STR_SERVER_NOT_FOUND,
+    STR_MOVED_TO,
+    STR_RETURNED_TO_LOBBY,
+    STR_WINDOW_TITLE,
+    STR_MOVE_ROOM_BTN
+};
+
+std::wstring GetString(StringID id) {
+    switch (id) {
+        case STR_LOBBY: return g_isEnglish ? L"Lobby" : L"\x30ED\x30D3\x30FC";
+        case STR_CHANGE_NAME_TITLE: return g_isEnglish ? L"Change Name" : L"\x540D\x524D\x306E\x5909\x66F4";
+        case STR_MOVE_ROOM_TITLE: return g_isEnglish ? L"Enter or Select Room" : L"\x79FB\x52D5\x5148\x306E\x90E8\x5C4B\x540D\x3092\x5165\x529B\x307E\x305F\x306F\x9078\x629E";
+        case STR_PRIVATE: return g_isEnglish ? L"Private" : L"\x975E\x516C\x958B";
+        case STR_VIDEO_STREAM: return g_isEnglish ? L"Video Stream" : L"\x30D3\x30C7\x30AA\x914D\x4FE1";
+        case STR_WATCH_VIDEO: return g_isEnglish ? L"Watch Video" : L"\x30D3\x30C7\x30AA\x3092\x8996\x8074";
+        case STR_IGNORE: return g_isEnglish ? L"Ignore" : L"\x7121\x8996\x3059\x308B";
+        case STR_TALK: return g_isEnglish ? L"Talk" : L"\x8A71\x3059";
+        case STR_SEND: return g_isEnglish ? L"Send" : L"\x767A\x8A00";
+        case STR_JOINED_NETWORK: return g_isEnglish ? L"Joined network" : L"\x30CD\x30C3\x30C8\x30EF\x30FC\x30AF\x306B\x53C2\x52A0\x3057\x307E\x3057\x305F";
+        case STR_SERVER_NOT_FOUND: return g_isEnglish ? L"Server not found. May be under maintenance." : L"\x30B5\x30FC\x30D0\x30FC\x304C\x898B\x3064\x304B\x308A\x307E\x305B\x3093\x3002\x30E1\x30F3\x30C6\x30CA\x30F3\x30B9\x306E\x53EF\x80FD\x6027\x304C\x3042\x308A\x307E\x3059";
+        case STR_MOVED_TO: return g_isEnglish ? L"Moved to " : L"\x306B\x79FB\x52D5\x3057\x307E\x3057\x305F";
+        case STR_RETURNED_TO_LOBBY: return g_isEnglish ? L"Returned to Lobby" : L"\x30ED\x30D3\x30FC\x306B\x623B\x308A\x307E\x3057\x305F";
+        case STR_WINDOW_TITLE: return g_isEnglish ? L"Retro Chat" : L"Retro Chat";
+        case STR_MOVE_ROOM_BTN: return g_isEnglish ? L"Move Room" : L"\x90E8\x5C4B\x79FB\x52D5";
+    }
+    return L"";
+}
 
 #define PORT 54321
 #define WM_USER_MSG (WM_APP + 2)
@@ -39,9 +88,51 @@
 HWND g_hLog, g_hInput, g_hSendBtn, g_hUserList;
 HWND g_hBtnB, g_hBtnI, g_hBtnU, g_hComboSize, g_hBtnColor;
 HWND g_hBtnMoveRoom;
-HWND g_hBtnVoice, g_hBtnVideo, g_hVolumeIndicator;
+HWND g_hBtnVoice, g_hBtnVideo, g_hVolumeIndicator, g_hSpeakerIcon, g_hVolumeSlider;
+IAudioClient* g_pAudioClient = nullptr;
+ISimpleAudioVolume* g_pSimpleAudioVolume = nullptr;
+IAudioSessionControl* g_pAudioSessionControl = nullptr;
+
 int g_currentMicVolume = 0;
 COLORREF g_currentColor = RGB(0, 0, 0);
+class CAudioSessionEvents : public IAudioSessionEvents {
+    LONG _cRef;
+public:
+    CAudioSessionEvents() : _cRef(1) {}
+    ~CAudioSessionEvents() {}
+
+    ULONG STDMETHODCALLTYPE AddRef() { return InterlockedIncrement(&_cRef); }
+    ULONG STDMETHODCALLTYPE Release() {
+        ULONG ulRef = InterlockedDecrement(&_cRef);
+        if (0 == ulRef) { delete this; }
+        return ulRef;
+    }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, VOID** ppvInterface) {
+        if (IID_IUnknown == riid) { *ppvInterface = (IUnknown*)this; }
+        else if (__uuidof(IAudioSessionEvents) == riid) { *ppvInterface = (IAudioSessionEvents*)this; }
+        else { *ppvInterface = NULL; return E_NOINTERFACE; }
+        AddRef(); return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnDisplayNameChanged(LPCWSTR, LPCGUID) { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnIconPathChanged(LPCWSTR, LPCGUID) { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnSimpleVolumeChanged(float NewVolume, BOOL NewMute, LPCGUID EventContext);
+    HRESULT STDMETHODCALLTYPE OnChannelVolumeChanged(DWORD, float[], DWORD, LPCGUID) { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnGroupingParamChanged(LPCGUID, LPCGUID) { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnStateChanged(AudioSessionState) { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnSessionDisconnected(AudioSessionDisconnectReason) { return S_OK; }
+};
+CAudioSessionEvents* g_pAudioEvents = nullptr;
+
+#define WM_APP_VOLUME_CHANGED (WM_APP + 1)
+
+HRESULT STDMETHODCALLTYPE CAudioSessionEvents::OnSimpleVolumeChanged(float NewVolume, BOOL NewMute, LPCGUID EventContext) {
+    if (g_hVolumeSlider) {
+        PostMessage(GetParent(g_hVolumeSlider), WM_APP_VOLUME_CHANGED, (WPARAM)(NewVolume * 100), 0);
+    }
+    return S_OK;
+}
+
 #include <Ws2tcpip.h>
 
 SOCKET g_sock = INVALID_SOCKET;
@@ -74,7 +165,7 @@ HFONT g_hFontI_btn;
 HFONT g_hFontU_btn;
 
 std::map<std::wstring, int> g_publicRooms;
-std::wstring g_currentRoom = L"\x30ED\x30D3\x30FC"; // "ロビー"
+std::wstring g_currentRoom = L""; // Initialized in wWinMain
 bool g_isPrivateRoom = false;
 
 ID2D1Factory* g_pD2DFactory = nullptr;
@@ -399,6 +490,43 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
             sendto(g_sock, udpPkt, sizeof(MediaHeader) + pHdr->dwBytesRecorded, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
         }
         waveInAddBuffer(hwi, pHdr, sizeof(WAVEHDR));
+    }
+}
+
+void InitVolumeSync(HWND hWnd) {
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    IMMDeviceEnumerator* pEnumerator = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+    if (SUCCEEDED(hr)) {
+        IMMDevice* pDevice = nullptr;
+        hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
+        if (SUCCEEDED(hr)) {
+            hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&g_pAudioClient);
+            if (SUCCEEDED(hr)) {
+                WAVEFORMATEX* pwfx = nullptr;
+                g_pAudioClient->GetMixFormat(&pwfx);
+                hr = g_pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_NOPERSIST, 10000000, 0, pwfx, NULL);
+                if (SUCCEEDED(hr)) {
+                    g_pAudioClient->Start();
+                    
+                    g_pAudioClient->GetService(__uuidof(ISimpleAudioVolume), (void**)&g_pSimpleAudioVolume);
+                    g_pAudioClient->GetService(__uuidof(IAudioSessionControl), (void**)&g_pAudioSessionControl);
+                    
+                    if (g_pAudioSessionControl) {
+                        g_pAudioEvents = new CAudioSessionEvents();
+                        g_pAudioSessionControl->RegisterAudioSessionNotification(g_pAudioEvents);
+                    }
+                    if (g_pSimpleAudioVolume) {
+                        float vol = 0.0f;
+                        g_pSimpleAudioVolume->GetMasterVolume(&vol);
+                        SendMessage(g_hVolumeSlider, TBM_SETPOS, TRUE, (LPARAM)(vol * 100));
+                    }
+                }
+                CoTaskMemFree(pwfx);
+            }
+            pDevice->Release();
+        }
+        pEnumerator->Release();
     }
 }
 
@@ -1562,7 +1690,7 @@ bool ShowChangeNameDialog(HWND hParent, std::wstring& outResult) {
     RECT rcParent;
     GetWindowRect(hParent, &rcParent);
 
-    HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"ChangeNameClass", L"\x540D\x524D\x306E\x5909\x66F4", // 名前の変更
+    HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"ChangeNameClass", GetString(STR_CHANGE_NAME_TITLE).c_str(),
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
         rcParent.left + (rcParent.right - rcParent.left - Scale(300)) / 2, 
         rcParent.top + (rcParent.bottom - rcParent.top - Scale(120)) / 2, 
@@ -1597,7 +1725,7 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             Scale(10), Scale(10), Scale(260), Scale(24), hWnd, (HMENU)101, GetModuleHandle(0), 0);
         hList = CreateWindowEx(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_NOTIFY | LBS_HASSTRINGS,
             Scale(10), Scale(40), Scale(260), Scale(100), hWnd, (HMENU)102, GetModuleHandle(0), 0);
-        hChk = CreateWindow(L"BUTTON", L"\x975E\x516C\x958B", 
+        hChk = CreateWindow(L"BUTTON", GetString(STR_PRIVATE).c_str(), 
             WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
             Scale(10), Scale(145), Scale(80), Scale(24), hWnd, (HMENU)103, GetModuleHandle(0), 0);
         hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
@@ -1754,7 +1882,7 @@ void ClearLogAndUsers() {
 }
 
 void SetWindowTitle(HWND hWnd) {
-    std::wstring title = L"Retro Chat - [" + g_currentRoom + L"]" + (g_isPrivateRoom ? L" (\x975E\x516C\x958B)" : L"");
+    std::wstring title = GetString(STR_WINDOW_TITLE) + L" - [" + g_currentRoom + L"]" + (g_isPrivateRoom ? L" (" + GetString(STR_PRIVATE) + L")" : L"");
     SetWindowText(hWnd, title.c_str());
 }
 
@@ -2278,7 +2406,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 
                 if (clickedUser == g_username) {
                     HMENU hMenu = CreatePopupMenu();
-                    AppendMenuW(hMenu, MF_STRING | (g_isWebcamActive ? MF_CHECKED : MF_UNCHECKED), 1, L"\x30D3\x30C7\x30AA\x914D\x4FE1");
+                    AppendMenuW(hMenu, MF_STRING | (g_isWebcamActive ? MF_CHECKED : MF_UNCHECKED), 1, GetString(STR_VIDEO_STREAM).c_str());
                     AppendMenuW(hMenu, MF_STRING, 3, L"\x540D\x524D\x5909\x66F4"); // 名前変更
                     ClientToScreen(hwnd, &pt);
                     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
@@ -2329,8 +2457,8 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                         isIgnored = (g_ignoredUsers.count(clickedUser) > 0);
                     }
                     HMENU hMenu = CreatePopupMenu();
-                    AppendMenuW(hMenu, MF_STRING | (hasStreamer ? 0 : MF_GRAYED), 2, L"\x30D3\x30C7\x30AA\x3092\x8996\x8074");
-                    AppendMenuW(hMenu, MF_STRING | (isIgnored ? MF_CHECKED : MF_UNCHECKED), 4, L"\x7121\x8996\x3059\x308B");
+                    AppendMenuW(hMenu, MF_STRING | (hasStreamer ? 0 : MF_GRAYED), 2, GetString(STR_WATCH_VIDEO).c_str());
+                    AppendMenuW(hMenu, MF_STRING | (isIgnored ? MF_CHECKED : MF_UNCHECKED), 4, GetString(STR_IGNORE).c_str());
                     ClientToScreen(hwnd, &pt);
                     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
                     DestroyMenu(hMenu);
@@ -2393,6 +2521,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         d2dVideoClass.lpfnWndProc = VideoViewProc;
         d2dVideoClass.hInstance = GetModuleHandle(0);
         d2dVideoClass.lpszClassName = L"D2DVideoViewClass";
+        d2dVideoClass.hIcon = LoadIcon(GetModuleHandle(0), MAKEINTRESOURCE(102)); // IDI_TV
         d2dVideoClass.hCursor = LoadCursor(0, IDC_ARROW);
         d2dVideoClass.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
         RegisterClass(&d2dVideoClass);
@@ -2465,13 +2594,22 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         g_hBtnMoveRoom = CreateWindow(L"BUTTON", L"", 
             WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
             0, 0, 0, 0, hWnd, (HMENU)1008, ((LPCREATESTRUCT)lParam)->hInstance, 0);
-        g_hBtnVoice = CreateWindow(L"BUTTON", L"\x8A71\x3059", 
+        g_hBtnVoice = CreateWindow(L"BUTTON", GetString(STR_TALK).c_str(), 
             WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
             0, 0, 0, 0, hWnd, (HMENU)1009, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
         g_hVolumeIndicator = CreateWindow(L"STATIC", L"", 
             WS_CHILD | WS_VISIBLE | SS_OWNERDRAW,
             0, 0, 0, 0, hWnd, (HMENU)1051, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+
+        g_hSpeakerIcon = CreateWindow(L"STATIC", L"", 
+            WS_CHILD | WS_VISIBLE | SS_OWNERDRAW,
+            0, 0, 0, 0, hWnd, (HMENU)1053, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+
+        g_hVolumeSlider = CreateWindow(TRACKBAR_CLASS, L"",
+            WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_AUTOTICKS | TBS_TOOLTIPS,
+            0, 0, 0, 0, hWnd, (HMENU)1052, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+        SendMessage(g_hVolumeSlider, TBM_SETRANGE, TRUE, MAKELPARAM(0, 100));
 
         g_hBtnVideo = CreateWindow(L"BUTTON", L"Video: OFF", 
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
@@ -2486,7 +2624,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             WS_CHILD | WS_VISIBLE,
             0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
-        g_hSendBtn = CreateWindow(L"BUTTON", L"\x767A\x8A00", 
+        g_hSendBtn = CreateWindow(L"BUTTON", GetString(STR_SEND).c_str(), 
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             0, 0, 0, 0, hWnd, (HMENU)1001, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
@@ -2525,10 +2663,10 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             std::wstring dispName = g_username;
             size_t pos = dispName.find(L'#');
             if (pos != std::wstring::npos) dispName = dispName.substr(0, pos);
-            sysMsg.msg = L"\x30CD\x30C3\x30C8\x30EF\x30FC\x30AF\x306B\x53C2\x52A0\x3057\x307E\x3057\x305F (" + dispName + L")";
+            sysMsg.msg = GetString(STR_JOINED_NETWORK) + L" (" + dispName + L")";
             sysMsg.color = RGB(128,128,128);
         } else {
-            sysMsg.msg = L"\x30B5\x30FC\x30D0\x30FC\x304C\x898B\x3064\x304B\x308A\x307E\x305B\x3093\x3002\x30E1\x30F3\x30C6\x30CA\x30F3\x30B9\x306E\x53EF\x80FD\x6027\x304C\x3042\x308A\x307E\x3059";
+            sysMsg.msg = GetString(STR_SERVER_NOT_FOUND);
             sysMsg.color = RGB(255,0,0);
         }
         sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
@@ -2540,6 +2678,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         CreateThread(0, 0, RecvThread, hWnd, 0, 0);
         SetTimer(hWnd, 1, 3000, NULL);
         SetTimer(hWnd, 2, 100, NULL);
+        InitVolumeSync(hWnd);
 
         return 0;
     }
@@ -2596,7 +2735,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, RGB(0,0,0));
             HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
-            LPCWSTR text = L"\x8A71\x3059";
+            std::wstring talkStr = GetString(STR_TALK);
+            LPCWSTR text = talkStr.c_str();
             RECT rcText = rc;
             rcText.left += Scale(28);
             DrawTextW(hdc, text, -1, &rcText, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
@@ -2616,7 +2756,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             GdiFlush(); // Ensure GDI background is drawn before GDI+ draws on top
 
             HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
-            LPCWSTR text = L"\x90E8\x5C4B\x79FB\x52D5";
+            std::wstring moveStr = GetString(STR_MOVE_ROOM_BTN);
+            LPCWSTR text = moveStr.c_str();
             SIZE size;
             GetTextExtentPoint32(hdc, text, lstrlen(text), &size);
             int iconWidth = Scale(16);
@@ -2722,6 +2863,46 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             HBRUSH hGrayBrush = CreateSolidBrush(RGB(180, 180, 180));
             FrameRect(hdc, &rc, hGrayBrush);
             DeleteObject(hGrayBrush);
+            return TRUE;
+        }
+        else if (lpdis->CtlID == 1053) {
+            HDC hdc = lpdis->hDC;
+            RECT rc = lpdis->rcItem;
+            
+            // Draw background
+            HBRUSH hBgBrush = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
+            FillRect(hdc, &rc, hBgBrush);
+            DeleteObject(hBgBrush);
+
+            Gdiplus::Graphics graphics(hdc);
+            graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+
+            Gdiplus::SolidBrush blackBrush(Gdiplus::Color(255, 60, 60, 60));
+            Gdiplus::Pen blackPen(Gdiplus::Color(255, 60, 60, 60), (Gdiplus::REAL)(Scale(1) * 1.5f));
+
+            int cx = rc.left + Scale(7);
+            int cy = rc.top + (rc.bottom - rc.top) / 2;
+
+            // Speaker body (Outline shape)
+            Gdiplus::Point pts[6] = {
+                Gdiplus::Point(cx - Scale(5), cy - Scale(3)),
+                Gdiplus::Point(cx - Scale(2), cy - Scale(3)),
+                Gdiplus::Point(cx + Scale(3), cy - Scale(7)),
+                Gdiplus::Point(cx + Scale(3), cy + Scale(7)),
+                Gdiplus::Point(cx - Scale(2), cy + Scale(3)),
+                Gdiplus::Point(cx - Scale(5), cy + Scale(3))
+            };
+            blackPen.SetLineJoin(Gdiplus::LineJoinRound);
+            graphics.DrawPolygon(&blackPen, pts, 6);
+
+            // Sound waves (natural circular arcs, slightly smaller)
+            int waveCx = cx + Scale(2);
+            int r1 = Scale(5);
+            graphics.DrawArc(&blackPen, waveCx - r1, cy - r1, r1 * 2, r1 * 2, -45.0f, 90.0f);
+            
+            int r2 = Scale(9);
+            graphics.DrawArc(&blackPen, waveCx - r2, cy - r2, r2 * 2, r2 * 2, -45.0f, 90.0f);
+
             return TRUE;
         }
         else if (lpdis->CtlID == 1050 && lpdis->itemID != (UINT)-1) {
@@ -2974,15 +3155,36 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         MoveWindow(g_hBtnI, margin + Scale(28), toolY, Scale(24), toolHeight, TRUE);
         MoveWindow(g_hBtnU, margin + Scale(56), toolY, Scale(24), toolHeight, TRUE);
         MoveWindow(g_hComboSize, margin + Scale(84), toolY, Scale(60), Scale(400), TRUE);
+        SendMessage(g_hComboSize, CB_SETITEMHEIGHT, (WPARAM)-1, toolHeight - Scale(6));
         MoveWindow(g_hBtnColor, margin + Scale(148), toolY, Scale(32), toolHeight, TRUE);
         MoveWindow(g_hBtnVoice, margin + Scale(186), toolY, Scale(70), toolHeight, TRUE);
-        MoveWindow(g_hVolumeIndicator, margin + Scale(261), toolY, Scale(50), toolHeight, TRUE);
-        // MoveWindow(g_hBtnVideo, margin + Scale(315), toolY, Scale(80), toolHeight, TRUE); // Hidden until video is restored
+        MoveWindow(g_hVolumeIndicator, margin + Scale(261), toolY, Scale(70), toolHeight, TRUE);
+        MoveWindow(g_hSpeakerIcon, margin + Scale(336), toolY, Scale(20), toolHeight, TRUE);
+        MoveWindow(g_hVolumeSlider, margin + Scale(356), toolY, Scale(100), toolHeight, TRUE);
+        // MoveWindow(g_hBtnVideo, margin + Scale(466), toolY, Scale(80), toolHeight, TRUE); // Hidden until video is restored
 
         int bottomY = margin * 3 + topHeight + toolHeight;
         MoveWindow(g_hInput, margin, bottomY, width - btnWidth - margin * 3, inputHeight, TRUE);
         MoveWindow(g_hSendBtn, width - btnWidth - margin, bottomY, btnWidth, inputHeight, TRUE);
 
+        return 0;
+    }
+
+    case WM_HSCROLL: {
+        if ((HWND)lParam == g_hVolumeSlider) {
+            if (g_pSimpleAudioVolume) {
+                int pos = SendMessage(g_hVolumeSlider, TBM_GETPOS, 0, 0);
+                float volume = pos / 100.0f;
+                g_pSimpleAudioVolume->SetMasterVolume(volume, NULL);
+            }
+        }
+        return 0;
+    }
+
+    case WM_APP_VOLUME_CHANGED: {
+        if (g_hVolumeSlider) {
+            SendMessage(g_hVolumeSlider, TBM_SETPOS, TRUE, wParam);
+        }
         return 0;
     }
 
@@ -3070,7 +3272,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 SetWindowTitle(hWnd);
                 MsgData sysMsg;
                 sysMsg.user = L"";
-                sysMsg.msg = g_currentRoom + L"\x306B\x79FB\x52D5\x3057\x307E\x3057\x305F"; 
+                sysMsg.msg = g_isEnglish ? (GetString(STR_MOVED_TO) + g_currentRoom) : (g_currentRoom + GetString(STR_MOVED_TO)); 
                 sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
                 sysMsg.size = 9; sysMsg.color = RGB(128,128,128);
                 AppendLog(sysMsg);
@@ -3195,6 +3397,15 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         DeleteObject(g_hFontBold);
         DeleteObject(g_hFontI_btn);
         DeleteObject(g_hFontU_btn);
+        if (g_pAudioSessionControl && g_pAudioEvents) {
+            g_pAudioSessionControl->UnregisterAudioSessionNotification(g_pAudioEvents);
+            g_pAudioEvents->Release();
+            g_pAudioEvents = nullptr;
+        }
+        if (g_pAudioSessionControl) { g_pAudioSessionControl->Release(); g_pAudioSessionControl = nullptr; }
+        if (g_pSimpleAudioVolume) { g_pSimpleAudioVolume->Release(); g_pSimpleAudioVolume = nullptr; }
+        CoUninitialize();
+
         if (g_pDWriteFactory) g_pDWriteFactory->Release();
         if (g_pD2DFactory) g_pD2DFactory->Release();
         PostQuitMessage(0);
@@ -3206,11 +3417,14 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 #include "resource.h"
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
+    InitLanguage();
+    g_currentRoom = GetString(STR_LOBBY);
+    
     HDC hdcDpi = GetDC(NULL);
     g_dpi = GetDeviceCaps(hdcDpi, LOGPIXELSX);
     ReleaseDC(NULL, hdcDpi);
 
-    INITCOMMONCONTROLSEX icex = { sizeof(INITCOMMONCONTROLSEX), ICC_STANDARD_CLASSES };
+    INITCOMMONCONTROLSEX icex = { sizeof(INITCOMMONCONTROLSEX), ICC_STANDARD_CLASSES | ICC_BAR_CLASSES };
     InitCommonControlsEx(&icex);
     
     MSG msg;
@@ -3227,7 +3441,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
     HWND hWnd = CreateWindow(
-        L"Retro Chat", L"Retro Chat",
+        L"Retro Chat", GetString(STR_WINDOW_TITLE).c_str(),
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         CW_USEDEFAULT, 0, Scale(500), Scale(400),
         0, 0, hInstance, 0);
