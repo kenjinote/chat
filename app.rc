@@ -26,6 +26,9 @@ BEGIN
     IDS_VIEWING_COUNT " (Viewing: %d)"
     IDS_ENTERED " entered."
     IDS_LEFT " left."
+    IDS_ERROR_TITLE "Error"
+    IDS_ERROR_ROOM_FULL "Room is full."
+    IDS_ERROR_NETWORK "Failed to connect to the signaling server."
 END
 
 LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
@@ -49,6 +52,9 @@ BEGIN
     IDS_VIEWING_COUNT " (視聴中: %d人)"
     IDS_ENTERED " が入室しました。"
     IDS_LEFT " が退出しました。"
+    IDS_ERROR_TITLE "エラー"
+    IDS_ERROR_ROOM_FULL "満室です。"
+    IDS_ERROR_NETWORK "通信サーバーへの接続に失敗しました。"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
@@ -72,6 +78,9 @@ BEGIN
     IDS_VIEWING_COUNT " (观看中: %d人)"
     IDS_ENTERED " 已进入。"
     IDS_LEFT " 已退出。"
+    IDS_ERROR_TITLE "错误"
+    IDS_ERROR_ROOM_FULL "房间已满。"
+    IDS_ERROR_NETWORK "连接到通信服务器失败。"
 END
 
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
@@ -95,6 +104,9 @@ BEGIN
     IDS_VIEWING_COUNT " (시청 중: %d명)"
     IDS_ENTERED " (이)가 입장했습니다."
     IDS_LEFT " (이)가 퇴장했습니다."
+    IDS_ERROR_TITLE "오류"
+    IDS_ERROR_ROOM_FULL "방이 꽉 찼습니다."
+    IDS_ERROR_NETWORK "신호 서버 연결에 실패했습니다."
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL
@@ -118,6 +130,9 @@ BEGIN
     IDS_VIEWING_COUNT " (觀看中: %d人)"
     IDS_ENTERED " 已進入。"
     IDS_LEFT " 已退出。"
+    IDS_ERROR_TITLE "錯誤"
+    IDS_ERROR_ROOM_FULL "房間已滿。"
+    IDS_ERROR_NETWORK "連接到通信服務器失敗。"
 END
 
 LANGUAGE LANG_FRENCH, SUBLANG_FRENCH
@@ -141,6 +156,9 @@ BEGIN
     IDS_VIEWING_COUNT " (Visionnage : %d)"
     IDS_ENTERED " est entre(e)."
     IDS_LEFT " est parti(e)."
+    IDS_ERROR_TITLE "Erreur"
+    IDS_ERROR_ROOM_FULL "La salle est pleine."
+    IDS_ERROR_NETWORK "Échec de la connexion au serveur."
 END
 
 LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
@@ -164,6 +182,9 @@ BEGIN
     IDS_VIEWING_COUNT " (Zuschauer: %d)"
     IDS_ENTERED " ist beigetreten."
     IDS_LEFT " hat den Raum verlassen."
+    IDS_ERROR_TITLE "Fehler"
+    IDS_ERROR_ROOM_FULL "Der Raum ist voll."
+    IDS_ERROR_NETWORK "Fehler beim Verbinden mit dem Server."
 END
 
 LANGUAGE LANG_SPANISH, SUBLANG_SPANISH_MODERN
@@ -187,6 +208,9 @@ BEGIN
     IDS_VIEWING_COUNT " (Viendo: %d)"
     IDS_ENTERED " ha entrado."
     IDS_LEFT " ha salido."
+    IDS_ERROR_TITLE "Error"
+    IDS_ERROR_ROOM_FULL "La habitación está llena."
+    IDS_ERROR_NETWORK "Error al conectar con el servidor."
 END
 
 LANGUAGE LANG_HINDI, SUBLANG_DEFAULT
@@ -210,6 +234,9 @@ BEGIN
     IDS_VIEWING_COUNT " (देख रहे हैं: %d)"
     IDS_ENTERED " प्रवेश किया।"
     IDS_LEFT " छोड़ दिया।"
+    IDS_ERROR_TITLE "त्रुटि"
+    IDS_ERROR_ROOM_FULL "कमरा भर गया है。"
+    IDS_ERROR_NETWORK "सर्वर से कनेक्ट करने में विफल।"
 END
 
 LANGUAGE LANG_PORTUGUESE, SUBLANG_DEFAULT
@@ -233,6 +260,9 @@ BEGIN
     IDS_VIEWING_COUNT " (Assistindo: %d)"
     IDS_ENTERED " entrou."
     IDS_LEFT " saiu."
+    IDS_ERROR_TITLE "Erro"
+    IDS_ERROR_ROOM_FULL "A sala está cheia."
+    IDS_ERROR_NETWORK "Falha ao conectar ao servidor."
 END
 
 LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
@@ -256,6 +286,9 @@ BEGIN
     IDS_VIEWING_COUNT " (Смотрят: %d)"
     IDS_ENTERED " вошел(ла)."
     IDS_LEFT " вышел(ла)."
+    IDS_ERROR_TITLE "Ошибка"
+    IDS_ERROR_ROOM_FULL "Комната полна."
+    IDS_ERROR_NETWORK "Не удалось подключиться к серверу."
 END
 
 LANGUAGE LANG_ARABIC, SUBLANG_DEFAULT
@@ -279,6 +312,9 @@ BEGIN
     IDS_VIEWING_COUNT " (يشاهد: %d)"
     IDS_ENTERED " دخل."
     IDS_LEFT " غادر."
+    IDS_ERROR_TITLE "خطأ"
+    IDS_ERROR_ROOM_FULL "الغرفة ممتلئة."
+    IDS_ERROR_NETWORK "فشل الاتصال بالخادم."
 END
 
 LANGUAGE LANG_BENGALI, SUBLANG_DEFAULT
@@ -302,6 +338,9 @@ BEGIN
     IDS_VIEWING_COUNT " (দেখছেন: %d)"
     IDS_ENTERED " প্রবেশ করেছে।"
     IDS_LEFT " চলে গেছে।"
+    IDS_ERROR_TITLE "ত্রুটি"
+    IDS_ERROR_ROOM_FULL "কক্ষটি পূর্ণ。"
+    IDS_ERROR_NETWORK "সার্ভারের সাথে সংযোগ করতে ব্যর্থ।"
 END
 
 LANGUAGE LANG_INDONESIAN, SUBLANG_DEFAULT
@@ -325,6 +364,9 @@ BEGIN
     IDS_VIEWING_COUNT " (Menonton: %d)"
     IDS_ENTERED " masuk."
     IDS_LEFT " keluar."
+    IDS_ERROR_TITLE "Kesalahan"
+    IDS_ERROR_ROOM_FULL "Ruangan penuh."
+    IDS_ERROR_NETWORK "Gagal terhubung ke server."
 END
 
 LANGUAGE LANG_ITALIAN, SUBLANG_DEFAULT
@@ -348,6 +390,9 @@ BEGIN
     IDS_VIEWING_COUNT " (In visione: %d)"
     IDS_ENTERED " è entrato/a."
     IDS_LEFT " è uscito/a."
+    IDS_ERROR_TITLE "Errore"
+    IDS_ERROR_ROOM_FULL "La stanza è piena."
+    IDS_ERROR_NETWORK "Impossibile connettersi al server."
 END
 
 LANGUAGE LANG_TURKISH, SUBLANG_DEFAULT
@@ -371,6 +416,9 @@ BEGIN
     IDS_VIEWING_COUNT " (İzleyen: %d)"
     IDS_ENTERED " katıldı."
     IDS_LEFT " ayrıldı."
+    IDS_ERROR_TITLE "Hata"
+    IDS_ERROR_ROOM_FULL "Oda dolu."
+    IDS_ERROR_NETWORK "Sunucuya bağlanılamadı."
 END
 
 LANGUAGE LANG_VIETNAMESE, SUBLANG_DEFAULT
@@ -394,4 +442,7 @@ BEGIN
     IDS_VIEWING_COUNT " (Đang xem: %d)"
     IDS_ENTERED " đã vào."
     IDS_LEFT " đã rời."
+    IDS_ERROR_TITLE "Lỗi"
+    IDS_ERROR_ROOM_FULL "Phòng đã đầy."
+    IDS_ERROR_NETWORK "Không thể kết nối với máy chủ."
 END

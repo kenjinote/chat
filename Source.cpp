@@ -1893,7 +1893,12 @@ DWORD WINAPI RecvThread(LPVOID param) {
 
         int max_fd = 0; // Windows select() ignores first arg
 
-        if (select(max_fd + 1, &readfds, NULL, NULL, NULL) > 0) {
+        timeval tv;
+        tv.tv_sec = 1;
+        tv.tv_usec = 0;
+
+        int ret = select(max_fd + 1, &readfds, NULL, NULL, &tv);
+        if (ret > 0) {
             
             // Handle TCP (Signaling)
             if (g_tcpSocket != INVALID_SOCKET && FD_ISSET(g_tcpSocket, &readfds)) {
@@ -1945,7 +1950,13 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             }
                             else if (type == "error") {
                                 std::string errorMsg = json["msg"].string_value();
-                                MessageBoxA(hWndParent, errorMsg.c_str(), "Error", MB_OK | MB_ICONERROR);
+                                std::wstring wErrorMsg = a2w(errorMsg.c_str());
+                                
+                                if (errorMsg.find("full") != std::string::npos || errorMsg.find("Full") != std::string::npos) {
+                                    wErrorMsg = GetString(IDS_ERROR_ROOM_FULL);
+                                }
+                                
+                                MessageBoxW(hWndParent, wErrorMsg.c_str(), GetString(IDS_ERROR_TITLE).c_str(), MB_OK | MB_ICONERROR);
                                 PostMessage(hWndParent, WM_REVERT_ROOM, 0, 0);
                             }
                             else if (type == "users") {
@@ -2048,7 +2059,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                 }
             }
 
-            // Handle UDP (Media)
+
             if (g_sock != INVALID_SOCKET && FD_ISSET(g_sock, &readfds)) {
                 sockaddr_in from;
                 int fromlen = sizeof(from);
@@ -2149,6 +2160,37 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 g_videoViewers[target][viewer] = GetTickCount();
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Auto-reconnect logic
+        if (g_tcpSocket == INVALID_SOCKET && !g_username.empty()) {
+            static DWORD lastReconnect = 0;
+            DWORD now = GetTickCount();
+            if (now - lastReconnect > 5000) {
+                lastReconnect = now;
+                
+                g_tcpSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+                if (g_tcpSocket != INVALID_SOCKET) {
+                    sockaddr_in serverAddr = { 0 };
+                    serverAddr.sin_family = AF_INET;
+                    serverAddr.sin_port = htons(4000);
+                    ResolveIP(g_serverIp, serverAddr.sin_addr);
+                    
+                    if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
+                        g_isServerUdpAddrResolved = false;
+                        json11::Json joinMsg = json11::Json::object {
+                            {"type", "join"},
+                            {"userId", w2a(g_username.c_str())},
+                            {"roomName", w2a(g_currentRoom.c_str())}
+                        };
+                        std::string joinStr = joinMsg.dump() + "\n";
+                        send(g_tcpSocket, joinStr.c_str(), (int)joinStr.length(), 0);
+                    } else {
+                        closesocket(g_tcpSocket);
+                        g_tcpSocket = INVALID_SOCKET;
                     }
                 }
             }
@@ -2525,7 +2567,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         
         bool isConnected = true;
         if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-            MessageBoxW(hWnd, L"Failed to connect to signaling server at 127.0.0.1:4000", L"Network Error", MB_OK | MB_ICONERROR);
+            MessageBoxW(hWnd, GetString(IDS_ERROR_NETWORK).c_str(), GetString(IDS_ERROR_TITLE).c_str(), MB_OK | MB_ICONERROR);
             isConnected = false;
         }
 
