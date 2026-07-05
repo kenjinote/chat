@@ -29,6 +29,9 @@ BEGIN
     IDS_ERROR_TITLE "Error"
     IDS_ERROR_ROOM_FULL "Room is full."
     IDS_ERROR_NETWORK "Failed to connect to the signaling server."
+    IDS_REPORT "Report"
+    IDS_REPORTED "Reported."
+    IDS_NG_WORDS "fuck,shit,bitch,cunt,nigger,asshole,bastard,whore,slut,faggot"
 END
 
 LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
@@ -55,6 +58,9 @@ BEGIN
     IDS_ERROR_TITLE "エラー"
     IDS_ERROR_ROOM_FULL "満室です。"
     IDS_ERROR_NETWORK "通信サーバーへの接続に失敗しました。"
+    IDS_REPORT "通報する"
+    IDS_REPORTED "通報しました。"
+    IDS_NG_WORDS "死ね,殺す,ガイジ,キチガイ,池沼,土人,チョン,チャンコロ,まんこ,ちんこ,ぶっ殺す,死んじまえ,自殺しろ,カス,アホ,バカ"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
@@ -81,6 +87,9 @@ BEGIN
     IDS_ERROR_TITLE "错误"
     IDS_ERROR_ROOM_FULL "房间已满。"
     IDS_ERROR_NETWORK "连接到通信服务器失败。"
+    IDS_REPORT "举报"
+    IDS_REPORTED "已举报。"
+    IDS_NG_WORDS "傻逼,操,滚,他妈的,肏,贱人,妓女,草泥马,尼玛,脑残"
 END
 
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
@@ -107,6 +116,9 @@ BEGIN
     IDS_ERROR_TITLE "오류"
     IDS_ERROR_ROOM_FULL "방이 꽉 찼습니다."
     IDS_ERROR_NETWORK "신호 서버 연결에 실패했습니다."
+    IDS_REPORT "신고하기"
+    IDS_REPORTED "신고했습니다."
+    IDS_NG_WORDS "병신,씨발,개새끼,존나,지랄,썅년,창녀,애미,애비,미친년,좆"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL
@@ -133,6 +145,9 @@ BEGIN
     IDS_ERROR_TITLE "錯誤"
     IDS_ERROR_ROOM_FULL "房間已滿。"
     IDS_ERROR_NETWORK "連接到通信服務器失敗。"
+    IDS_REPORT "舉報"
+    IDS_REPORTED "已舉報。"
+    IDS_NG_WORDS "幹,白痴,去死,他媽的,肏,賤人,妓女,草泥馬,尼瑪,腦殘"
 END
 
 LANGUAGE LANG_FRENCH, SUBLANG_FRENCH
@@ -159,6 +174,9 @@ BEGIN
     IDS_ERROR_TITLE "Erreur"
     IDS_ERROR_ROOM_FULL "La salle est pleine."
     IDS_ERROR_NETWORK "Échec de la connexion au serveur."
+    IDS_REPORT "Signaler"
+    IDS_REPORTED "Signalé."
+    IDS_NG_WORDS "merde,putain,connard,salope,pd,enculé,pute,chier,bâtard,conne"
 END
 
 LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
@@ -185,6 +203,9 @@ BEGIN
     IDS_ERROR_TITLE "Fehler"
     IDS_ERROR_ROOM_FULL "Der Raum ist voll."
     IDS_ERROR_NETWORK "Fehler beim Verbinden mit dem Server."
+    IDS_REPORT "Melden"
+    IDS_REPORTED "Gemeldet."
+    IDS_NG_WORDS "scheiße,fick,fotze,schlampe,hurensohn,arschloch,wichser,missgeburt,bastard"
 END
 
 LANGUAGE LANG_SPANISH, SUBLANG_SPANISH_MODERN
@@ -211,6 +232,9 @@ BEGIN
     IDS_ERROR_TITLE "Error"
     IDS_ERROR_ROOM_FULL "La habitación está llena."
     IDS_ERROR_NETWORK "Error al conectar con el servidor."
+    IDS_REPORT "Reportar"
+    IDS_REPORTED "Reportado."
+    IDS_NG_WORDS "mierda,puta,joder,cabrón,pendejo,gilipollas,coño,maricón,zorra,perra"
 END
 
 LANGUAGE LANG_HINDI, SUBLANG_DEFAULT
@@ -237,6 +261,9 @@ BEGIN
     IDS_ERROR_TITLE "त्रुटि"
     IDS_ERROR_ROOM_FULL "कमरा भर गया है。"
     IDS_ERROR_NETWORK "सर्वर से कनेक्ट करने में विफल।"
+    IDS_REPORT "रिपोर्ट करें"
+    IDS_REPORTED "रिपोर्ट किया गया।"
+    IDS_NG_WORDS "चूतिया,मादरचोद,बहनचोद,भोसड़ीके,रांड,गंडू,छिनाल,हरामजादे"
 END
 
 LANGUAGE LANG_PORTUGUESE, SUBLANG_DEFAULT
@@ -263,6 +290,9 @@ BEGIN
     IDS_ERROR_TITLE "Erro"
     IDS_ERROR_ROOM_FULL "A sala está cheia."
     IDS_ERROR_NETWORK "Falha ao conectar ao servidor."
+    IDS_REPORT "Denunciar"
+    IDS_REPORTED "Denunciado."
+    IDS_NG_WORDS "merda,porra,caralho,filho da puta,boceta,viado,puta,cabrão,corno,buceta"
 END
 
 LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
@@ -289,6 +319,9 @@ BEGIN
     IDS_ERROR_TITLE "Ошибка"
     IDS_ERROR_ROOM_FULL "Комната полна."
     IDS_ERROR_NETWORK "Не удалось подключиться к серверу."
+    IDS_REPORT "Пожаловаться"
+    IDS_REPORTED "Жалоба отправлена."
+    IDS_NG_WORDS "блять,сука,хуй,пиздец,ебать,пидор,шлюха,гондон,мудак,блядь"
 END
 
 LANGUAGE LANG_ARABIC, SUBLANG_DEFAULT
@@ -315,6 +348,9 @@ BEGIN
     IDS_ERROR_TITLE "خطأ"
     IDS_ERROR_ROOM_FULL "الغرفة ممتلئة."
     IDS_ERROR_NETWORK "فشل الاتصال بالخادم."
+    IDS_REPORT "إبلاغ"
+    IDS_REPORTED "تم الإبلاغ."
+    IDS_NG_WORDS "شرموطة,قحبة,عرص,خول,كس,زب,نيك,متناك,ابن المتناكة"
 END
 
 LANGUAGE LANG_BENGALI, SUBLANG_DEFAULT
@@ -341,6 +377,9 @@ BEGIN
     IDS_ERROR_TITLE "ত্রুটি"
     IDS_ERROR_ROOM_FULL "কক্ষটি পূর্ণ。"
     IDS_ERROR_NETWORK "সার্ভারের সাথে সংযোগ করতে ব্যর্থ।"
+    IDS_REPORT "রিপোর্ট করুন"
+    IDS_REPORTED "রিপোর্ট করা হয়েছে।"
+    IDS_NG_WORDS "খানকি,মাগি,বানচোদ,শুয়োরের বাচ্চা,বেশ্যা,চুদি,গুঁদ"
 END
 
 LANGUAGE LANG_INDONESIAN, SUBLANG_DEFAULT
@@ -367,6 +406,9 @@ BEGIN
     IDS_ERROR_TITLE "Kesalahan"
     IDS_ERROR_ROOM_FULL "Ruangan penuh."
     IDS_ERROR_NETWORK "Gagal terhubung ke server."
+    IDS_REPORT "Laporkan"
+    IDS_REPORTED "Dilaporkan."
+    IDS_NG_WORDS "anjing,bangsat,ngentot,perek,lonte,kontol,memek,bajingan,keparat"
 END
 
 LANGUAGE LANG_ITALIAN, SUBLANG_DEFAULT
@@ -393,6 +435,9 @@ BEGIN
     IDS_ERROR_TITLE "Errore"
     IDS_ERROR_ROOM_FULL "La stanza è piena."
     IDS_ERROR_NETWORK "Impossibile connettersi al server."
+    IDS_REPORT "Segnala"
+    IDS_REPORTED "Segnalato."
+    IDS_NG_WORDS "merda,cazzo,puttana,stronzo,troia,frocio,bastardo,vaffanculo,zoccola"
 END
 
 LANGUAGE LANG_TURKISH, SUBLANG_DEFAULT
@@ -419,6 +464,9 @@ BEGIN
     IDS_ERROR_TITLE "Hata"
     IDS_ERROR_ROOM_FULL "Oda dolu."
     IDS_ERROR_NETWORK "Sunucuya bağlanılamadı."
+    IDS_REPORT "Bildir"
+    IDS_REPORTED "Bildirildi."
+    IDS_NG_WORDS "amk,siktir,piç,orospu,yavşak,göt,yarrak,amcık,pezevenk"
 END
 
 LANGUAGE LANG_VIETNAMESE, SUBLANG_DEFAULT
@@ -445,4 +493,7 @@ BEGIN
     IDS_ERROR_TITLE "Lỗi"
     IDS_ERROR_ROOM_FULL "Phòng đã đầy."
     IDS_ERROR_NETWORK "Không thể kết nối với máy chủ."
+    IDS_REPORT "Báo cáo"
+    IDS_REPORTED "Đã báo cáo."
+    IDS_NG_WORDS "đụ,lồn,cặc,đĩ,chó đẻ,địt,phò,cứt"
 END

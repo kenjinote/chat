@@ -6,6 +6,8 @@
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
+#include <shlobj.h>
+#include <fstream>
 #include <d2d1.h>
 #include <dwrite.h>
 #include <imm.h>
@@ -28,6 +30,7 @@
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "comctl32.lib")
+#pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "d2d1.lib")
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "imm32.lib")
@@ -173,6 +176,67 @@ std::map<std::wstring, std::map<uint16_t, VideoFrameBuffer>> g_videoBuffers;
 
 std::set<std::wstring> g_ignoredUsers;
 std::mutex g_ignoredMutex;
+
+std::wstring GetIgnoredUsersFilePath() {
+    wchar_t appData[MAX_PATH];
+    if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_APPDATA, NULL, 0, appData))) {
+        std::wstring dir = std::wstring(appData) + L"\\chat_app";
+        CreateDirectoryW(dir.c_str(), NULL);
+        return dir + L"\\ignored.txt";
+    }
+    return L"ignored.txt";
+}
+
+void LoadIgnoredUsers() {
+    std::lock_guard<std::mutex> lock(g_ignoredMutex);
+    g_ignoredUsers.clear();
+    std::wifstream in(GetIgnoredUsersFilePath());
+    if (in.is_open()) {
+        std::wstring line;
+        while (std::getline(in, line)) {
+            if (!line.empty()) g_ignoredUsers.insert(line);
+        }
+    }
+}
+
+void SaveIgnoredUsers() {
+    std::lock_guard<std::mutex> lock(g_ignoredMutex);
+    std::wofstream out(GetIgnoredUsersFilePath(), std::ios::trunc);
+    if (out.is_open()) {
+        for (const auto& u : g_ignoredUsers) {
+            out << u << L"\n";
+        }
+    }
+}
+
+std::wstring FilterProfanity(std::wstring text) {
+    std::wstring ng_words = GetString(IDS_NG_WORDS);
+    size_t start = 0;
+    size_t end = ng_words.find(L',');
+    while (end != std::wstring::npos) {
+        std::wstring word = ng_words.substr(start, end - start);
+        if (!word.empty()) {
+            size_t pos = 0;
+            while ((pos = text.find(word, pos)) != std::wstring::npos) {
+                text.replace(pos, word.length(), L"***");
+                pos += 3;
+            }
+        }
+        start = end + 1;
+        end = ng_words.find(L',', start);
+    }
+    if (start < ng_words.length()) {
+        std::wstring word = ng_words.substr(start);
+        if (!word.empty()) {
+            size_t pos = 0;
+            while ((pos = text.find(word, pos)) != std::wstring::npos) {
+                text.replace(pos, word.length(), L"***");
+                pos += 3;
+            }
+        }
+    }
+    return text;
+}
 
 void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& username) {
     IStream* pStream = NULL;
@@ -1871,9 +1935,29 @@ void AppendLog(const MsgData& data) {
         }
         UpdateUserList(data.user);
     }
+    MsgData filteredData = data;
+    filteredData.msg = FilterProfanity(filteredData.msg);
     LogEntry entry;
-    entry.data = data;
+    entry.data = filteredData;
     g_logEntries.push_back(entry);
+    
+    const size_t MAX_LOG_ENTRIES = 5000;
+    if (g_logEntries.size() > MAX_LOG_ENTRIES + 100) {
+        size_t eraseCount = g_logEntries.size() - MAX_LOG_ENTRIES;
+        float deletedHeight = 0.0f;
+        for (size_t i = 0; i < eraseCount; i++) {
+            deletedHeight += g_logEntries[i].height;
+            if (g_logEntries[i].pLayout) {
+                g_logEntries[i].pLayout->Release();
+            }
+        }
+        g_logEntries.erase(g_logEntries.begin(), g_logEntries.begin() + eraseCount);
+        if (!g_autoScroll) {
+            g_logScrollY -= deletedHeight;
+            if (g_logScrollY < 0.0f) g_logScrollY = 0.0f;
+        }
+    }
+    
     InvalidateRect(g_hLog, NULL, FALSE);
 }
 
@@ -2480,6 +2564,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     HMENU hMenu = CreatePopupMenu();
                     AppendMenuW(hMenu, MF_STRING | (hasStreamer ? 0 : MF_GRAYED), 2, GetString(IDS_WATCH_VIDEO).c_str());
                     AppendMenuW(hMenu, MF_STRING | (isIgnored ? MF_CHECKED : MF_UNCHECKED), 4, GetString(IDS_IGNORE).c_str());
+                    AppendMenuW(hMenu, MF_STRING, 5, GetString(IDS_REPORT).c_str());
                     ClientToScreen(hwnd, &pt);
                     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
                     DestroyMenu(hMenu);
@@ -2492,15 +2577,39 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             SetForegroundWindow(g_videoWindows[clickedUser]);
                         }
                     } else if (cmd == 4) {
-                        std::lock_guard<std::mutex> lock(g_ignoredMutex);
-                        if (g_ignoredUsers.count(clickedUser) > 0) {
-                            g_ignoredUsers.erase(clickedUser);
-                        } else {
+                        {
+                            std::lock_guard<std::mutex> lock(g_ignoredMutex);
+                            if (g_ignoredUsers.count(clickedUser) > 0) {
+                                g_ignoredUsers.erase(clickedUser);
+                            } else {
+                                g_ignoredUsers.insert(clickedUser);
+                                if (g_videoWindows[clickedUser] && IsWindow(g_videoWindows[clickedUser])) {
+                                    DestroyWindow(g_videoWindows[clickedUser]);
+                                }
+                            }
+                        }
+                        SaveIgnoredUsers();
+                        InvalidateRect(hwnd, NULL, FALSE);
+                    } else if (cmd == 5) {
+                        {
+                            std::lock_guard<std::mutex> lock(g_ignoredMutex);
                             g_ignoredUsers.insert(clickedUser);
                             if (g_videoWindows[clickedUser] && IsWindow(g_videoWindows[clickedUser])) {
                                 DestroyWindow(g_videoWindows[clickedUser]);
                             }
                         }
+                        SaveIgnoredUsers();
+                        LPSTR utf8Target = w2a(clickedUser.c_str());
+                        json11::Json reportMsg = json11::Json::object {
+                            {"type", "report"},
+                            {"target", utf8Target}
+                        };
+                        GlobalFree(utf8Target);
+                        std::string msg = reportMsg.dump() + "\n";
+                        if (g_tcpSocket != INVALID_SOCKET) {
+                            send(g_tcpSocket, msg.c_str(), msg.length(), 0);
+                        }
+                        MessageBoxW(hwnd, GetString(IDS_REPORTED).c_str(), L"Report", MB_OK);
                         InvalidateRect(hwnd, NULL, FALSE);
                     }
                 }
@@ -3447,6 +3556,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     SetThreadUILanguage(0);
     g_currentRoom = GetString(IDS_LOBBY);
+    LoadIgnoredUsers();
     
     HDC hdcDpi = GetDC(NULL);
     g_dpi = GetDeviceCaps(hdcDpi, LOGPIXELSX);
