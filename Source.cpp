@@ -1660,6 +1660,232 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     return DefWindowProc(hWnd, msg, wParam, lParam);
 }
+#ifndef WM_GETTITLEBARINFOEX
+#define WM_GETTITLEBARINFOEX 0x033F
+#endif
+
+bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult) {
+    switch (msg) {
+    case WM_NCCREATE:
+    case WM_CREATE: {
+        SetWindowTheme(hWnd, L" ", L" ");
+        SystemParametersInfo(SPI_SETGRADIENTCAPTIONS, 0, (PVOID)FALSE, 0);
+        SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOREDRAW);
+        return false;
+    }
+    case WM_WINDOWPOSCHANGING: {
+        WINDOWPOS* pwp = (WINDOWPOS*)lParam;
+        int primaryBtn = GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
+        if ((GetAsyncKeyState(primaryBtn) >= 0) && !(pwp->flags & SWP_NOSIZE) && !(pwp->flags & SWP_NOMOVE)) {
+            RECT rcNew = { pwp->x, pwp->y, pwp->x + pwp->cx, pwp->y + pwp->cy };
+            HMONITOR hMonitor = MonitorFromRect(&rcNew, MONITOR_DEFAULTTONEAREST);
+            MONITORINFO mi = { sizeof(MONITORINFO) };
+            if (GetMonitorInfo(hMonitor, &mi)) {
+                bool isLeftEdge = (pwp->x == mi.rcWork.left);
+                bool isRightEdge = (pwp->x + pwp->cx == mi.rcWork.right);
+                bool isTopEdge = (pwp->y == mi.rcWork.top);
+                bool isBottomEdge = (pwp->y + pwp->cy == mi.rcWork.bottom);
+
+                if (isLeftEdge || isRightEdge || isTopEdge || isBottomEdge) {
+                    RECT rcFrame = { 0, 0, 0, 0 };
+                    AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+                    int cxCrop = -rcFrame.left - 3;
+                    int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - 3;
+                    int cyCropBottom = rcFrame.bottom - 3;
+                    if (cxCrop < 0) cxCrop = 0;
+                    if (cyCropTop < 0) cyCropTop = 0;
+                    if (cyCropBottom < 0) cyCropBottom = 0;
+
+                    pwp->x -= cxCrop;
+                    pwp->y -= cyCropTop;
+                    pwp->cx += cxCrop * 2;
+                    pwp->cy += cyCropTop + cyCropBottom;
+                }
+            }
+        }
+        return false;
+    }
+    case WM_WINDOWPOSCHANGED: {
+        *pResult = DefWindowProc(hWnd, msg, wParam, lParam);
+        WINDOWPOS* pwp = (WINDOWPOS*)lParam;
+        if (!(pwp->flags & SWP_NOSIZE)) {
+            RECT rcFrame = { 0, 0, 0, 0 };
+            AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+            int cxCrop = -rcFrame.left - 2;
+            int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - 2;
+            int cyCropBottom = rcFrame.bottom - 2;
+            if (cxCrop < 0) cxCrop = 0;
+            if (cyCropTop < 0) cyCropTop = 0;
+            if (cyCropBottom < 0) cyCropBottom = 0;
+            HRGN hRgn = CreateRectRgn(cxCrop, cyCropTop, pwp->cx - cxCrop, pwp->cy - cyCropBottom);
+            SetWindowRgn(hWnd, hRgn, TRUE);
+        }
+        return true;
+    }
+    case WM_NCHITTEST: {
+        POINT pt;
+        pt.x = (int)(short)LOWORD(lParam);
+        pt.y = (int)(short)HIWORD(lParam);
+        RECT rc;
+        GetWindowRect(hWnd, &rc);
+        
+        int grab = 4;
+        
+        bool bLeft = (pt.x >= rc.left && pt.x < rc.left + grab);
+        bool bRight = (pt.x < rc.right && pt.x >= rc.right - grab);
+        bool bTop = (pt.y >= rc.top && pt.y < rc.top + grab);
+        bool bBottom = (pt.y < rc.bottom && pt.y >= rc.bottom - grab);
+        
+        if (bTop && bLeft) { *pResult = HTTOPLEFT; return true; }
+        if (bTop && bRight) { *pResult = HTTOPRIGHT; return true; }
+        if (bBottom && bLeft) { *pResult = HTBOTTOMLEFT; return true; }
+        if (bBottom && bRight) { *pResult = HTBOTTOMRIGHT; return true; }
+        if (bLeft) { *pResult = HTLEFT; return true; }
+        if (bRight) { *pResult = HTRIGHT; return true; }
+        if (bTop) { *pResult = HTTOP; return true; }
+        if (bBottom) { *pResult = HTBOTTOM; return true; }
+        return false;
+    }
+    case WM_NCPAINT:
+    case WM_NCACTIVATE: {
+        *pResult = DefWindowProc(hWnd, msg, wParam, lParam);
+        if (!IsIconic(hWnd)) {
+            HDC hdc = GetWindowDC(hWnd);
+            if (hdc) {
+                RECT rcWindow;
+                GetWindowRect(hWnd, &rcWindow);
+                int width = rcWindow.right - rcWindow.left;
+                int height = rcWindow.bottom - rcWindow.top;
+
+                RECT rcFrame = { 0, 0, 0, 0 };
+                AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+                int cxCrop = -rcFrame.left - 3;
+                int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - 3;
+                int cyCropBottom = rcFrame.bottom - 3;
+                if (cxCrop < 0) cxCrop = 0;
+                if (cyCropTop < 0) cyCropTop = 0;
+                if (cyCropBottom < 0) cyCropBottom = 0;
+
+                int visLeft = cxCrop;
+                int visTop = cyCropTop;
+                int visRight = width - cxCrop;
+                int visBottom = height - cyCropBottom;
+
+                HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
+                HBRUSH hWhite = CreateSolidBrush(RGB(255, 255, 255));
+                HBRUSH hLightGray = CreateSolidBrush(RGB(223, 223, 223));
+                HBRUSH hDarkGray = CreateSolidBrush(RGB(128, 128, 128));
+                HBRUSH hFaceGray = CreateSolidBrush(RGB(192, 199, 200));
+
+                RECT rcWhiteTop = { visLeft, visTop, visRight - 1, visTop + 1 };
+                FillRect(hdc, &rcWhiteTop, hWhite);
+                RECT rcWhiteLeft = { visLeft, visTop, visLeft + 1, visBottom - 1 };
+                FillRect(hdc, &rcWhiteLeft, hWhite);
+
+                RECT rcBlackBottom = { visLeft, visBottom - 1, visRight, visBottom };
+                FillRect(hdc, &rcBlackBottom, hBlack);
+                RECT rcBlackRight = { visRight - 1, visTop, visRight, visBottom };
+                FillRect(hdc, &rcBlackRight, hBlack);
+
+                RECT rcLightTop = { visLeft + 1, visTop + 1, visRight - 2, visTop + 2 };
+                FillRect(hdc, &rcLightTop, hLightGray);
+                RECT rcLightLeft = { visLeft + 1, visTop + 1, visLeft + 2, visBottom - 2 };
+                FillRect(hdc, &rcLightLeft, hLightGray);
+
+                RECT rcDarkBottom = { visLeft + 1, visBottom - 2, visRight - 1, visBottom - 1 };
+                FillRect(hdc, &rcDarkBottom, hDarkGray);
+                RECT rcDarkRight = { visRight - 2, visTop + 1, visRight - 1, visBottom - 1 };
+                FillRect(hdc, &rcDarkRight, hDarkGray);
+
+                RECT rcFaceTop = { visLeft + 2, visTop + 2, visRight - 2, visTop + 3 };
+                FillRect(hdc, &rcFaceTop, hFaceGray);
+                RECT rcFaceBottom = { visLeft + 2, visBottom - 3, visRight - 2, visBottom - 2 };
+                FillRect(hdc, &rcFaceBottom, hFaceGray);
+                RECT rcFaceLeft = { visLeft + 2, visTop + 2, visLeft + 3, visBottom - 2 };
+                FillRect(hdc, &rcFaceLeft, hFaceGray);
+                RECT rcFaceRight = { visRight - 3, visTop + 2, visRight - 2, visBottom - 2 };
+                FillRect(hdc, &rcFaceRight, hFaceGray);
+
+                DeleteObject(hBlack);
+                DeleteObject(hWhite);
+                DeleteObject(hLightGray);
+                DeleteObject(hDarkGray);
+                DeleteObject(hFaceGray);
+
+                int captionHeight = GetSystemMetrics(SM_CYCAPTION);
+                RECT rcCaption = { visLeft + 3, visTop + 3, visRight - 3, visTop + 3 + captionHeight - 1 };
+                
+                TITLEBARINFOEX tbiex = { 0 };
+                tbiex.cbSize = sizeof(TITLEBARINFOEX);
+                SendMessage(hWnd, WM_GETTITLEBARINFOEX, 0, (LPARAM)&tbiex);
+
+                RECT rcWin;
+                GetWindowRect(hWnd, &rcWin);
+
+                bool bHasTitleBarInfo = !IsRectEmpty(&tbiex.rgrect[5]);
+                if (bHasTitleBarInfo) {
+                    for (int i = 2; i <= 5; i++) {
+                        if (!IsRectEmpty(&tbiex.rgrect[i])) {
+                            RECT rcBtn = tbiex.rgrect[i];
+                            OffsetRect(&rcBtn, -rcWin.left, -rcWin.top);
+                            ExcludeClipRect(hdc, rcBtn.left, rcBtn.top, rcBtn.right, rcBtn.bottom);
+                        }
+                    }
+                } else {
+                    int btnWidth = GetSystemMetrics(SM_CXSIZE);
+                    int btnCount = (GetWindowLong(hWnd, GWL_STYLE) & WS_MAXIMIZEBOX) ? 3 : 1;
+                    RECT rcBtnArea = { rcCaption.right - (btnWidth * btnCount) - 4, rcCaption.top, rcCaption.right, rcCaption.bottom };
+                    ExcludeClipRect(hdc, rcBtnArea.left, rcBtnArea.top, rcBtnArea.right, rcBtnArea.bottom);
+                }
+
+                bool bActive;
+                if (msg == WM_NCACTIVATE) {
+                    bActive = (wParam != FALSE);
+                } else {
+                    bActive = (GetAncestor(GetForegroundWindow(), GA_ROOTOWNER) == hWnd);
+                }
+                
+                HBRUSH hCaptionBrush = CreateSolidBrush(bActive ? RGB(0, 0, 168) : RGB(128, 128, 128));
+                FillRect(hdc, &rcCaption, hCaptionBrush);
+                DeleteObject(hCaptionBrush);
+
+                SetBkMode(hdc, TRANSPARENT);
+                SetTextColor(hdc, bActive ? RGB(255, 255, 255) : RGB(192, 199, 200));
+                
+                HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+                HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+                
+                WCHAR szTitle[256];
+                GetWindowText(hWnd, szTitle, 256);
+                
+                int iconWidth = GetSystemMetrics(SM_CXSMICON);
+                RECT rcText = rcCaption;
+                
+                HICON hIcon = (HICON)SendMessage(hWnd, WM_GETICON, ICON_SMALL, 0);
+                if (!hIcon) hIcon = (HICON)GetClassLongPtr(hWnd, GCLP_HICONSM);
+                if (!hIcon && (GetWindowLong(hWnd, GWL_STYLE) & WS_SYSMENU)) hIcon = LoadIcon(NULL, IDI_APPLICATION);
+                
+                if (hIcon) {
+                    rcText.left += iconWidth + 6;
+                    int iconY = rcCaption.top + (rcCaption.bottom - rcCaption.top - GetSystemMetrics(SM_CYSMICON)) / 2;
+                    DrawIconEx(hdc, rcCaption.left + 2, iconY, hIcon, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0, NULL, DI_NORMAL);
+                } else {
+                    rcText.left += 2;
+                }
+                
+                rcText.right -= 4;
+                
+                DrawText(hdc, szTitle, lstrlen(szTitle), &rcText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+                
+                SelectObject(hdc, hOldFont);
+                ReleaseDC(hWnd, hdc);
+            }
+        }
+        return true;
+    }
+    }
+    return false;
+}
 
 // Dialogs
 
@@ -1667,6 +1893,9 @@ std::wstring g_changeNameResult;
 bool g_changeNameOK = false;
 
 LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    LRESULT classicResult = 0;
+    if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult)) return classicResult;
+
     static HWND hEdit, hBtnOK, hBtnCancel;
     switch (msg) {
     case WM_CREATE: {
@@ -1758,6 +1987,9 @@ bool g_moveBoxOK = false;
 bool g_ignoreEditChange = false;
 
 LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    LRESULT classicResult = 0;
+    if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult)) return classicResult;
+
     static HWND hEdit, hList, hChk, hBtnOK, hBtnCancel;
     static std::vector<std::wstring> s_roomNames;
     switch (msg) {
@@ -2372,6 +2604,9 @@ void SendChatMessage(const std::wstring& msg) {
 std::map<HWND, ID2D1HwndRenderTarget*> g_videoRts;
 
 LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    LRESULT classicResult = 0;
+    if (HandleClassicStyle(hwnd, message, wParam, lParam, &classicResult)) return classicResult;
+
     std::wstring* pUser = (std::wstring*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
     switch (message) {
     case WM_NCCREATE: {
@@ -2621,6 +2856,9 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    LRESULT classicResult = 0;
+    if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult)) return classicResult;
+
     switch (msg) {
     case WM_CREATE: {
         
