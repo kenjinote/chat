@@ -2051,20 +2051,17 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
 
         POINT wpt = { pt.x - rc.left, pt.y - rc.top };
         if (PtInRect(&rcCaption, wpt)) {
-            HDC hdc = GetWindowDC(hWnd);
-            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
-            ReleaseDC(hWnd, hdc);
+            int margin2 = Scale(2);
+            int margin4 = Scale(4);
+            int btnHeight = GetSystemMetrics(SM_CYSIZE) - margin4;
+            if (btnHeight > captionHeight - margin4) btnHeight = captionHeight - margin4;
+            int btnWidth = btnHeight + margin2;
             
-            int marginX = MulDiv(2, dpiY, 96); if (marginX < 2) marginX = 2;
-            int gap = MulDiv(2, dpiY, 96); if (gap < 2) gap = 2;
-            
-            int btnHeight = MulDiv(14, dpiY, 96);
-            int btnWidth = MulDiv(16, dpiY, 96);
-            int btnTop = rcCaption.top + (captionHeight - btnHeight) / 2;
-            int btnRight = rcCaption.right - marginX;
+            int btnTop = rcCaption.top + margin2;
+            int btnRight = rcCaption.right - margin2;
             
             RECT rcClose = { btnRight - btnWidth, btnTop, btnRight, btnTop + btnHeight };
-            RECT rcMax = { rcClose.left - gap - btnWidth, btnTop, rcClose.left - gap, btnTop + btnHeight };
+            RECT rcMax = { rcClose.left - margin2 - btnWidth, btnTop, rcClose.left - margin2, btnTop + btnHeight };
             RECT rcMin = { rcMax.left - btnWidth, btnTop, rcMax.left, btnTop + btnHeight };
             
             if (PtInRect(&rcClose, wpt)) { *pResult = HTCLOSE; return true; }
@@ -2188,17 +2185,18 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 FillRect(hdc, &rcCaption, hCaptionBrush);
                 DeleteObject(hCaptionBrush);
 
-                int marginX = MulDiv(2, dpiY, 96); if (marginX < 2) marginX = 2;
-                int gap = MulDiv(2, dpiY, 96); if (gap < 2) gap = 2;
-
-                int btnHeight = MulDiv(14, dpiY, 96);
-                int btnWidth = MulDiv(16, dpiY, 96);
+                int margin2 = Scale(2);
+                int margin4 = Scale(4);
+                int btnHeight = GetSystemMetrics(SM_CYSIZE) - margin4;
                 captionHeight = rcCaption.bottom - rcCaption.top;
-                int btnTop = rcCaption.top + (captionHeight - btnHeight) / 2;
-                int btnRight = rcCaption.right - marginX;
+                if (btnHeight > captionHeight - margin4) btnHeight = captionHeight - margin4;
+                int btnWidth = btnHeight + margin2;
+
+                int btnTop = rcCaption.top + margin2;
+                int btnRight = rcCaption.right - margin2;
 
                 RECT rcClose = { btnRight - btnWidth, btnTop, btnRight, btnTop + btnHeight };
-                RECT rcMax = { rcClose.left - gap - btnWidth, btnTop, rcClose.left - gap, btnTop + btnHeight };
+                RECT rcMax = { rcClose.left - margin2 - btnWidth, btnTop, rcClose.left - margin2, btnTop + btnHeight };
                 RECT rcMin = { rcMax.left - btnWidth, btnTop, rcMax.left, btnTop + btnHeight };
 
                 extern HWND g_capturedWnd;
