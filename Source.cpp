@@ -2259,11 +2259,17 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                     HBRUSH hOldB = (HBRUSH)SelectObject(hdc, hBlackBrush);
                     
                     if (type == 0) { // close
-                        int x = cx - 4*s, y = cy - 3*s;
-                        MoveToEx(hdc, x, y, NULL); LineTo(hdc, x + 7*s, y + 7*s);
-                        MoveToEx(hdc, x + 1*s, y, NULL); LineTo(hdc, x + 8*s, y + 7*s);
-                        MoveToEx(hdc, x + 6*s, y, NULL); LineTo(hdc, x - 1*s, y + 7*s);
-                        MoveToEx(hdc, x + 7*s, y, NULL); LineTo(hdc, x, y + 7*s);
+                        int h = 3 * s;
+                        int x0 = cx - 4 * s;
+                        int y0 = cy - h;
+                        int x1 = x0 + 6 * s;
+                        int y1 = cy + h;
+
+                        MoveToEx(hdc, x0, y0, NULL); LineTo(hdc, x1 + 1, y1 + 1);
+                        MoveToEx(hdc, x0 + s, y0, NULL); LineTo(hdc, x1 + s + 1, y1 + 1);
+
+                        MoveToEx(hdc, x1, y0, NULL); LineTo(hdc, x0 - 1, y1 + 1);
+                        MoveToEx(hdc, x1 + s, y0, NULL); LineTo(hdc, x0 + s - 1, y1 + 1);
                     } else if (type == 1) { // max
                         SelectObject(hdc, GetStockObject(NULL_BRUSH));
                         Rectangle(hdc, cx - 4*s, cy - 4*s, cx + 5*s, cy + 5*s);
@@ -2383,6 +2389,7 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         SetWindowSubclass(hBtnOK, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hBtnCancel, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hEdit, EditSelectionColorProc, 0, 0);
+        SetWindowSubclass(hEdit, ClientEdgeSubclassProc, 0, 0);
         
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
         SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, FALSE);
@@ -2754,7 +2761,9 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         SetWindowSubclass(hBtnOK, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hBtnCancel, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hEdit, EditSelectionColorProc, 0, 0);
+        SetWindowSubclass(hEdit, ClientEdgeSubclassProc, 0, 0);
         SetWindowSubclass(hList, ScrollbarColorProc, 0, 0);
+        SetWindowSubclass(hList, ClientEdgeSubclassProc, 0, 0);
         SendMessage(hList, LB_SETITEMHEIGHT, 0, Scale(16));
         
         s_roomNames.clear();
