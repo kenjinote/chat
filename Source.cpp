@@ -2016,39 +2016,44 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 int visRight = width - cxCrop;
                 int visBottom = height - cyCropBottom;
 
+                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+                int bw2 = bw1 * 2;
+                int bw3 = bw1 * 3;
+
                 HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
                 HBRUSH hWhite = CreateSolidBrush(RGB(255, 255, 255));
                 HBRUSH hLightGray = CreateSolidBrush(RGB(223, 223, 223));
                 HBRUSH hDarkGray = CreateSolidBrush(RGB(128, 128, 128));
                 HBRUSH hFaceGray = CreateSolidBrush(RGB(192, 199, 200));
 
-                RECT rcWhiteTop = { visLeft, visTop, visRight - 1, visTop + 1 };
+                RECT rcWhiteTop = { visLeft, visTop, visRight - bw1, visTop + bw1 };
                 FillRect(hdc, &rcWhiteTop, hWhite);
-                RECT rcWhiteLeft = { visLeft, visTop, visLeft + 1, visBottom - 1 };
+                RECT rcWhiteLeft = { visLeft, visTop, visLeft + bw1, visBottom - bw1 };
                 FillRect(hdc, &rcWhiteLeft, hWhite);
 
-                RECT rcBlackBottom = { visLeft, visBottom - 1, visRight, visBottom };
+                RECT rcBlackBottom = { visLeft, visBottom - bw1, visRight, visBottom };
                 FillRect(hdc, &rcBlackBottom, hBlack);
-                RECT rcBlackRight = { visRight - 1, visTop, visRight, visBottom };
+                RECT rcBlackRight = { visRight - bw1, visTop, visRight, visBottom };
                 FillRect(hdc, &rcBlackRight, hBlack);
 
-                RECT rcLightTop = { visLeft + 1, visTop + 1, visRight - 2, visTop + 2 };
+                RECT rcLightTop = { visLeft + bw1, visTop + bw1, visRight - bw2, visTop + bw2 };
                 FillRect(hdc, &rcLightTop, hLightGray);
-                RECT rcLightLeft = { visLeft + 1, visTop + 1, visLeft + 2, visBottom - 2 };
+                RECT rcLightLeft = { visLeft + bw1, visTop + bw1, visLeft + bw2, visBottom - bw2 };
                 FillRect(hdc, &rcLightLeft, hLightGray);
 
-                RECT rcDarkBottom = { visLeft + 1, visBottom - 2, visRight - 1, visBottom - 1 };
+                RECT rcDarkBottom = { visLeft + bw1, visBottom - bw2, visRight - bw1, visBottom - bw1 };
                 FillRect(hdc, &rcDarkBottom, hDarkGray);
-                RECT rcDarkRight = { visRight - 2, visTop + 1, visRight - 1, visBottom - 1 };
+                RECT rcDarkRight = { visRight - bw2, visTop + bw1, visRight - bw1, visBottom - bw1 };
                 FillRect(hdc, &rcDarkRight, hDarkGray);
 
-                RECT rcFaceTop = { visLeft + 2, visTop + 2, visRight - 2, visTop + 3 };
+                RECT rcFaceTop = { visLeft + bw2, visTop + bw2, visRight - bw2, visTop + bw3 };
                 FillRect(hdc, &rcFaceTop, hFaceGray);
-                RECT rcFaceBottom = { visLeft + 2, visBottom - 3, visRight - 2, visBottom - 2 };
+                RECT rcFaceBottom = { visLeft + bw2, visBottom - bw3, visRight - bw2, visBottom - bw2 };
                 FillRect(hdc, &rcFaceBottom, hFaceGray);
-                RECT rcFaceLeft = { visLeft + 2, visTop + 2, visLeft + 3, visBottom - 2 };
+                RECT rcFaceLeft = { visLeft + bw2, visTop + bw2, visLeft + bw3, visBottom - bw2 };
                 FillRect(hdc, &rcFaceLeft, hFaceGray);
-                RECT rcFaceRight = { visRight - 3, visTop + 2, visRight - 2, visBottom - 2 };
+                RECT rcFaceRight = { visRight - bw3, visTop + bw2, visRight - bw2, visBottom - bw2 };
                 FillRect(hdc, &rcFaceRight, hFaceGray);
 
                 DeleteObject(hBlack);
@@ -2058,7 +2063,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 DeleteObject(hFaceGray);
 
                 int captionHeight = GetSystemMetrics(SM_CYCAPTION);
-                RECT rcCaption = { visLeft + 3, visTop + 3, visRight - 3, visTop + 3 + captionHeight };
+                RECT rcCaption = { visLeft + bw3, visTop + bw3, visRight - bw3, visTop + bw3 + captionHeight };
                 
                 TITLEBARINFOEX tbiex = { 0 };
                 tbiex.cbSize = sizeof(TITLEBARINFOEX);
@@ -2104,48 +2109,85 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 if (g_capturedWnd == hWnd && g_hoverBtn == HTMINBUTTON) minState |= DFCS_PUSHED;
 
                 auto drawCaptionBtn = [&](RECT r, int type, bool pushed) {
+                    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                    int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+                    int bw2 = bw1 * 2;
+
                     HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
                     FillRect(hdc, &r, hBg);
                     DeleteObject(hBg);
-                    DrawEdge(hdc, &r, pushed ? EDGE_SUNKEN : EDGE_RAISED, BF_RECT);
+
+                    // Manually draw button edge
+                    HBRUSH hWhite = CreateSolidBrush(RGB(255, 255, 255));
+                    HBRUSH hDarkGray = CreateSolidBrush(RGB(128, 128, 128));
+                    HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
+                    HBRUSH hLightGray = CreateSolidBrush(RGB(223, 223, 223));
+
+                    if (!pushed) {
+                        RECT rcTop = { r.left, r.top, r.right, r.top + bw1 }; FillRect(hdc, &rcTop, hWhite);
+                        RECT rcLeft = { r.left, r.top, r.left + bw1, r.bottom }; FillRect(hdc, &rcLeft, hWhite);
+                        RECT rcBottom = { r.left, r.bottom - bw1, r.right, r.bottom }; FillRect(hdc, &rcBottom, hBlack);
+                        RECT rcRight = { r.right - bw1, r.top, r.right, r.bottom }; FillRect(hdc, &rcRight, hBlack);
+                        
+                        RECT rcTop2 = { r.left + bw1, r.top + bw1, r.right - bw1, r.top + bw2 }; FillRect(hdc, &rcTop2, hLightGray);
+                        RECT rcLeft2 = { r.left + bw1, r.top + bw1, r.left + bw2, r.bottom - bw1 }; FillRect(hdc, &rcLeft2, hLightGray);
+                        RECT rcBottom2 = { r.left + bw1, r.bottom - bw2, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcBottom2, hDarkGray);
+                        RECT rcRight2 = { r.right - bw2, r.top + bw1, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcRight2, hDarkGray);
+                    } else {
+                        RECT rcTop = { r.left, r.top, r.right, r.top + bw1 }; FillRect(hdc, &rcTop, hBlack);
+                        RECT rcLeft = { r.left, r.top, r.left + bw1, r.bottom }; FillRect(hdc, &rcLeft, hBlack);
+                        RECT rcBottom = { r.left, r.bottom - bw1, r.right, r.bottom }; FillRect(hdc, &rcBottom, hWhite);
+                        RECT rcRight = { r.right - bw1, r.top, r.right, r.bottom }; FillRect(hdc, &rcRight, hWhite);
+
+                        RECT rcTop2 = { r.left + bw1, r.top + bw1, r.right - bw1, r.top + bw2 }; FillRect(hdc, &rcTop2, hDarkGray);
+                        RECT rcLeft2 = { r.left + bw1, r.top + bw1, r.left + bw2, r.bottom - bw1 }; FillRect(hdc, &rcLeft2, hDarkGray);
+                        RECT rcBottom2 = { r.left + bw1, r.bottom - bw2, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcBottom2, hLightGray);
+                        RECT rcRight2 = { r.right - bw2, r.top + bw1, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcRight2, hLightGray);
+                    }
+
+                    DeleteObject(hWhite);
+                    DeleteObject(hDarkGray);
+                    DeleteObject(hBlack);
+                    DeleteObject(hLightGray);
                     
                     int cx = r.left + (r.right - r.left) / 2;
                     int cy = r.top + (r.bottom - r.top) / 2;
-                    if (pushed) { cx++; cy++; }
+                    if (pushed) { cx += bw1; cy += bw1; }
                     
-                    HPEN hBlack = CreatePen(PS_SOLID, 1, RGB(0,0,0));
+                    int s = bw1;
+                    HPEN hBlackPen = CreatePen(PS_SOLID, s, RGB(0,0,0));
                     HBRUSH hBlackBrush = CreateSolidBrush(RGB(0,0,0));
-                    HPEN hOldP = (HPEN)SelectObject(hdc, hBlack);
+                    HPEN hOldP = (HPEN)SelectObject(hdc, hBlackPen);
                     HBRUSH hOldB = (HBRUSH)SelectObject(hdc, hBlackBrush);
                     
                     if (type == 0) { // close
-                        int x = cx - 4, y = cy - 3;
-                        MoveToEx(hdc, x, y, NULL); LineTo(hdc, x + 7, y + 7);
-                        MoveToEx(hdc, x + 1, y, NULL); LineTo(hdc, x + 8, y + 7);
-                        MoveToEx(hdc, x + 6, y, NULL); LineTo(hdc, x - 1, y + 7);
-                        MoveToEx(hdc, x + 7, y, NULL); LineTo(hdc, x, y + 7);
+                        int x = cx - 4*s, y = cy - 3*s;
+                        MoveToEx(hdc, x, y, NULL); LineTo(hdc, x + 7*s, y + 7*s);
+                        MoveToEx(hdc, x + 1*s, y, NULL); LineTo(hdc, x + 8*s, y + 7*s);
+                        MoveToEx(hdc, x + 6*s, y, NULL); LineTo(hdc, x - 1*s, y + 7*s);
+                        MoveToEx(hdc, x + 7*s, y, NULL); LineTo(hdc, x, y + 7*s);
                     } else if (type == 1) { // max
                         SelectObject(hdc, GetStockObject(NULL_BRUSH));
-                        Rectangle(hdc, cx - 4, cy - 4, cx + 5, cy + 5);
-                        MoveToEx(hdc, cx - 4, cy - 3, NULL); LineTo(hdc, cx + 5, cy - 3);
+                        Rectangle(hdc, cx - 4*s, cy - 4*s, cx + 5*s, cy + 5*s);
+                        MoveToEx(hdc, cx - 4*s, cy - 3*s, NULL); LineTo(hdc, cx + 5*s, cy - 3*s);
                     } else if (type == 2) { // min
                         SelectObject(hdc, GetStockObject(BLACK_BRUSH));
-                        Rectangle(hdc, cx - 3, cy + 3, cx + 3, cy + 5);
+                        Rectangle(hdc, cx - 3*s, cy + 3*s, cx + 3*s, cy + 5*s);
                     } else if (type == 3) { // restore
                         SelectObject(hdc, GetStockObject(NULL_BRUSH));
-                        Rectangle(hdc, cx - 1, cy - 4, cx + 5, cy + 2);
-                        MoveToEx(hdc, cx - 1, cy - 3, NULL); LineTo(hdc, cx + 5, cy - 3);
+                        Rectangle(hdc, cx - 1*s, cy - 4*s, cx + 5*s, cy + 2*s);
+                        MoveToEx(hdc, cx - 1*s, cy - 3*s, NULL); LineTo(hdc, cx + 5*s, cy - 3*s);
                         HBRUSH hFace = CreateSolidBrush(RGB(192, 192, 192));
-                        RECT rcFace = {cx - 4, cy - 1, cx + 3, cy + 5};
+                        RECT rcFace = {cx - 4*s, cy - 1*s, cx + 3*s, cy + 5*s};
                         FillRect(hdc, &rcFace, hFace);
                         DeleteObject(hFace);
-                        Rectangle(hdc, cx - 4, cy - 1, cx + 2, cy + 5);
-                        MoveToEx(hdc, cx - 4, cy, NULL); LineTo(hdc, cx + 2, cy);
+                        Rectangle(hdc, cx - 4*s, cy - 1*s, cx + 2*s, cy + 5*s);
+                        MoveToEx(hdc, cx - 4*s, cy, NULL); LineTo(hdc, cx + 2*s, cy);
                     }
                     
                     SelectObject(hdc, hOldP);
                     SelectObject(hdc, hOldB);
-                    DeleteObject(hBlack);
+                    DeleteObject(hBlackPen);
                     DeleteObject(hBlackBrush);
                 };
 
@@ -2158,8 +2200,9 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 SetBkMode(hdc, TRANSPARENT);
                 SetTextColor(hdc, bActive ? RGB(255, 255, 255) : RGB(192, 192, 192));
                 
+                int fontSize = -MulDiv(12, dpiY, 96);
                 HFONT hFont = CreateFont(
-                    -12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                    fontSize, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                     SHIFTJIS_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                     NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"MS Gothic"
                 );
@@ -3556,11 +3599,46 @@ LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
         isPressed = (SendMessage(hWnd, BM_GETSTATE, 0, 0) & BST_PUSHED) != 0;
 
         UINT edge = (isPressed || isChecked) ? EDGE_SUNKEN : EDGE_RAISED;
-        DrawEdge(hdc, &rc, edge, BF_RECT);
+        int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+        int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+        int bw2 = bw1 * 2;
+
+        HBRUSH hWhite = CreateSolidBrush(RGB(255, 255, 255));
+        HBRUSH hDarkGray = CreateSolidBrush(RGB(128, 128, 128));
+        HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
+        HBRUSH hLightGray = CreateSolidBrush(RGB(223, 223, 223));
+
+        RECT r = rc;
+        if (edge == EDGE_RAISED) {
+            RECT rcTop = { r.left, r.top, r.right, r.top + bw1 }; FillRect(hdc, &rcTop, hWhite);
+            RECT rcLeft = { r.left, r.top, r.left + bw1, r.bottom }; FillRect(hdc, &rcLeft, hWhite);
+            RECT rcBottom = { r.left, r.bottom - bw1, r.right, r.bottom }; FillRect(hdc, &rcBottom, hBlack);
+            RECT rcRight = { r.right - bw1, r.top, r.right, r.bottom }; FillRect(hdc, &rcRight, hBlack);
+            
+            RECT rcTop2 = { r.left + bw1, r.top + bw1, r.right - bw1, r.top + bw2 }; FillRect(hdc, &rcTop2, hLightGray);
+            RECT rcLeft2 = { r.left + bw1, r.top + bw1, r.left + bw2, r.bottom - bw1 }; FillRect(hdc, &rcLeft2, hLightGray);
+            RECT rcBottom2 = { r.left + bw1, r.bottom - bw2, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcBottom2, hDarkGray);
+            RECT rcRight2 = { r.right - bw2, r.top + bw1, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcRight2, hDarkGray);
+        } else {
+            RECT rcTop = { r.left, r.top, r.right, r.top + bw1 }; FillRect(hdc, &rcTop, hBlack);
+            RECT rcLeft = { r.left, r.top, r.left + bw1, r.bottom }; FillRect(hdc, &rcLeft, hBlack);
+            RECT rcBottom = { r.left, r.bottom - bw1, r.right, r.bottom }; FillRect(hdc, &rcBottom, hWhite);
+            RECT rcRight = { r.right - bw1, r.top, r.right, r.bottom }; FillRect(hdc, &rcRight, hWhite);
+
+            RECT rcTop2 = { r.left + bw1, r.top + bw1, r.right - bw1, r.top + bw2 }; FillRect(hdc, &rcTop2, hDarkGray);
+            RECT rcLeft2 = { r.left + bw1, r.top + bw1, r.left + bw2, r.bottom - bw1 }; FillRect(hdc, &rcLeft2, hDarkGray);
+            RECT rcBottom2 = { r.left + bw1, r.bottom - bw2, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcBottom2, hLightGray);
+            RECT rcRight2 = { r.right - bw2, r.top + bw1, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcRight2, hLightGray);
+        }
+
+        DeleteObject(hWhite);
+        DeleteObject(hDarkGray);
+        DeleteObject(hBlack);
+        DeleteObject(hLightGray);
 
         if (GetFocus() == hWnd) {
             RECT rcFocus = rc;
-            InflateRect(&rcFocus, -4, -4);
+            InflateRect(&rcFocus, -bw2 * 2, -bw2 * 2);
             DrawFocusRect(hdc, &rcFocus);
         }
 
@@ -3574,8 +3652,8 @@ LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
 
             RECT rcText = rc;
             if (isPressed || isChecked) {
-                rcText.left += 2;
-                rcText.top += 2;
+                rcText.left += bw2;
+                rcText.top += bw2;
             }
             DrawTextW(hdc, text, -1, &rcText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             SelectObject(hdc, hOld);
