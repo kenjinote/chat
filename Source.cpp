@@ -2048,6 +2048,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         int visTop = cyCropTop;
         int captionHeight = GetSystemMetrics(SM_CYCAPTION);
         RECT rcCaption = { visLeft + 3, visTop + 3, visRight - 3, visTop + 3 + captionHeight };
+        if (rcCaption.bottom > -rcFrame.top) rcCaption.bottom = -rcFrame.top;
 
         POINT wpt = { pt.x - rc.left, pt.y - rc.top };
         if (PtInRect(&rcCaption, wpt)) {
@@ -2164,6 +2165,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
 
                 int captionHeight = GetSystemMetrics(SM_CYCAPTION);
                 RECT rcCaption = { visLeft + bw3, visTop + bw3, visRight - bw3, visTop + bw3 + captionHeight };
+                if (rcCaption.bottom > -rcFrame.top) rcCaption.bottom = -rcFrame.top;
                 
                 TITLEBARINFOEX tbiex = { 0 };
                 tbiex.cbSize = sizeof(TITLEBARINFOEX);
