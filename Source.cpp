@@ -2265,11 +2265,17 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                         int x1 = x0 + 6 * s;
                         int y1 = cy + h;
 
-                        MoveToEx(hdc, x0, y0, NULL); LineTo(hdc, x1 + 1, y1 + 1);
-                        MoveToEx(hdc, x0 + s, y0, NULL); LineTo(hdc, x1 + s + 1, y1 + 1);
+                        HPEN hThinPen = CreatePen(PS_SOLID, 1, RGB(0,0,0));
+                        HPEN hOldP2 = (HPEN)SelectObject(hdc, hThinPen);
 
-                        MoveToEx(hdc, x1, y0, NULL); LineTo(hdc, x0 - 1, y1 + 1);
-                        MoveToEx(hdc, x1 + s, y0, NULL); LineTo(hdc, x0 + s - 1, y1 + 1);
+                        int thick = 2 * s;
+                        for (int i = 0; i < thick; i++) {
+                            MoveToEx(hdc, x0 + i, y0, NULL); LineTo(hdc, x1 + i + 1, y1 + 1);
+                            MoveToEx(hdc, x1 + i, y0, NULL); LineTo(hdc, x0 + i - 1, y1 + 1);
+                        }
+
+                        SelectObject(hdc, hOldP2);
+                        DeleteObject(hThinPen);
                     } else if (type == 1) { // max
                         SelectObject(hdc, GetStockObject(NULL_BRUSH));
                         Rectangle(hdc, cx - 4*s, cy - 4*s, cx + 5*s, cy + 5*s);
