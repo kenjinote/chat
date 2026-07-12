@@ -2391,6 +2391,7 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         SetWindowSubclass(hEdit, EditSelectionColorProc, 0, 0);
         SetWindowSubclass(hEdit, ClientEdgeSubclassProc, 0, 0);
         SetWindowTheme(hEdit, L" ", L" ");
+        SetWindowPos(hEdit, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
         
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
         SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, FALSE);
@@ -2767,6 +2768,8 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         SetWindowSubclass(hList, ClientEdgeSubclassProc, 0, 0);
         SetWindowTheme(hEdit, L" ", L" ");
         SetWindowTheme(hList, L" ", L" ");
+        SetWindowPos(hEdit, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+        SetWindowPos(hList, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
         SendMessage(hList, LB_SETITEMHEIGHT, 0, Scale(16));
         
         s_roomNames.clear();
