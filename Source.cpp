@@ -2508,18 +2508,22 @@ LRESULT CALLBACK ScrollbarColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
 
             auto drawArrow = [&](RECT rc, bool isUp, bool isPressed) {
                 FillRect(hdc, &rc, hFace);
-                DrawEdge(hdc, &rc, isPressed ? EDGE_SUNKEN : EDGE_RAISED, BF_RECT);
+                DrawScaledButtonBorder(hdc, rc, isPressed ? EDGE_SUNKEN : EDGE_RAISED);
+                
+                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int s = MulDiv(1, dpiY, 96); if (s < 1) s = 1;
+
                 int cx = rc.left + (rc.right - rc.left) / 2;
                 int cy = rc.top + (rc.bottom - rc.top) / 2;
-                if (isPressed) { cx++; cy++; }
+                if (isPressed) { cx += s; cy += s; }
                 SelectObject(hdc, hBlack);
                 HBRUSH hBlackBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
                 HBRUSH hOldB = (HBRUSH)SelectObject(hdc, hBlackBrush);
                 if (isUp) {
-                    POINT pts[3] = { {cx, cy - 2}, {cx - 3, cy + 1}, {cx + 3, cy + 1} };
+                    POINT pts[3] = { {cx, cy - 2*s}, {cx - 3*s, cy + 1*s}, {cx + 3*s, cy + 1*s} };
                     Polygon(hdc, pts, 3);
                 } else {
-                    POINT pts[3] = { {cx - 3, cy - 1}, {cx + 3, cy - 1}, {cx, cy + 2} };
+                    POINT pts[3] = { {cx - 3*s, cy - 1*s}, {cx + 3*s, cy - 1*s}, {cx, cy + 2*s} };
                     Polygon(hdc, pts, 3);
                 }
                 SelectObject(hdc, hOldB);
@@ -2545,7 +2549,7 @@ LRESULT CALLBACK ScrollbarColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
 
                 RECT rcThumb = { offsetX, offsetY + sbi.xyThumbTop, offsetX + sbWidth, offsetY + sbi.xyThumbBottom };
                 FillRect(hdc, &rcThumb, hFace);
-                DrawEdge(hdc, &rcThumb, EDGE_RAISED, BF_RECT);
+                DrawScaledButtonBorder(hdc, rcThumb, EDGE_RAISED);
             } else {
                 RECT rcTrack = { offsetX, rcTop.bottom, offsetX + sbWidth, rcBot.top };
                 FillRect(hdc, &rcTrack, hTrackBrush);
@@ -4495,14 +4499,16 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                     HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
                     FillRect(hdc, &rc, hBg);
                     DeleteObject(hBg);
-                    DrawEdge(hdc, &rc, EDGE_RAISED, BF_RECT);
+                    DrawScaledButtonBorder(hdc, rc, EDGE_RAISED);
                     return CDRF_SKIPDEFAULT;
                 } else if (pcd->dwItemSpec == TBCD_CHANNEL) {
                     HDC hdc = pcd->hdc;
                     RECT rc = pcd->rc;
-                    rc.top += (rc.bottom - rc.top) / 2 - 2;
-                    rc.bottom = rc.top + 4;
-                    DrawEdge(hdc, &rc, EDGE_SUNKEN, BF_RECT);
+                    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                    int s = MulDiv(1, dpiY, 96); if (s < 1) s = 1;
+                    rc.top += (rc.bottom - rc.top) / 2 - 2*s;
+                    rc.bottom = rc.top + 4*s;
+                    DrawScaledButtonBorder(hdc, rc, EDGE_SUNKEN);
                     return CDRF_SKIPDEFAULT;
                 }
             }
