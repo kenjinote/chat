@@ -10,7 +10,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobby"
     IDS_CHANGE_NAME_TITLE "Change Name"
-    IDS_MOVE_ROOM_TITLE "Enter or Select Room"
+    IDS_MOVE_ROOM_TITLE "Move Room"
     IDS_PRIVATE "Private"
     IDS_VIDEO_STREAM "Video Stream"
     IDS_WATCH_VIDEO "Watch Video"
@@ -39,7 +39,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "ロビー"
     IDS_CHANGE_NAME_TITLE "名前の変更"
-    IDS_MOVE_ROOM_TITLE "移動先の部屋名を入力または選択"
+    IDS_MOVE_ROOM_TITLE "部屋移動"
     IDS_PRIVATE "非公開"
     IDS_VIDEO_STREAM "ビデオ配信"
     IDS_WATCH_VIDEO "ビデオを視聴"
@@ -68,7 +68,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "大厅"
     IDS_CHANGE_NAME_TITLE "更改名称"
-    IDS_MOVE_ROOM_TITLE "输入或选择房间"
+    IDS_MOVE_ROOM_TITLE "移动房间"
     IDS_PRIVATE "私密"
     IDS_VIDEO_STREAM "视频推流"
     IDS_WATCH_VIDEO "观看视频"
@@ -97,7 +97,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "로비"
     IDS_CHANGE_NAME_TITLE "이름 변경"
-    IDS_MOVE_ROOM_TITLE "방 이름 입력 또는 선택"
+    IDS_MOVE_ROOM_TITLE "방 이동"
     IDS_PRIVATE "비공개"
     IDS_VIDEO_STREAM "비디오 스트리밍"
     IDS_WATCH_VIDEO "비디오 시청"
@@ -126,7 +126,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "大廳"
     IDS_CHANGE_NAME_TITLE "更改名稱"
-    IDS_MOVE_ROOM_TITLE "輸入或選擇房間"
+    IDS_MOVE_ROOM_TITLE "移動房間"
     IDS_PRIVATE "私密"
     IDS_VIDEO_STREAM "視訊串流"
     IDS_WATCH_VIDEO "觀看視訊"
@@ -155,7 +155,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "Accueil"
     IDS_CHANGE_NAME_TITLE "Changer de nom"
-    IDS_MOVE_ROOM_TITLE "Entrez ou selectionnez un salon"
+    IDS_MOVE_ROOM_TITLE "Changer de salon"
     IDS_PRIVATE "Prive"
     IDS_VIDEO_STREAM "Diffuser la video"
     IDS_WATCH_VIDEO "Regarder la video"
@@ -184,7 +184,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobby"
     IDS_CHANGE_NAME_TITLE "Name andern"
-    IDS_MOVE_ROOM_TITLE "Raum eingeben oder auswahlen"
+    IDS_MOVE_ROOM_TITLE "Raum wechseln"
     IDS_PRIVATE "Privat"
     IDS_VIDEO_STREAM "Video-Stream"
     IDS_WATCH_VIDEO "Video ansehen"
@@ -213,7 +213,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "Sala principal"
     IDS_CHANGE_NAME_TITLE "Cambiar nombre"
-    IDS_MOVE_ROOM_TITLE "Ingresar o seleccionar sala"
+    IDS_MOVE_ROOM_TITLE "Mover Sala"
     IDS_PRIVATE "Privado"
     IDS_VIDEO_STREAM "Transmitir video"
     IDS_WATCH_VIDEO "Ver video"
@@ -242,7 +242,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "लॉबी"
     IDS_CHANGE_NAME_TITLE "नाम बदलें"
-    IDS_MOVE_ROOM_TITLE "कमरा दर्ज करें या चुनें"
+    IDS_MOVE_ROOM_TITLE "कमरा बदलें"
     IDS_PRIVATE "निजी"
     IDS_VIDEO_STREAM "वीडियो स्ट्रीम"
     IDS_WATCH_VIDEO "वीडियो देखें"
@@ -271,7 +271,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobby"
     IDS_CHANGE_NAME_TITLE "Mudar Nome"
-    IDS_MOVE_ROOM_TITLE "Entrar ou Selecionar Sala"
+    IDS_MOVE_ROOM_TITLE "Mover Sala"
     IDS_PRIVATE "Privado"
     IDS_VIDEO_STREAM "Transmissão de Vídeo"
     IDS_WATCH_VIDEO "Assistir Vídeo"
@@ -300,7 +300,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "Лобби"
     IDS_CHANGE_NAME_TITLE "Изменить имя"
-    IDS_MOVE_ROOM_TITLE "Войти или выбрать комнату"
+    IDS_MOVE_ROOM_TITLE "Сменить комнату"
     IDS_PRIVATE "Приватный"
     IDS_VIDEO_STREAM "Видеотрансляция"
     IDS_WATCH_VIDEO "Смотреть видео"
@@ -329,7 +329,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "الردهة"
     IDS_CHANGE_NAME_TITLE "تغيير الاسم"
-    IDS_MOVE_ROOM_TITLE "إدخال أو تحديد غرفة"
+    IDS_MOVE_ROOM_TITLE "نقل الغرفة"
     IDS_PRIVATE "خاص"
     IDS_VIDEO_STREAM "بث الفيديو"
     IDS_WATCH_VIDEO "مشاهدة الفيديو"
@@ -358,7 +358,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "লবি"
     IDS_CHANGE_NAME_TITLE "নাম পরিবর্তন"
-    IDS_MOVE_ROOM_TITLE "রুম লিখুন বা নির্বাচন করুন"
+    IDS_MOVE_ROOM_TITLE "রুম পরিবর্তন করুন"
     IDS_PRIVATE "ব্যক্তিগত"
     IDS_VIDEO_STREAM "ভিডিও স্ট্রিম"
     IDS_WATCH_VIDEO "ভিডিও দেখুন"
@@ -387,7 +387,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobi"
     IDS_CHANGE_NAME_TITLE "Ubah Nama"
-    IDS_MOVE_ROOM_TITLE "Masukkan atau Pilih Ruangan"
+    IDS_MOVE_ROOM_TITLE "Pindah Ruangan"
     IDS_PRIVATE "Pribadi"
     IDS_VIDEO_STREAM "Siaran Video"
     IDS_WATCH_VIDEO "Tonton Video"
@@ -416,7 +416,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobby"
     IDS_CHANGE_NAME_TITLE "Cambia Nome"
-    IDS_MOVE_ROOM_TITLE "Inserisci o Seleziona Stanza"
+    IDS_MOVE_ROOM_TITLE "Cambia Stanza"
     IDS_PRIVATE "Privato"
     IDS_VIDEO_STREAM "Trasmetti Video"
     IDS_WATCH_VIDEO "Guarda Video"
@@ -445,7 +445,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobi"
     IDS_CHANGE_NAME_TITLE "İsmi Değiştir"
-    IDS_MOVE_ROOM_TITLE "Oda Gir veya Seç"
+    IDS_MOVE_ROOM_TITLE "Oda Değiştir"
     IDS_PRIVATE "Özel"
     IDS_VIDEO_STREAM "Video Yayını"
     IDS_WATCH_VIDEO "Video İzle"
@@ -474,7 +474,7 @@ STRINGTABLE
 BEGIN
     IDS_LOBBY "Sảnh"
     IDS_CHANGE_NAME_TITLE "Đổi tên"
-    IDS_MOVE_ROOM_TITLE "Nhập hoặc chọn phòng"
+    IDS_MOVE_ROOM_TITLE "Chuyển phòng"
     IDS_PRIVATE "Riêng tư"
     IDS_VIDEO_STREAM "Phát Video"
     IDS_WATCH_VIDEO "Xem Video"

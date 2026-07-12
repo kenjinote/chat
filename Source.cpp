@@ -51,7 +51,7 @@ std::wstring GetString(UINT id) {
 #define WM_NEW_ROOM (WM_APP + 3)
 #define WM_REVERT_ROOM (WM_APP + 4)
 
-HWND g_hLog, g_hInput, g_hSendBtn, g_hUserList;
+HWND g_hLog, g_hInput, g_hSendBtn, g_hUserList, g_hUserListHeader;
 HWND g_hBtnB, g_hBtnI, g_hBtnU, g_hComboSize, g_hBtnColor;
 HWND g_hBtnMoveRoom;
 HWND g_hBtnVoice, g_hBtnVideo, g_hVolumeIndicator, g_hSpeakerIcon, g_hVolumeSlider;
@@ -207,6 +207,43 @@ void SaveIgnoredUsers() {
             out << u << L"\n";
         }
     }
+}
+
+void SortUserList() {
+    extern HWND g_hUserList;
+    if (!g_hUserList) return;
+    int count = (int)SendMessage(g_hUserList, LB_GETCOUNT, 0, 0);
+    if (count <= 1) return;
+
+    std::vector<std::wstring> users;
+    for (int i = 0; i < count; ++i) {
+        int len = (int)SendMessage(g_hUserList, LB_GETTEXTLEN, i, 0);
+        if (len > 0) {
+            std::vector<WCHAR> buf(len + 1, 0);
+            SendMessage(g_hUserList, LB_GETTEXT, i, (LPARAM)buf.data());
+            users.push_back(std::wstring(buf.data()));
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(g_ignoredMutex);
+        std::sort(users.begin(), users.end(), [](const std::wstring& a, const std::wstring& b) {
+            bool a_ignored = (g_ignoredUsers.count(a) > 0);
+            bool b_ignored = (g_ignoredUsers.count(b) > 0);
+            if (a_ignored != b_ignored) {
+                return !a_ignored; // false (not ignored) goes before true (ignored)
+            }
+            return _wcsicmp(a.c_str(), b.c_str()) < 0;
+        });
+    }
+
+    SendMessage(g_hUserList, WM_SETREDRAW, FALSE, 0);
+    SendMessage(g_hUserList, LB_RESETCONTENT, 0, 0);
+    for (const auto& u : users) {
+        SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)u.c_str());
+    }
+    SendMessage(g_hUserList, WM_SETREDRAW, TRUE, 0);
+    InvalidateRect(g_hUserList, NULL, TRUE);
 }
 
 std::wstring FilterProfanity(std::wstring text) {
@@ -655,7 +692,7 @@ bool GetTextPositionFromPoint(float x, float y, int& outEntryIndex, int& outChar
                 BOOL isInside = FALSE;
                 DWRITE_HIT_TEST_METRICS metrics;
                 entry.pLayout->HitTestPoint(x, y - currentY, &isTrailingHit, &isInside, &metrics);
-                outCharIndex = metrics.textPosition + (isTrailingHit ? 1 : 0);
+                outCharIndex = metrics.textPosition + (isTrailingHit ? metrics.length : 0);
                 return true;
             }
             currentY += entry.height;
@@ -668,7 +705,7 @@ bool GetTextPositionFromPoint(float x, float y, int& outEntryIndex, int& outChar
             BOOL isTrailingHit = FALSE, isInside = FALSE;
             DWRITE_HIT_TEST_METRICS metrics;
             entry.pLayout->HitTestPoint(9999.0f, 9999.0f, &isTrailingHit, &isInside, &metrics);
-            outCharIndex = metrics.textPosition + (isTrailingHit ? 1 : 0);
+            outCharIndex = metrics.textPosition + (isTrailingHit ? metrics.length : 0);
             return true;
         }
     }
@@ -703,7 +740,20 @@ void CopySelectedText(HWND hWnd) {
         for (int i = sEntry; i <= eEntry; ++i) {
             if (i >= 0 && i < g_logEntries.size()) {
                 auto& entry = g_logEntries[i];
-                std::wstring fullText = entry.data.user.empty() ? entry.data.msg : (entry.data.user + L": " + entry.data.msg);
+                std::wstring displayUser = entry.data.user;
+                size_t hashPos = displayUser.find(L'#');
+                if (hashPos != std::wstring::npos) displayUser = displayUser.substr(0, hashPos);
+
+                std::wstring fullText;
+                if (displayUser.empty()) {
+                    fullText = entry.data.msg;
+                } else {
+                    if (entry.data.isSystemEvent) {
+                        fullText = displayUser + entry.data.msg;
+                    } else {
+                        fullText = displayUser + L": " + entry.data.msg;
+                    }
+                }
                 if (fullText.empty()) fullText = L" ";
                 int startC = (i == sEntry) ? sChar : 0;
                 int endC = (i == eEntry) ? eChar : (int)fullText.length();
@@ -727,6 +777,8 @@ void CopySelectedText(HWND hWnd) {
         }
     }
 }
+
+bool g_logIsDraggingScrollbar = false;
 
 LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     static ID2D1HwndRenderTarget* pRT = nullptr;
@@ -760,8 +812,8 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (!entry.pLayout) {
                     IDWriteTextFormat* pFormat = nullptr;
                     HRESULT hr = g_pDWriteFactory->CreateTextFormat(
-                        L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                        12.0f * 1.5f, L"ja-JP", &pFormat); // MS PGothic
+                        L"MS UI Gothic", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                        12.0f * 1.5f, L"ja-JP", &pFormat); // MS UI Gothic
                         
                     if (SUCCEEDED(hr) && pFormat) {
                         std::wstring fullText;
@@ -849,12 +901,13 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             }
 
             SCROLLINFO si = { sizeof(si) };
-            si.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+            si.fMask = SIF_RANGE | SIF_PAGE | (g_logIsDraggingScrollbar ? 0 : SIF_POS);
             si.nMin = 0;
             si.nMax = (int)g_logTotalHeight;
             si.nPage = (int)viewH;
             si.nPos = (int)g_logScrollY;
-            SetScrollInfo(hWnd, SB_VERT, &si, TRUE);
+            SetScrollInfo(hWnd, SB_VERT, &si, FALSE);
+            SendMessage(hWnd, WM_NCPAINT, 1, 0);
 
             pRT->BeginDraw();
             pRT->Clear(D2D1::ColorF(D2D1::ColorF::White));
@@ -900,7 +953,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                                 if (actualHitTestCount > 0) {
                                     std::vector<DWRITE_HIT_TEST_METRICS> hitMetrics(actualHitTestCount);
                                     entry.pLayout->HitTestTextRange(startC, endC - startC, 0, 0, hitMetrics.data(), actualHitTestCount, &actualHitTestCount);
-                                    DWORD hlColor = GetSysColor(COLOR_HIGHLIGHT);
+                                    DWORD hlColor = RGB(0, 0, 128);
                                     float r = GetRValue(hlColor) / 255.0f;
                                     float g = GetGValue(hlColor) / 255.0f;
                                     float b = GetBValue(hlColor) / 255.0f;
@@ -918,7 +971,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                                         pBgBrush->Release();
                                     }
 
-                                    DWORD hlText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+                                    DWORD hlText = RGB(255, 255, 255);
                                     float tr = GetRValue(hlText) / 255.0f;
                                     float tg = GetGValue(hlText) / 255.0f;
                                     float tb = GetBValue(hlText) / 255.0f;
@@ -1024,11 +1077,15 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         else if (action == SB_LINEDOWN) g_logScrollY += 20;
         else if (action == SB_PAGEUP) g_logScrollY -= 100;
         else if (action == SB_PAGEDOWN) g_logScrollY += 100;
-        else if (action == SB_THUMBTRACK) {
+        else if (action == SB_THUMBTRACK || action == SB_THUMBPOSITION) {
             SCROLLINFO si = { sizeof(si), SIF_TRACKPOS };
             GetScrollInfo(hWnd, SB_VERT, &si);
             g_logScrollY = si.nTrackPos;
         }
+        extern bool g_logIsDraggingScrollbar;
+        if (action == SB_THUMBTRACK) g_logIsDraggingScrollbar = true;
+        if (action == SB_ENDSCROLL) g_logIsDraggingScrollbar = false;
+        
         g_autoScroll = false;
         InvalidateRect(hWnd, NULL, FALSE);
         return 0;
@@ -1093,7 +1150,21 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         if (GetTextPositionFromPoint(x, y, entryIndex, charIndex)) {
             if (entryIndex >= 0 && entryIndex < g_logEntries.size()) {
                 auto& entry = g_logEntries[entryIndex];
-                std::wstring fullText = entry.data.user.empty() ? entry.data.msg : (entry.data.user + L": " + entry.data.msg);
+                std::wstring displayUser = entry.data.user;
+                size_t hashPos = displayUser.find(L'#');
+                if (hashPos != std::wstring::npos) displayUser = displayUser.substr(0, hashPos);
+
+                std::wstring fullText;
+                if (displayUser.empty()) {
+                    fullText = entry.data.msg;
+                } else {
+                    if (entry.data.isSystemEvent) {
+                        fullText = displayUser + entry.data.msg;
+                    } else {
+                        fullText = displayUser + L": " + entry.data.msg;
+                    }
+                }
+                if (fullText.empty()) fullText = L" ";
                 if (!fullText.empty() && charIndex >= 0 && charIndex < fullText.length()) {
                     int cType = GetCharType(fullText[charIndex]);
                     int startC = charIndex;
@@ -1172,7 +1243,7 @@ IDWriteTextLayout* CreateInputLayout(HWND hWnd) {
     DWRITE_FONT_STYLE style = i ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL;
     
     HRESULT hrFormat = g_pDWriteFactory->CreateTextFormat(
-        L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF", NULL, weight, style, DWRITE_FONT_STRETCH_NORMAL,
+        L"MS UI Gothic", NULL, weight, style, DWRITE_FONT_STRETCH_NORMAL,
         tsize * 1.5f, L"ja-JP", &pFormat);
         
     IDWriteTextLayout* pLayout = nullptr;
@@ -1346,7 +1417,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                             pLayout->HitTestTextRange(selStart, selLen, 5, 5, hitTestMetrics, actualHitTestCount, &actualHitTestCount);
                         }
                         
-                        DWORD hlColor = GetSysColor(COLOR_HIGHLIGHT);
+                        DWORD hlColor = RGB(0, 0, 128);
                         float r = GetRValue(hlColor) / 255.0f;
                         float g = GetGValue(hlColor) / 255.0f;
                         float b = GetBValue(hlColor) / 255.0f;
@@ -1364,7 +1435,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                             pSelBrush->Release();
                         }
 
-                        DWORD hlText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+                        DWORD hlText = RGB(255, 255, 255);
                         float tr = GetRValue(hlText) / 255.0f;
                         float tg = GetGValue(hlText) / 255.0f;
                         float tb = GetBValue(hlText) / 255.0f;
@@ -1421,7 +1492,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
                             LOGFONTW lf = { 0 };
                             lf.lfHeight = -Scale((LONG)(hm.height));
-                            wcscpy_s(lf.lfFaceName, L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF");
+                            wcscpy_s(lf.lfFaceName, L"MS UI Gothic");
                             ImmSetCompositionFontW(hImc, &lf);
 
                             ImmReleaseContext(hWnd, hImc);
@@ -1664,14 +1735,78 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 #define WM_GETTITLEBARINFOEX 0x033F
 #endif
 
+HWND g_capturedWnd = NULL;
+int g_pressedBtn = 0;
+int g_hoverBtn = 0;
+
+void ApplyClassicStyle(HWND hWnd) {
+    SetWindowTheme(hWnd, L" ", L" ");
+    SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+    RECT rc;
+    GetWindowRect(hWnd, &rc);
+    RECT rcFrame = { 0, 0, 0, 0 };
+    AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+    int cxCrop = -rcFrame.left - 2;
+    int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - 2;
+    int cyCropBottom = rcFrame.bottom - 2;
+    if (cxCrop < 1) cxCrop = 1;
+    if (cyCropTop < 1) cyCropTop = 1;
+    if (cyCropBottom < 1) cyCropBottom = 1;
+    HRGN hRgn = CreateRectRgn(cxCrop, cyCropTop, (rc.right - rc.left) - cxCrop, (rc.bottom - rc.top) - cyCropBottom);
+    SetWindowRgn(hWnd, hRgn, FALSE);
+}
+
+bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult);
+extern LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+
+BOOL CALLBACK EnumChildProcColorDlg(HWND hwndChild, LPARAM lParam) {
+    WCHAR className[256];
+    GetClassNameW(hwndChild, className, 256);
+    if (_wcsicmp(className, L"Button") == 0) {
+        DWORD style = GetWindowLong(hwndChild, GWL_STYLE) & BS_TYPEMASK;
+        if (style == BS_PUSHBUTTON || style == BS_DEFPUSHBUTTON) {
+            SetWindowSubclass(hwndChild, ClassicButtonProc, 0, 0);
+        }
+    }
+    return TRUE;
+}
+
+LRESULT CALLBACK ColorDlgSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    LRESULT classicResult = 0;
+    if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult)) {
+        return classicResult;
+    }
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
+}
+
+UINT_PTR CALLBACK ColorHookProc(HWND hdlg, UINT uiMsg, WPARAM wParam, LPARAM lParam) {
+    if (uiMsg == WM_INITDIALOG) {
+        SetWindowSubclass(hdlg, ColorDlgSubclassProc, 0, 0);
+        ApplyClassicStyle(hdlg);
+        EnumChildWindows(hdlg, EnumChildProcColorDlg, 0);
+        return TRUE;
+    }
+    return 0;
+}
+
 bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult) {
     switch (msg) {
-    case WM_NCCREATE:
-    case WM_CREATE: {
-        SetWindowTheme(hWnd, L" ", L" ");
-        SystemParametersInfo(SPI_SETGRADIENTCAPTIONS, 0, (PVOID)FALSE, 0);
-        SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOREDRAW);
-        return false;
+    case WM_CTLCOLORDLG:
+    case WM_CTLCOLORMSGBOX:
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORBTN: {
+        HDC hdcStatic = (HDC)wParam;
+        int id = GetDlgCtrlID((HWND)lParam);
+        if (id == 1054) {
+            SetBkColor(hdcStatic, RGB(192, 230, 192));
+            static HBRUSH hbrHeader = CreateSolidBrush(RGB(192, 230, 192));
+            *pResult = (LRESULT)hbrHeader;
+            return true;
+        }
+        SetBkColor(hdcStatic, RGB(192, 192, 192));
+        static HBRUSH hbrBkgnd = CreateSolidBrush(RGB(192, 192, 192));
+        *pResult = (LRESULT)hbrBkgnd;
+        return true;
     }
     case WM_WINDOWPOSCHANGING: {
         WINDOWPOS* pwp = (WINDOWPOS*)lParam;
@@ -1705,6 +1840,63 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         }
         return false;
     }
+    case WM_NCLBUTTONDOWN: {
+        int hit = (int)wParam;
+        if (hit == HTCLOSE || hit == HTMINBUTTON || hit == HTMAXBUTTON) {
+            extern HWND g_capturedWnd;
+            extern int g_pressedBtn;
+            extern int g_hoverBtn;
+            
+            SetCapture(hWnd);
+            g_capturedWnd = hWnd;
+            g_pressedBtn = hit;
+            g_hoverBtn = hit;
+            SendMessage(hWnd, WM_NCPAINT, 1, 0);
+            *pResult = 0;
+            return true; // Handled
+        }
+        return false;
+    }
+    case WM_MOUSEMOVE: {
+        extern HWND g_capturedWnd;
+        extern int g_pressedBtn;
+        extern int g_hoverBtn;
+        if (g_capturedWnd == hWnd && g_pressedBtn != 0) {
+            POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
+            ClientToScreen(hWnd, &pt);
+            LRESULT hit = SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(pt.x, pt.y));
+            int newHover = (hit == g_pressedBtn) ? g_pressedBtn : 0;
+            if (newHover != g_hoverBtn) {
+                g_hoverBtn = newHover;
+                SendMessage(hWnd, WM_NCPAINT, 1, 0);
+            }
+        }
+        return false;
+    }
+    case WM_LBUTTONUP: {
+        extern HWND g_capturedWnd;
+        extern int g_pressedBtn;
+        extern int g_hoverBtn;
+        if (g_capturedWnd == hWnd && g_pressedBtn != 0) {
+            ReleaseCapture();
+            int btn = g_pressedBtn;
+            int hover = g_hoverBtn;
+            g_capturedWnd = NULL;
+            g_pressedBtn = 0;
+            g_hoverBtn = 0;
+            SendMessage(hWnd, WM_NCPAINT, 1, 0);
+            
+            if (hover == btn) {
+                if (btn == HTCLOSE) PostMessage(hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+                if (btn == HTMINBUTTON) PostMessage(hWnd, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+                if (btn == HTMAXBUTTON) PostMessage(hWnd, WM_SYSCOMMAND, IsZoomed(hWnd) ? SC_RESTORE : SC_MAXIMIZE, 0);
+            }
+        }
+        return false;
+    }
+    case WM_NCMOUSEMOVE:
+    case WM_NCMOUSELEAVE:
+        return true; // Prevent hover redraw from DefWindowProc
     case WM_WINDOWPOSCHANGED: {
         *pResult = DefWindowProc(hWnd, msg, wParam, lParam);
         WINDOWPOS* pwp = (WINDOWPOS*)lParam;
@@ -1714,9 +1906,10 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
             int cxCrop = -rcFrame.left - 2;
             int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - 2;
             int cyCropBottom = rcFrame.bottom - 2;
-            if (cxCrop < 0) cxCrop = 0;
-            if (cyCropTop < 0) cyCropTop = 0;
-            if (cyCropBottom < 0) cyCropBottom = 0;
+            if (cxCrop < 1) cxCrop = 1;
+            if (cyCropTop < 1) cyCropTop = 1;
+            if (cyCropBottom < 1) cyCropBottom = 1;
+            
             HRGN hRgn = CreateRectRgn(cxCrop, cyCropTop, pwp->cx - cxCrop, pwp->cy - cyCropBottom);
             SetWindowRgn(hWnd, hRgn, TRUE);
         }
@@ -1744,11 +1937,63 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         if (bRight) { *pResult = HTRIGHT; return true; }
         if (bTop) { *pResult = HTTOP; return true; }
         if (bBottom) { *pResult = HTBOTTOM; return true; }
+
+        RECT rcFrame = { 0, 0, 0, 0 };
+        AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+        int cxCrop = -rcFrame.left - 3;
+        int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - 3;
+        if (cxCrop < 1) cxCrop = 1;
+        if (cyCropTop < 1) cyCropTop = 1;
+
+        int visLeft = cxCrop;
+        int visRight = (rc.right - rc.left) - cxCrop;
+        int visTop = cyCropTop;
+        int captionHeight = GetSystemMetrics(SM_CYCAPTION);
+        RECT rcCaption = { visLeft + 3, visTop + 3, visRight - 3, visTop + 3 + captionHeight };
+
+        POINT wpt = { pt.x - rc.left, pt.y - rc.top };
+        if (PtInRect(&rcCaption, wpt)) {
+            int btnHeight = GetSystemMetrics(SM_CYSIZE) - 4;
+            if (btnHeight > captionHeight - 4) btnHeight = captionHeight - 4;
+            int btnWidth = btnHeight + 2;
+            
+            int btnTop = rcCaption.top + 2;
+            int btnRight = rcCaption.right - 2;
+            
+            RECT rcClose = { btnRight - btnWidth, btnTop, btnRight, btnTop + btnHeight };
+            RECT rcMax = { rcClose.left - 2 - btnWidth, btnTop, rcClose.left - 2, btnTop + btnHeight };
+            RECT rcMin = { rcMax.left - btnWidth, btnTop, rcMax.left, btnTop + btnHeight };
+            
+            if (PtInRect(&rcClose, wpt)) { *pResult = HTCLOSE; return true; }
+            if (GetWindowLong(hWnd, GWL_STYLE) & WS_MAXIMIZEBOX) {
+                if (PtInRect(&rcMax, wpt)) { *pResult = HTMAXBUTTON; return true; }
+                if (PtInRect(&rcMin, wpt)) { *pResult = HTMINBUTTON; return true; }
+            }
+            *pResult = HTCAPTION;
+            return true;
+        }
+
         return false;
+    }
+    case WM_SETTEXT: {
+        DWORD style = GetWindowLong(hWnd, GWL_STYLE);
+        if (style & WS_VISIBLE) {
+            SetWindowLong(hWnd, GWL_STYLE, style & ~WS_VISIBLE);
+            *pResult = DefWindowProc(hWnd, msg, wParam, lParam);
+            SetWindowLong(hWnd, GWL_STYLE, style);
+            RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+        } else {
+            *pResult = DefWindowProc(hWnd, msg, wParam, lParam);
+        }
+        return true;
     }
     case WM_NCPAINT:
     case WM_NCACTIVATE: {
+        DWORD style = GetWindowLong(hWnd, GWL_STYLE);
+        if (style & WS_VISIBLE) SetWindowLong(hWnd, GWL_STYLE, style & ~WS_VISIBLE);
         *pResult = DefWindowProc(hWnd, msg, wParam, lParam);
+        if (style & WS_VISIBLE) SetWindowLong(hWnd, GWL_STYLE, style);
+        
         if (!IsIconic(hWnd)) {
             HDC hdc = GetWindowDC(hWnd);
             if (hdc) {
@@ -1762,9 +2007,9 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 int cxCrop = -rcFrame.left - 3;
                 int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - 3;
                 int cyCropBottom = rcFrame.bottom - 3;
-                if (cxCrop < 0) cxCrop = 0;
-                if (cyCropTop < 0) cyCropTop = 0;
-                if (cyCropBottom < 0) cyCropBottom = 0;
+                if (cxCrop < 1) cxCrop = 1;
+                if (cyCropTop < 1) cyCropTop = 1;
+                if (cyCropBottom < 1) cyCropBottom = 1;
 
                 int visLeft = cxCrop;
                 int visTop = cyCropTop;
@@ -1813,7 +2058,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 DeleteObject(hFaceGray);
 
                 int captionHeight = GetSystemMetrics(SM_CYCAPTION);
-                RECT rcCaption = { visLeft + 3, visTop + 3, visRight - 3, visTop + 3 + captionHeight - 1 };
+                RECT rcCaption = { visLeft + 3, visTop + 3, visRight - 3, visTop + 3 + captionHeight };
                 
                 TITLEBARINFOEX tbiex = { 0 };
                 tbiex.cbSize = sizeof(TITLEBARINFOEX);
@@ -1822,37 +2067,102 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 RECT rcWin;
                 GetWindowRect(hWnd, &rcWin);
 
-                bool bHasTitleBarInfo = !IsRectEmpty(&tbiex.rgrect[5]);
-                if (bHasTitleBarInfo) {
-                    for (int i = 2; i <= 5; i++) {
-                        if (!IsRectEmpty(&tbiex.rgrect[i])) {
-                            RECT rcBtn = tbiex.rgrect[i];
-                            OffsetRect(&rcBtn, -rcWin.left, -rcWin.top);
-                            ExcludeClipRect(hdc, rcBtn.left, rcBtn.top, rcBtn.right, rcBtn.bottom);
-                        }
-                    }
-                } else {
-                    int btnWidth = GetSystemMetrics(SM_CXSIZE);
-                    int btnCount = (GetWindowLong(hWnd, GWL_STYLE) & WS_MAXIMIZEBOX) ? 3 : 1;
-                    RECT rcBtnArea = { rcCaption.right - (btnWidth * btnCount) - 4, rcCaption.top, rcCaption.right, rcCaption.bottom };
-                    ExcludeClipRect(hdc, rcBtnArea.left, rcBtnArea.top, rcBtnArea.right, rcBtnArea.bottom);
-                }
+                // We no longer exclude the clip rect because we will draw the buttons manually
 
                 bool bActive;
                 if (msg == WM_NCACTIVATE) {
                     bActive = (wParam != FALSE);
                 } else {
-                    bActive = (GetAncestor(GetForegroundWindow(), GA_ROOTOWNER) == hWnd);
+                    bActive = (GetActiveWindow() == hWnd);
                 }
                 
-                HBRUSH hCaptionBrush = CreateSolidBrush(bActive ? RGB(0, 0, 168) : RGB(128, 128, 128));
+                HBRUSH hCaptionBrush = CreateSolidBrush(bActive ? RGB(0, 0, 128) : RGB(128, 128, 128));
                 FillRect(hdc, &rcCaption, hCaptionBrush);
                 DeleteObject(hCaptionBrush);
 
+                int btnHeight = GetSystemMetrics(SM_CYSIZE) - 4;
+                captionHeight = rcCaption.bottom - rcCaption.top;
+                if (btnHeight > captionHeight - 4) btnHeight = captionHeight - 4;
+                int btnWidth = btnHeight + 2;
+
+                int btnTop = rcCaption.top + 2;
+                int btnRight = rcCaption.right - 2;
+
+                RECT rcClose = { btnRight - btnWidth, btnTop, btnRight, btnTop + btnHeight };
+                RECT rcMax = { rcClose.left - 2 - btnWidth, btnTop, rcClose.left - 2, btnTop + btnHeight };
+                RECT rcMin = { rcMax.left - btnWidth, btnTop, rcMax.left, btnTop + btnHeight };
+
+                extern HWND g_capturedWnd;
+                extern int g_hoverBtn;
+
+                UINT closeState = DFCS_CAPTIONCLOSE;
+                UINT maxState = IsZoomed(hWnd) ? DFCS_CAPTIONRESTORE : DFCS_CAPTIONMAX;
+                UINT minState = DFCS_CAPTIONMIN;
+
+                if (g_capturedWnd == hWnd && g_hoverBtn == HTCLOSE) closeState |= DFCS_PUSHED;
+                if (g_capturedWnd == hWnd && g_hoverBtn == HTMAXBUTTON) maxState |= DFCS_PUSHED;
+                if (g_capturedWnd == hWnd && g_hoverBtn == HTMINBUTTON) minState |= DFCS_PUSHED;
+
+                auto drawCaptionBtn = [&](RECT r, int type, bool pushed) {
+                    HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
+                    FillRect(hdc, &r, hBg);
+                    DeleteObject(hBg);
+                    DrawEdge(hdc, &r, pushed ? EDGE_SUNKEN : EDGE_RAISED, BF_RECT);
+                    
+                    int cx = r.left + (r.right - r.left) / 2;
+                    int cy = r.top + (r.bottom - r.top) / 2;
+                    if (pushed) { cx++; cy++; }
+                    
+                    HPEN hBlack = CreatePen(PS_SOLID, 1, RGB(0,0,0));
+                    HBRUSH hBlackBrush = CreateSolidBrush(RGB(0,0,0));
+                    HPEN hOldP = (HPEN)SelectObject(hdc, hBlack);
+                    HBRUSH hOldB = (HBRUSH)SelectObject(hdc, hBlackBrush);
+                    
+                    if (type == 0) { // close
+                        int x = cx - 4, y = cy - 3;
+                        MoveToEx(hdc, x, y, NULL); LineTo(hdc, x + 7, y + 7);
+                        MoveToEx(hdc, x + 1, y, NULL); LineTo(hdc, x + 8, y + 7);
+                        MoveToEx(hdc, x + 6, y, NULL); LineTo(hdc, x - 1, y + 7);
+                        MoveToEx(hdc, x + 7, y, NULL); LineTo(hdc, x, y + 7);
+                    } else if (type == 1) { // max
+                        SelectObject(hdc, GetStockObject(NULL_BRUSH));
+                        Rectangle(hdc, cx - 4, cy - 4, cx + 5, cy + 5);
+                        MoveToEx(hdc, cx - 4, cy - 3, NULL); LineTo(hdc, cx + 5, cy - 3);
+                    } else if (type == 2) { // min
+                        SelectObject(hdc, GetStockObject(BLACK_BRUSH));
+                        Rectangle(hdc, cx - 3, cy + 3, cx + 3, cy + 5);
+                    } else if (type == 3) { // restore
+                        SelectObject(hdc, GetStockObject(NULL_BRUSH));
+                        Rectangle(hdc, cx - 1, cy - 4, cx + 5, cy + 2);
+                        MoveToEx(hdc, cx - 1, cy - 3, NULL); LineTo(hdc, cx + 5, cy - 3);
+                        HBRUSH hFace = CreateSolidBrush(RGB(192, 192, 192));
+                        RECT rcFace = {cx - 4, cy - 1, cx + 3, cy + 5};
+                        FillRect(hdc, &rcFace, hFace);
+                        DeleteObject(hFace);
+                        Rectangle(hdc, cx - 4, cy - 1, cx + 2, cy + 5);
+                        MoveToEx(hdc, cx - 4, cy, NULL); LineTo(hdc, cx + 2, cy);
+                    }
+                    
+                    SelectObject(hdc, hOldP);
+                    SelectObject(hdc, hOldB);
+                    DeleteObject(hBlack);
+                    DeleteObject(hBlackBrush);
+                };
+
+                drawCaptionBtn(rcClose, 0, (closeState & DFCS_PUSHED) != 0);
+                if (GetWindowLong(hWnd, GWL_STYLE) & WS_MAXIMIZEBOX) {
+                    drawCaptionBtn(rcMax, IsZoomed(hWnd) ? 3 : 1, (maxState & DFCS_PUSHED) != 0);
+                    drawCaptionBtn(rcMin, 2, (minState & DFCS_PUSHED) != 0);
+                }
+
                 SetBkMode(hdc, TRANSPARENT);
-                SetTextColor(hdc, bActive ? RGB(255, 255, 255) : RGB(192, 199, 200));
+                SetTextColor(hdc, bActive ? RGB(255, 255, 255) : RGB(192, 192, 192));
                 
-                HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+                HFONT hFont = CreateFont(
+                    -12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                    SHIFTJIS_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                    NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"MS Gothic"
+                );
                 HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
                 
                 WCHAR szTitle[256];
@@ -1861,9 +2171,12 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 int iconWidth = GetSystemMetrics(SM_CXSMICON);
                 RECT rcText = rcCaption;
                 
-                HICON hIcon = (HICON)SendMessage(hWnd, WM_GETICON, ICON_SMALL, 0);
-                if (!hIcon) hIcon = (HICON)GetClassLongPtr(hWnd, GCLP_HICONSM);
-                if (!hIcon && (GetWindowLong(hWnd, GWL_STYLE) & WS_SYSMENU)) hIcon = LoadIcon(NULL, IDI_APPLICATION);
+                HICON hIcon = NULL;
+                if (!(GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_DLGMODALFRAME)) {
+                    hIcon = (HICON)SendMessage(hWnd, WM_GETICON, ICON_SMALL, 0);
+                    if (!hIcon) hIcon = (HICON)GetClassLongPtr(hWnd, GCLP_HICONSM);
+                    if (!hIcon && (GetWindowLong(hWnd, GWL_STYLE) & WS_SYSMENU)) hIcon = LoadIcon(NULL, IDI_APPLICATION);
+                }
                 
                 if (hIcon) {
                     rcText.left += iconWidth + 6;
@@ -1873,11 +2186,16 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                     rcText.left += 2;
                 }
                 
-                rcText.right -= 4;
+                if (GetWindowLong(hWnd, GWL_STYLE) & WS_MAXIMIZEBOX) {
+                    rcText.right = rcMin.left - 4;
+                } else {
+                    rcText.right = rcClose.left - 4;
+                }
                 
                 DrawText(hdc, szTitle, lstrlen(szTitle), &rcText, DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
                 
                 SelectObject(hdc, hOldFont);
+                DeleteObject(hFont);
                 ReleaseDC(hWnd, hdc);
             }
         }
@@ -1889,6 +2207,8 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
 
 // Dialogs
 
+LRESULT CALLBACK EditSelectionColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+
 std::wstring g_changeNameResult;
 bool g_changeNameOK = false;
 
@@ -1899,12 +2219,30 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
     static HWND hEdit, hBtnOK, hBtnCancel;
     switch (msg) {
     case WM_CREATE: {
+        int margin = Scale(5);
+        int inputHeight = Scale(24);
+        int btnHeight = Scale(24);
+        int btnWidth = Scale(80);
+        int totalWidth = margin * 2 + Scale(260);
+        
+        int y = margin;
         hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-            Scale(10), Scale(10), Scale(260), Scale(24), hWnd, 0, GetModuleHandle(0), 0);
+            margin, y, totalWidth - margin * 2, inputHeight, hWnd, 0, GetModuleHandle(0), 0);
+        
+        y += inputHeight + margin;
+        
+        int cancelX = totalWidth - margin - btnWidth;
+        int okX = cancelX - margin - btnWidth;
+        
         hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
-            Scale(100), Scale(45), Scale(80), Scale(24), hWnd, (HMENU)1, GetModuleHandle(0), 0);
+            okX, y, btnWidth, btnHeight, hWnd, (HMENU)1, GetModuleHandle(0), 0);
         hBtnCancel = CreateWindow(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            Scale(190), Scale(45), Scale(80), Scale(24), hWnd, (HMENU)2, GetModuleHandle(0), 0);
+            cancelX, y, btnWidth, btnHeight, hWnd, (HMENU)2, GetModuleHandle(0), 0);
+            
+        SetWindowSubclass(hBtnOK, ClassicButtonProc, 0, 0);
+        SetWindowSubclass(hBtnCancel, ClassicButtonProc, 0, 0);
+        SetWindowSubclass(hEdit, EditSelectionColorProc, 0, 0);
+        
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
         SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hBtnOK, WM_SETFONT, (WPARAM)hFont, FALSE);
@@ -1951,7 +2289,7 @@ bool ShowChangeNameDialog(HWND hParent, std::wstring& outResult) {
     wc.lpfnWndProc = ChangeNameProc;
     wc.hInstance = GetModuleHandle(0);
     wc.lpszClassName = L"ChangeNameClass";
-    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+    wc.hbrBackground = (HBRUSH)CreateSolidBrush(RGB(192, 192, 192));
     RegisterClass(&wc);
 
     g_changeNameOK = false;
@@ -1960,11 +2298,22 @@ bool ShowChangeNameDialog(HWND hParent, std::wstring& outResult) {
     RECT rcParent;
     GetWindowRect(hParent, &rcParent);
 
+    int margin = Scale(5);
+    int totalWidth = margin * 2 + Scale(260);
+    int totalHeight = margin * 3 + Scale(24) + Scale(24);
+    
+    RECT rcDlg = { 0, 0, totalWidth, totalHeight };
+    AdjustWindowRectEx(&rcDlg, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_DLGMODALFRAME);
+    int winW = rcDlg.right - rcDlg.left;
+    int winH = rcDlg.bottom - rcDlg.top;
+
     HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"ChangeNameClass", GetString(IDS_CHANGE_NAME_TITLE).c_str(),
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-        rcParent.left + (rcParent.right - rcParent.left - Scale(300)) / 2, 
-        rcParent.top + (rcParent.bottom - rcParent.top - Scale(120)) / 2, 
-        Scale(300), Scale(120), hParent, 0, GetModuleHandle(0), 0);
+        rcParent.left + (rcParent.right - rcParent.left - winW) / 2, 
+        rcParent.top + (rcParent.bottom - rcParent.top - winH) / 2, 
+        winW, winH, hParent, 0, GetModuleHandle(0), 0);
+    
+    ApplyClassicStyle(hWnd);
     
     EnableWindow(hParent, FALSE);
     
@@ -1979,12 +2328,245 @@ bool ShowChangeNameDialog(HWND hParent, std::wstring& outResult) {
     return g_changeNameOK;
 }
 
+static HWND g_sbPressedWnd = NULL;
+static int g_sbPressedHit = 0;
 
+LRESULT CALLBACK ScrollbarColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (msg == WM_NCPAINT) {
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        if ((GetWindowLong(hWnd, GWL_STYLE) & WS_VSCROLL) == 0) return res;
+        
+        HDC hdc = GetWindowDC(hWnd);
+        RECT rcWin;
+        GetWindowRect(hWnd, &rcWin);
+        int width = rcWin.right - rcWin.left;
+        int height = rcWin.bottom - rcWin.top;
+        
+        int cxVScroll = GetSystemMetrics(SM_CXVSCROLL);
+        int border = GetSystemMetrics(SM_CXEDGE);
+        if (width <= cxVScroll) {
+            ReleaseDC(hWnd, hdc);
+            return res;
+        }
+
+        SCROLLBARINFO sbi = { sizeof(sbi) };
+        if (GetScrollBarInfo(hWnd, OBJID_VSCROLL, &sbi)) {
+            int sbWidth = sbi.rcScrollBar.right - sbi.rcScrollBar.left;
+            int sbHeight = sbi.rcScrollBar.bottom - sbi.rcScrollBar.top;
+            
+            RECT rcWin; GetWindowRect(hWnd, &rcWin);
+            int offsetX = sbi.rcScrollBar.left - rcWin.left;
+            int offsetY = sbi.rcScrollBar.top - rcWin.top;
+
+            HBRUSH hFace = CreateSolidBrush(RGB(192, 192, 192));
+            HPEN hBlack = (HPEN)GetStockObject(BLACK_PEN);
+
+            WORD pat[8] = { 0xAAAA, 0x5555, 0xAAAA, 0x5555, 0xAAAA, 0x5555, 0xAAAA, 0x5555 };
+            HBITMAP hBmp = CreateBitmap(8, 8, 1, 1, pat);
+            HBRUSH hTrackBrush = CreatePatternBrush(hBmp);
+
+            auto drawArrow = [&](RECT rc, bool isUp, bool isPressed) {
+                FillRect(hdc, &rc, hFace);
+                DrawEdge(hdc, &rc, isPressed ? EDGE_SUNKEN : EDGE_RAISED, BF_RECT);
+                int cx = rc.left + (rc.right - rc.left) / 2;
+                int cy = rc.top + (rc.bottom - rc.top) / 2;
+                if (isPressed) { cx++; cy++; }
+                SelectObject(hdc, hBlack);
+                HBRUSH hBlackBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
+                HBRUSH hOldB = (HBRUSH)SelectObject(hdc, hBlackBrush);
+                if (isUp) {
+                    POINT pts[3] = { {cx, cy - 2}, {cx - 3, cy + 1}, {cx + 3, cy + 1} };
+                    Polygon(hdc, pts, 3);
+                } else {
+                    POINT pts[3] = { {cx - 3, cy - 1}, {cx + 3, cy - 1}, {cx, cy + 2} };
+                    Polygon(hdc, pts, 3);
+                }
+                SelectObject(hdc, hOldB);
+            };
+
+            RECT rcTop = { offsetX, offsetY, offsetX + sbWidth, offsetY + sbi.dxyLineButton };
+            bool isTopPressed = (sbi.rgstate[1] & STATE_SYSTEM_PRESSED) != 0 || (g_sbPressedWnd == hWnd && g_sbPressedHit == 1);
+            drawArrow(rcTop, true, isTopPressed);
+
+            RECT rcBot = { offsetX, offsetY + sbHeight - sbi.dxyLineButton, offsetX + sbWidth, offsetY + sbHeight };
+            bool isBotPressed = (sbi.rgstate[5] & STATE_SYSTEM_PRESSED) != 0 || (g_sbPressedWnd == hWnd && g_sbPressedHit == 2);
+            drawArrow(rcBot, false, isBotPressed);
+
+            SetTextColor(hdc, RGB(255, 255, 255));
+            SetBkColor(hdc, RGB(192, 192, 192));
+
+            if (sbi.xyThumbBottom > sbi.xyThumbTop && !(sbi.rgstate[0] & STATE_SYSTEM_UNAVAILABLE)) {
+                RECT rcPgUp = { offsetX, rcTop.bottom, offsetX + sbWidth, offsetY + sbi.xyThumbTop };
+                FillRect(hdc, &rcPgUp, hTrackBrush);
+
+                RECT rcPgDn = { offsetX, offsetY + sbi.xyThumbBottom, offsetX + sbWidth, rcBot.top };
+                FillRect(hdc, &rcPgDn, hTrackBrush);
+
+                RECT rcThumb = { offsetX, offsetY + sbi.xyThumbTop, offsetX + sbWidth, offsetY + sbi.xyThumbBottom };
+                FillRect(hdc, &rcThumb, hFace);
+                DrawEdge(hdc, &rcThumb, EDGE_RAISED, BF_RECT);
+            } else {
+                RECT rcTrack = { offsetX, rcTop.bottom, offsetX + sbWidth, rcBot.top };
+                FillRect(hdc, &rcTrack, hTrackBrush);
+            }
+
+            DeleteObject(hFace);
+            DeleteObject(hTrackBrush);
+            DeleteObject(hBmp);
+            ReleaseDC(hWnd, hdc);
+            return res;
+        }
+
+        ReleaseDC(hWnd, hdc);
+        
+        return res;
+    }
+    else if (msg == WM_NCMOUSEMOVE || msg == WM_NCMOUSELEAVE) {
+        if (wParam == HTVSCROLL || wParam == HTHSCROLL) return 0;
+    }
+    else if (msg == WM_NCLBUTTONDBLCLK || msg == WM_NCLBUTTONDOWN) {
+        if (wParam == HTVSCROLL) {
+            SCROLLBARINFO sbi = { sizeof(sbi) };
+            if (GetScrollBarInfo(hWnd, OBJID_VSCROLL, &sbi)) {
+                POINT pt; GetCursorPos(&pt);
+                RECT rcTop = { sbi.rcScrollBar.left, sbi.rcScrollBar.top, sbi.rcScrollBar.right, sbi.rcScrollBar.top + sbi.dxyLineButton };
+                RECT rcBot = { sbi.rcScrollBar.left, sbi.rcScrollBar.bottom - sbi.dxyLineButton, sbi.rcScrollBar.right, sbi.rcScrollBar.bottom };
+                RECT rcThumb = { sbi.rcScrollBar.left, sbi.rcScrollBar.top + sbi.xyThumbTop, sbi.rcScrollBar.right, sbi.rcScrollBar.top + sbi.xyThumbBottom };
+                RECT rcPgUp = { sbi.rcScrollBar.left, rcTop.bottom, sbi.rcScrollBar.right, rcThumb.top };
+                RECT rcPgDn = { sbi.rcScrollBar.left, rcThumb.bottom, sbi.rcScrollBar.right, rcBot.top };
+
+                int hit = 0;
+                if (PtInRect(&rcTop, pt)) hit = 1;
+                else if (PtInRect(&rcBot, pt)) hit = 2;
+                else if (PtInRect(&rcThumb, pt)) hit = 3;
+                else if (PtInRect(&rcPgUp, pt)) hit = 4;
+                else if (PtInRect(&rcPgDn, pt)) hit = 5;
+
+                if (hit != 0) {
+                    SetCapture(hWnd);
+                    int startY = pt.y;
+                    SCROLLINFO si = { sizeof(si), SIF_ALL };
+                    GetScrollInfo(hWnd, SB_VERT, &si);
+                    int startPos = si.nPos;
+
+                    auto sendScroll = [&](int action) { SendMessage(hWnd, WM_VSCROLL, MAKEWPARAM(action, 0), 0); };
+                    if (hit == 1) sendScroll(SB_LINEUP);
+                    if (hit == 2) sendScroll(SB_LINEDOWN);
+                    if (hit == 4) sendScroll(SB_PAGEUP);
+                    if (hit == 5) sendScroll(SB_PAGEDOWN);
+
+                    if (hit != 3) SetTimer(hWnd, 9998, 250, NULL);
+                    
+                    g_sbPressedWnd = hWnd;
+                    g_sbPressedHit = hit;
+                    RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+
+                    MSG msgLoop;
+                    while (GetCapture() == hWnd && GetMessage(&msgLoop, NULL, 0, 0)) {
+                        if (msgLoop.message == WM_LBUTTONUP) {
+                            ReleaseCapture();
+                            break;
+                        } else if (msgLoop.message == WM_MOUSEMOVE) {
+                            if (hit == 3) {
+                                POINT scrPt; GetCursorPos(&scrPt);
+                                int trackLen = (sbi.rcScrollBar.bottom - sbi.dxyLineButton) - (sbi.rcScrollBar.top + sbi.dxyLineButton);
+                                int thumbLen = sbi.xyThumbBottom - sbi.xyThumbTop;
+                                int scrollMax = si.nMax - max((int)si.nPage - 1, 0);
+                                if (trackLen > thumbLen && scrollMax > 0) {
+                                    int dy = scrPt.y - startY;
+                                    int newPos = startPos + dy * scrollMax / (trackLen - thumbLen);
+                                    if (newPos < si.nMin) newPos = si.nMin;
+                                    if (newPos > scrollMax) newPos = scrollMax;
+                                    SendMessage(hWnd, WM_VSCROLL, MAKEWPARAM(SB_THUMBTRACK, newPos), 0);
+                                    SetScrollPos(hWnd, SB_VERT, newPos, TRUE);
+                                    RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+                                }
+                            } else if (hit == 1 || hit == 2) {
+                                POINT scrPt; GetCursorPos(&scrPt);
+                                bool isInside = (hit == 1 && PtInRect(&rcTop, scrPt)) || (hit == 2 && PtInRect(&rcBot, scrPt));
+                                int newHit = isInside ? hit : 0;
+                                if (g_sbPressedHit != newHit) {
+                                    g_sbPressedHit = newHit;
+                                    RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+                                }
+                            }
+                        } else if (msgLoop.message == WM_TIMER && msgLoop.wParam == 9998) {
+                            SetTimer(hWnd, 9998, 50, NULL);
+                            POINT scrPt; GetCursorPos(&scrPt);
+                            if (hit == 1 && PtInRect(&rcTop, scrPt)) sendScroll(SB_LINEUP);
+                            if (hit == 2 && PtInRect(&rcBot, scrPt)) sendScroll(SB_LINEDOWN);
+                            if (hit == 4 && PtInRect(&rcPgUp, scrPt)) sendScroll(SB_PAGEUP);
+                            if (hit == 5 && PtInRect(&rcPgDn, scrPt)) sendScroll(SB_PAGEDOWN);
+                        } else {
+                            TranslateMessage(&msgLoop);
+                            DispatchMessage(&msgLoop);
+                        }
+                    }
+                    g_sbPressedWnd = NULL;
+                    g_sbPressedHit = 0;
+                    if (hit != 3) KillTimer(hWnd, 9998);
+                    sendScroll(SB_ENDSCROLL);
+                    RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+                    return 0;
+                }
+            }
+        }
+    }
+    else if (msg == WM_MOUSEWHEEL || msg == WM_KEYDOWN || msg == WM_KEYUP || msg == WM_VSCROLL) {
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+        return res;
+    }
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
+}
 
 std::wstring g_moveBoxResult;
 bool g_moveBoxPrivate = false;
 bool g_moveBoxOK = false;
 bool g_ignoreEditChange = false;
+
+LRESULT CALLBACK EditSelectionColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (msg == WM_PAINT) {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hWnd, &ps);
+        RECT rc;
+        GetClientRect(hWnd, &rc);
+        
+        HDC hMemDC = CreateCompatibleDC(hdc);
+        HBITMAP hBitmap = CreateCompatibleBitmap(hdc, rc.right, rc.bottom);
+        HBITMAP hOld = (HBITMAP)SelectObject(hMemDC, hBitmap);
+        
+        SendMessage(hWnd, WM_PRINTCLIENT, (WPARAM)hMemDC, PRF_CLIENT | PRF_ERASEBKGND);
+        
+        COLORREF sysHighlight = GetSysColor(COLOR_HIGHLIGHT);
+        COLORREF targetHighlight = RGB(0, 0, 128);
+        if (sysHighlight != targetHighlight) {
+            for (int y = 0; y < rc.bottom; y++) {
+                for (int x = 0; x < rc.right; x++) {
+                    if (GetPixel(hMemDC, x, y) == sysHighlight) {
+                        SetPixel(hMemDC, x, y, targetHighlight);
+                    }
+                }
+            }
+        }
+        
+        BitBlt(hdc, 0, 0, rc.right, rc.bottom, hMemDC, 0, 0, SRCCOPY);
+        
+        SelectObject(hMemDC, hOld);
+        DeleteObject(hBitmap);
+        DeleteDC(hMemDC);
+        EndPaint(hWnd, &ps);
+        return 0;
+    }
+    else if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK || 
+             msg == WM_MOUSEMOVE || msg == WM_KEYDOWN || msg == WM_KEYUP) {
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        InvalidateRect(hWnd, NULL, FALSE);
+        UpdateWindow(hWnd);
+        return res;
+    }
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
+}
 
 LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     LRESULT classicResult = 0;
@@ -1994,20 +2576,45 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     static std::vector<std::wstring> s_roomNames;
     switch (msg) {
     case WM_CREATE: {
-        hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-            Scale(10), Scale(10), Scale(260), Scale(24), hWnd, (HMENU)101, GetModuleHandle(0), 0);
-        hList = CreateWindowEx(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_NOTIFY | LBS_HASSTRINGS,
-            Scale(10), Scale(40), Scale(260), Scale(100), hWnd, (HMENU)102, GetModuleHandle(0), 0);
+        int margin = Scale(5);
+        int inputHeight = Scale(24);
+        int listHeight = Scale(100);
+        int btnHeight = Scale(24);
+        int btnWidth = Scale(80);
+        int chkWidth = Scale(80);
+        int totalWidth = margin * 2 + Scale(260); // 270
+        
+        int y = margin;
+        hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
+            margin, y, totalWidth - margin * 2, inputHeight, hWnd, (HMENU)101, GetModuleHandle(0), 0);
+        y += inputHeight + margin;
+        
+        hList = CreateWindowEx(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | LBS_NOTIFY | LBS_HASSTRINGS | LBS_OWNERDRAWFIXED,
+            margin, y, totalWidth - margin * 2, listHeight, hWnd, (HMENU)102, GetModuleHandle(0), 0);
+        y += listHeight + margin;
+
+        int cancelX = totalWidth - margin - btnWidth;
+        int okX = cancelX - margin - btnWidth;
+        
         hChk = CreateWindow(L"BUTTON", GetString(IDS_PRIVATE).c_str(), 
-            WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
-            Scale(10), Scale(145), Scale(80), Scale(24), hWnd, (HMENU)103, GetModuleHandle(0), 0);
-        hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
-            Scale(100), Scale(145), Scale(80), Scale(24), hWnd, (HMENU)1, GetModuleHandle(0), 0);
-        hBtnCancel = CreateWindow(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            Scale(190), Scale(145), Scale(80), Scale(24), hWnd, (HMENU)2, GetModuleHandle(0), 0);
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX,
+            margin, y, chkWidth, btnHeight, hWnd, (HMENU)103, GetModuleHandle(0), 0);
+            
+        hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
+            okX, y, btnWidth, btnHeight, hWnd, (HMENU)1, GetModuleHandle(0), 0);
+            
+        hBtnCancel = CreateWindow(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            cancelX, y, btnWidth, btnHeight, hWnd, (HMENU)2, GetModuleHandle(0), 0);
+            
+        SetWindowSubclass(hBtnOK, ClassicButtonProc, 0, 0);
+        SetWindowSubclass(hBtnCancel, ClassicButtonProc, 0, 0);
+        SetWindowSubclass(hEdit, EditSelectionColorProc, 0, 0);
+        SetWindowSubclass(hList, ScrollbarColorProc, 0, 0);
+        SendMessage(hList, LB_SETITEMHEIGHT, 0, Scale(16));
         
         s_roomNames.clear();
         for (const auto& r : g_publicRooms) {
+            if (r.second <= 0) continue;
             std::wstring display = r.first + L" (" + std::to_wstring(r.second) + L")";
             int idx = (int)SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)display.c_str());
             s_roomNames.push_back(r.first);
@@ -2047,6 +2654,8 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     g_ignoreEditChange = false;
                 }
             }
+        } else if (id == 102 && code == LBN_DBLCLK) {
+            SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(1, BN_CLICKED), (LPARAM)hBtnOK);
         } else if (id == 101 && code == EN_CHANGE) {
             if (g_ignoreEditChange) break;
             int len = GetWindowTextLength(hEdit);
@@ -2057,6 +2666,7 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             SendMessage(hList, LB_RESETCONTENT, 0, 0);
             s_roomNames.clear();
             for (const auto& r : g_publicRooms) {
+                if (r.second <= 0) continue;
                 if (search.empty() || r.first.find(search) != std::wstring::npos) {
                     std::wstring display = r.first + L" (" + std::to_wstring(r.second) + L")";
                     int idx = (int)SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)display.c_str());
@@ -2064,6 +2674,43 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     SendMessage(hList, LB_SETITEMDATA, idx, (LPARAM)(s_roomNames.size() - 1));
                 }
             }
+        }
+        break;
+    }
+    case WM_DRAWITEM: {
+        DRAWITEMSTRUCT* pdis = (DRAWITEMSTRUCT*)lParam;
+        if (pdis->CtlID == 102 && pdis->itemID != -1) {
+            HDC hdc = pdis->hDC;
+            RECT rc = pdis->rcItem;
+            bool isSelected = (pdis->itemState & ODS_SELECTED);
+            
+            if (isSelected) {
+                HBRUSH hSel = CreateSolidBrush(RGB(0, 0, 128));
+                FillRect(hdc, &rc, hSel);
+                DeleteObject(hSel);
+                SetTextColor(hdc, RGB(255, 255, 255));
+            } else {
+                FillRect(hdc, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
+                SetTextColor(hdc, RGB(0, 0, 0));
+            }
+            SetBkMode(hdc, TRANSPARENT);
+            
+            WCHAR text[256];
+            SendMessage(pdis->hwndItem, LB_GETTEXT, pdis->itemID, (LPARAM)text);
+            rc.left += Scale(2);
+            DrawTextW(hdc, text, -1, &rc, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
+            
+            if (pdis->itemState & ODS_FOCUS) {
+                SetTextColor(hdc, isSelected ? RGB(255, 255, 255) : RGB(0, 0, 0));
+                SetBkColor(hdc, isSelected ? RGB(0, 0, 128) : RGB(255, 255, 255));
+                WORD pat[8] = { 0xAAAA, 0x5555, 0xAAAA, 0x5555, 0xAAAA, 0x5555, 0xAAAA, 0x5555 };
+                HBITMAP hBmp = CreateBitmap(8, 8, 1, 1, pat);
+                HBRUSH hBrush = CreatePatternBrush(hBmp);
+                FrameRect(hdc, &rc, hBrush);
+                DeleteObject(hBrush);
+                DeleteObject(hBmp);
+            }
+            return TRUE;
         }
         break;
     }
@@ -2080,7 +2727,7 @@ bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult, bool& outPrivate)
     wc.lpfnWndProc = MoveRoomProc;
     wc.hInstance = GetModuleHandle(0);
     wc.lpszClassName = L"MoveRoomClass";
-    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+    wc.hbrBackground = (HBRUSH)CreateSolidBrush(RGB(192, 192, 192));
     RegisterClass(&wc);
 
     g_moveBoxOK = false;
@@ -2090,18 +2737,45 @@ bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult, bool& outPrivate)
     RECT rcParent;
     GetWindowRect(hParent, &rcParent);
 
+    int clientW = Scale(270);
+    int clientH = Scale(168);
+    RECT rcDlg = { 0, 0, clientW, clientH };
+    AdjustWindowRectEx(&rcDlg, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_DLGMODALFRAME);
+    int winW = rcDlg.right - rcDlg.left;
+    int winH = rcDlg.bottom - rcDlg.top;
+
     HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"MoveRoomClass", GetString(IDS_MOVE_ROOM_TITLE).c_str(),
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
-        rcParent.left + (rcParent.right - rcParent.left - Scale(300)) / 2, 
-        rcParent.top + (rcParent.bottom - rcParent.top - Scale(220)) / 2, 
-        Scale(300), Scale(220), hParent, 0, GetModuleHandle(0), 0);
+        rcParent.left + (rcParent.right - rcParent.left - winW) / 2, 
+        rcParent.top + (rcParent.bottom - rcParent.top - winH) / 2, 
+        winW, winH, hParent, 0, GetModuleHandle(0), 0);
+    
+    ApplyClassicStyle(hWnd);
     
     EnableWindow(hParent, FALSE);
     
     MSG msg;
     while (IsWindow(hWnd) && GetMessage(&msg, 0, 0, 0)) {
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
+        if (msg.message == WM_KEYDOWN) {
+            if (msg.wParam == VK_DOWN && msg.hwnd == GetDlgItem(hWnd, 101)) {
+                HWND hList = GetDlgItem(hWnd, 102);
+                SetFocus(hList);
+                if (SendMessage(hList, LB_GETCURSEL, 0, 0) == LB_ERR) {
+                    SendMessage(hList, LB_SETCURSEL, 0, 0);
+                }
+                continue;
+            } else if (msg.wParam == VK_UP && msg.hwnd == GetDlgItem(hWnd, 102)) {
+                int sel = SendMessage(msg.hwnd, LB_GETCURSEL, 0, 0);
+                if (sel <= 0) {
+                    SetFocus(GetDlgItem(hWnd, 101));
+                    continue;
+                }
+            }
+        }
+        if (!IsDialogMessage(hWnd, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
     }
     
     EnableWindow(hParent, TRUE);
@@ -2290,6 +2964,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 if (localIdx == LB_ERR) {
                                     SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)g_username.c_str());
                                 }
+                                SortUserList();
                             }
                             else if (type == "join") {
                                 std::string uid = json["userId"].string_value();
@@ -2297,6 +2972,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wuid.c_str());
                                 if (idx == LB_ERR) {
                                     SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wuid.c_str());
+                                    SortUserList();
                                     MsgData* pData = new MsgData();
                                     pData->user = wuid;
                                     pData->msg = GetString(IDS_ENTERED);
@@ -2761,7 +3437,8 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             g_isWebcamActive = true;
                             if (!g_videoWindows[g_username] || !IsWindow(g_videoWindows[g_username])) {
                                 HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", g_username.c_str(),
-                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_username.c_str());
+                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(640), Scale(480), NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_username.c_str());
+                                ApplyClassicStyle(hVid);
                                 g_videoWindows[g_username] = hVid;
                             } else {
                                 SetForegroundWindow(g_videoWindows[g_username]);
@@ -2806,7 +3483,8 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     if (cmd == 2 && hasStreamer) {
                         if (!g_videoWindows[clickedUser] || !IsWindow(g_videoWindows[clickedUser])) {
                             HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", clickedUser.c_str(),
-                                WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
+                                WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(640), Scale(480), NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
+                            ApplyClassicStyle(hVid);
                             g_videoWindows[clickedUser] = hVid;
                         } else {
                             SetForegroundWindow(g_videoWindows[clickedUser]);
@@ -2824,6 +3502,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             }
                         }
                         SaveIgnoredUsers();
+                        SortUserList();
                         InvalidateRect(hwnd, NULL, FALSE);
                     } else if (cmd == 5) {
                         {
@@ -2834,6 +3513,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             }
                         }
                         SaveIgnoredUsers();
+                        SortUserList();
                         LPSTR utf8Target = w2a(clickedUser.c_str());
                         json11::Json reportMsg = json11::Json::object {
                             {"type", "report"},
@@ -2855,11 +3535,144 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
     return CallWindowProc(g_oldListProc, hwnd, msg, wParam, lParam);
 }
 
+LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (msg == WM_PAINT) {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hWnd, &ps);
+        RECT rc;
+        GetClientRect(hWnd, &rc);
+
+        HBRUSH hBgBrush = CreateSolidBrush(RGB(192, 192, 192));
+        FillRect(hdc, &rc, hBgBrush);
+        DeleteObject(hBgBrush);
+
+        bool isPressed = false;
+        bool isChecked = false;
+
+        DWORD style = GetWindowLong(hWnd, GWL_STYLE);
+        if ((style & BS_TYPEMASK) == BS_AUTOCHECKBOX || (style & BS_TYPEMASK) == BS_CHECKBOX || (style & BS_TYPEMASK) == BS_RADIOBUTTON || (style & BS_TYPEMASK) == BS_AUTORADIOBUTTON) {
+            isChecked = (SendMessage(hWnd, BM_GETCHECK, 0, 0) == BST_CHECKED);
+        }
+        isPressed = (SendMessage(hWnd, BM_GETSTATE, 0, 0) & BST_PUSHED) != 0;
+
+        UINT edge = (isPressed || isChecked) ? EDGE_SUNKEN : EDGE_RAISED;
+        DrawEdge(hdc, &rc, edge, BF_RECT);
+
+        if (GetFocus() == hWnd) {
+            RECT rcFocus = rc;
+            InflateRect(&rcFocus, -4, -4);
+            DrawFocusRect(hdc, &rcFocus);
+        }
+
+        WCHAR text[256];
+        GetWindowText(hWnd, text, 256);
+        if (wcslen(text) > 0) {
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, RGB(0, 0, 0));
+            HFONT hFont = (HFONT)SendMessage(hWnd, WM_GETFONT, 0, 0);
+            HFONT hOld = (HFONT)SelectObject(hdc, hFont);
+
+            RECT rcText = rc;
+            if (isPressed || isChecked) {
+                rcText.left += 2;
+                rcText.top += 2;
+            }
+            DrawTextW(hdc, text, -1, &rcText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            SelectObject(hdc, hOld);
+        }
+
+        EndPaint(hWnd, &ps);
+        return 0;
+    }
+    else if (msg == WM_ERASEBKGND) {
+        return 1;
+    }
+    else if (msg == BM_SETSTATE || msg == BM_SETCHECK || 
+             msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK ||
+             msg == WM_MOUSEMOVE || msg == WM_MOUSELEAVE || 
+             msg == WM_SETFOCUS || msg == WM_KILLFOCUS) {
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        InvalidateRect(hWnd, NULL, FALSE);
+        UpdateWindow(hWnd);
+        return res;
+    }
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
+}
+
+LRESULT CALLBACK ComboBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (msg == WM_PAINT) {
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        
+        HDC hdc = GetWindowDC(hWnd);
+        if (hdc) {
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
+            int width = rc.right - rc.left;
+            int height = rc.bottom - rc.top;
+            
+            int btnWidth = GetSystemMetrics(SM_CXVSCROLL);
+            RECT rcBtn = { width - btnWidth - 2, 2, width - 2, height - 2 };
+            
+            HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
+            FillRect(hdc, &rcBtn, hBg);
+            DeleteObject(hBg);
+            
+            bool isPressed = (SendMessage(hWnd, CB_GETDROPPEDSTATE, 0, 0) != 0);
+            
+            DrawEdge(hdc, &rcBtn, isPressed ? EDGE_SUNKEN : EDGE_RAISED, BF_RECT);
+            
+            int cx = rcBtn.left + btnWidth / 2;
+            int cy = rcBtn.top + (height - 4) / 2;
+            if (isPressed) { cx++; cy++; }
+            
+            HPEN hBlack = CreatePen(PS_SOLID, 1, RGB(0,0,0));
+            HBRUSH hBlackBrush = CreateSolidBrush(RGB(0,0,0));
+            HPEN hOldP = (HPEN)SelectObject(hdc, hBlack);
+            HBRUSH hOldB = (HBRUSH)SelectObject(hdc, hBlackBrush);
+            
+            POINT pts[3] = {
+                { cx - 2, cy - 1 },
+                { cx + 3, cy - 1 },
+                { cx, cy + 2 }
+            };
+            Polygon(hdc, pts, 3);
+            
+            SelectObject(hdc, hOldP);
+            SelectObject(hdc, hOldB);
+            DeleteObject(hBlack);
+            DeleteObject(hBlackBrush);
+            
+            ReleaseDC(hWnd, hdc);
+        }
+        return res;
+    }
+    else if (msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK ||
+             msg == WM_MOUSEMOVE || msg == WM_MOUSELEAVE || 
+             msg == WM_SETFOCUS || msg == WM_KILLFOCUS) {
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        InvalidateRect(hWnd, NULL, FALSE);
+        UpdateWindow(hWnd);
+        return res;
+    }
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     LRESULT classicResult = 0;
     if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult)) return classicResult;
 
     switch (msg) {
+    case WM_GETMINMAXINFO: {
+        MINMAXINFO* pmmi = (MINMAXINFO*)lParam;
+        int minClientWidth = Scale(5) * 2 + Scale(456);
+        int minClientHeight = Scale(300);
+
+        RECT rc = { 0, 0, minClientWidth, minClientHeight };
+        AdjustWindowRectEx(&rc, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+        pmmi->ptMinTrackSize.x = rc.right - rc.left;
+        pmmi->ptMinTrackSize.y = rc.bottom - rc.top;
+        return 0;
+    }
     case WM_CREATE: {
         
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
@@ -2932,18 +3745,18 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         }
         SaveSettings();
 
-        g_hFont = CreateFontW(Scale(14), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
+        g_hFont = CreateFontW(Scale(12), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-            DEFAULT_PITCH | FF_DONTCARE, L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF");
-        g_hFontBold = CreateFontW(Scale(14), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
+            DEFAULT_PITCH | FF_DONTCARE, L"MS UI Gothic");
+        g_hFontBold = CreateFontW(Scale(12), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-            DEFAULT_PITCH | FF_DONTCARE, L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF");
-        g_hFontI_btn = CreateFontW(Scale(14), 0, 0, 0, FW_NORMAL, TRUE, FALSE, FALSE, SHIFTJIS_CHARSET,
+            DEFAULT_PITCH | FF_DONTCARE, L"MS UI Gothic");
+        g_hFontI_btn = CreateFontW(Scale(12), 0, 0, 0, FW_NORMAL, TRUE, FALSE, FALSE, SHIFTJIS_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-            DEFAULT_PITCH | FF_DONTCARE, L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF");
-        g_hFontU_btn = CreateFontW(Scale(14), 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE, SHIFTJIS_CHARSET,
+            DEFAULT_PITCH | FF_DONTCARE, L"MS UI Gothic");
+        g_hFontU_btn = CreateFontW(Scale(12), 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE, SHIFTJIS_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-            DEFAULT_PITCH | FF_DONTCARE, L"\xFF2D\xFF33 \xFF30\x30B4\x30B7\x30C3\x30AF");
+            DEFAULT_PITCH | FF_DONTCARE, L"MS UI Gothic");
 
         // UI Creation
         g_hLog = CreateWindowEx(WS_EX_CLIENTEDGE, L"D2DLogViewClass", L"",
@@ -2951,11 +3764,19 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
         g_hUserList = CreateWindowEx(WS_EX_CLIENTEDGE, L"LISTBOX", L"",
-            WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_SORT | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT,
+            WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT,
             0, 0, 0, 0, hWnd, (HMENU)1050, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+
+        g_hUserListHeader = CreateWindowEx(WS_EX_CLIENTEDGE, L"STATIC", L"ユーザー一覧 (0)",
+            WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
+            0, 0, 0, 0, hWnd, (HMENU)1054, ((LPCREATESTRUCT)lParam)->hInstance, 0);
             
         SetWindowTheme(g_hLog, L" ", L" ");
         SetWindowTheme(g_hUserList, L" ", L" ");
+        SetWindowTheme(g_hUserListHeader, L" ", L" ");
+        
+        SetWindowSubclass(g_hLog, ScrollbarColorProc, 0, 0);
+        SetWindowSubclass(g_hUserList, ScrollbarColorProc, 0, 0);
 
 
 
@@ -3015,12 +3836,21 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         SendMessage(g_hComboSize, CB_SETCURSEL, 4, 0);
 
         SendMessage(g_hUserList, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        SendMessage(g_hUserListHeader, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
         SendMessage(g_hSendBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
         SendMessage(g_hBtnB, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
         SendMessage(g_hBtnI, WM_SETFONT, (WPARAM)g_hFontI_btn, TRUE);
         SendMessage(g_hBtnU, WM_SETFONT, (WPARAM)g_hFontU_btn, TRUE);
+        SendMessage(g_hBtnVideo, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        
+        SetWindowSubclass(g_hSendBtn, ClassicButtonProc, 0, 0);
+        SetWindowSubclass(g_hBtnB, ClassicButtonProc, 0, 0);
+        SetWindowSubclass(g_hBtnI, ClassicButtonProc, 0, 0);
+        SetWindowSubclass(g_hBtnU, ClassicButtonProc, 0, 0);
+        SetWindowSubclass(g_hBtnVideo, ClassicButtonProc, 0, 0);
         SendMessage(g_hComboSize, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        SetWindowSubclass(g_hComboSize, ComboBoxSubclassProc, 0, 0);
 
         UpdateInputFormat();
         SetWindowTitle(hWnd);
@@ -3070,7 +3900,9 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 SetDCBrushColor(hdc, RGB(100, 255, 100));
                 FillRect(hdc, &rc, (HBRUSH)GetStockObject(DC_BRUSH));
             } else {
-                FillRect(hdc, &rc, (HBRUSH)(COLOR_BTNFACE + 1));
+                HBRUSH hFaceBrush = CreateSolidBrush(RGB(192, 192, 192));
+                FillRect(hdc, &rc, hFaceBrush);
+                DeleteObject(hFaceBrush);
             }
             UINT edge = ((lpdis->itemState & ODS_SELECTED) || g_isVoiceActive) ? EDGE_SUNKEN : EDGE_RAISED;
             DrawEdge(hdc, &rc, edge, BF_RECT);
@@ -3114,7 +3946,9 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         else if (lpdis->CtlID == 1008) {
             HDC hdc = lpdis->hDC;
             RECT rc = lpdis->rcItem;
-            FillRect(hdc, &rc, (HBRUSH)(COLOR_BTNFACE + 1));
+            HBRUSH hFaceBrush = CreateSolidBrush(RGB(192, 192, 192));
+            FillRect(hdc, &rc, hFaceBrush);
+            DeleteObject(hFaceBrush);
             UINT edge = (lpdis->itemState & ODS_SELECTED) ? EDGE_SUNKEN : EDGE_RAISED;
             DrawEdge(hdc, &rc, edge, BF_RECT);
             if (lpdis->itemState & ODS_FOCUS) {
@@ -3159,7 +3993,9 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         else if (lpdis->CtlID == 1002) {
             HDC hdc = lpdis->hDC;
             RECT rc = lpdis->rcItem;
-            FillRect(hdc, &rc, (HBRUSH)(COLOR_BTNFACE + 1));
+            HBRUSH hFaceBrush = CreateSolidBrush(RGB(192, 192, 192));
+            FillRect(hdc, &rc, hFaceBrush);
+            DeleteObject(hFaceBrush);
             UINT edge = (lpdis->itemState & ODS_SELECTED) ? EDGE_SUNKEN : EDGE_RAISED;
             DrawEdge(hdc, &rc, edge, BF_RECT);
             if (lpdis->itemState & ODS_FOCUS) {
@@ -3178,7 +4014,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 Gdiplus::SolidBrush palBrush(Gdiplus::Color(255, 245, 225, 170));
                 graphics.FillEllipse(&palBrush, cx - Scale(10), cy - Scale(7), Scale(20), Scale(14));
 
-                COLORREF btnFace = GetSysColor(COLOR_BTNFACE);
+                COLORREF btnFace = RGB(192, 192, 192);
                 Gdiplus::SolidBrush bgBrush(Gdiplus::Color(255, GetRValue(btnFace), GetGValue(btnFace), GetBValue(btnFace)));
                 graphics.FillEllipse(&bgBrush, cx + Scale(3), cy - Scale(3), Scale(6), Scale(6));
 
@@ -3201,30 +4037,18 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             
             RECT rcBg = rc;
             InflateRect(&rcBg, -1, -1);
-            FillRect(hdc, &rcBg, (HBRUSH)(COLOR_BTNFACE + 1));
+            HBRUSH hFaceBrush = CreateSolidBrush(RGB(192, 192, 192));
+            FillRect(hdc, &rcBg, hFaceBrush);
+            DeleteObject(hFaceBrush);
             
             if (g_isVoiceActive) {
                 int maxVolWidth = rc.right - rc.left - 2;
                 int volWidth = (maxVolWidth * g_currentMicVolume) / 100;
                 if (volWidth > 0) {
                     Gdiplus::Graphics graphics(hdc);
-                    Gdiplus::Rect fullRect(rc.left + 1, rc.top + 1, maxVolWidth, rc.bottom - rc.top - 2);
-                    Gdiplus::LinearGradientBrush linGrBrush(
-                        fullRect,
-                        Gdiplus::Color(255, 0, 255, 0),
-                        Gdiplus::Color(255, 255, 0, 0),
-                        Gdiplus::LinearGradientModeHorizontal);
-                        
-                    Gdiplus::Color colors[] = {
-                        Gdiplus::Color(255, 0, 255, 0),
-                        Gdiplus::Color(255, 255, 255, 0),
-                        Gdiplus::Color(255, 255, 0, 0)
-                    };
-                    Gdiplus::REAL positions[] = { 0.0f, 0.6f, 1.0f };
-                    linGrBrush.SetInterpolationColors(colors, positions, 3);
-                    
+                    Gdiplus::SolidBrush brightGreen(Gdiplus::Color(255, 0, 255, 0));
                     Gdiplus::Rect volRect(rc.left + 1, rc.top + 1, volWidth, rc.bottom - rc.top - 2);
-                    graphics.FillRectangle(&linGrBrush, volRect);
+                    graphics.FillRectangle(&brightGreen, volRect);
                 }
             }
             
@@ -3238,7 +4062,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             RECT rc = lpdis->rcItem;
             
             // Draw background
-            HBRUSH hBgBrush = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
+            HBRUSH hBgBrush = CreateSolidBrush(RGB(192, 192, 192));
             FillRect(hdc, &rc, hBgBrush);
             DeleteObject(hBgBrush);
 
@@ -3306,10 +4130,12 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             }
 
             if (lpdis->itemState & ODS_SELECTED) {
-                FillRect(hdc, &rc, (HBRUSH)(COLOR_HIGHLIGHT + 1));
-                SetTextColor(hdc, isIgnored ? RGB(180, 180, 180) : GetSysColor(COLOR_HIGHLIGHTTEXT));
+                HBRUSH hSelBrush = CreateSolidBrush(RGB(0, 0, 128));
+                FillRect(hdc, &rc, hSelBrush);
+                DeleteObject(hSelBrush);
+                SetTextColor(hdc, isIgnored ? RGB(180, 180, 180) : RGB(255, 255, 255));
             } else {
-                FillRect(hdc, &rc, (HBRUSH)(COLOR_WINDOW + 1));
+                FillRect(hdc, &rc, (HBRUSH)GetStockObject(WHITE_BRUSH));
                 SetTextColor(hdc, isIgnored ? RGB(140, 140, 140) : userColor);
             }
             SetBkMode(hdc, TRANSPARENT);
@@ -3490,7 +4316,34 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             DeleteObject(hMemBmp);
             DeleteDC(hdc);
             
-            return TRUE;
+        }
+        break;
+    }
+
+    case WM_NOTIFY: {
+        NMHDR* nmhdr = (NMHDR*)lParam;
+        if (nmhdr->hwndFrom == g_hVolumeSlider && nmhdr->code == NM_CUSTOMDRAW) {
+            NMCUSTOMDRAW* pcd = (NMCUSTOMDRAW*)lParam;
+            if (pcd->dwDrawStage == CDDS_PREPAINT) {
+                return CDRF_NOTIFYITEMDRAW;
+            } else if (pcd->dwDrawStage == CDDS_ITEMPREPAINT) {
+                if (pcd->dwItemSpec == TBCD_THUMB) {
+                    HDC hdc = pcd->hdc;
+                    RECT rc = pcd->rc;
+                    HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
+                    FillRect(hdc, &rc, hBg);
+                    DeleteObject(hBg);
+                    DrawEdge(hdc, &rc, EDGE_RAISED, BF_RECT);
+                    return CDRF_SKIPDEFAULT;
+                } else if (pcd->dwItemSpec == TBCD_CHANNEL) {
+                    HDC hdc = pcd->hdc;
+                    RECT rc = pcd->rc;
+                    rc.top += (rc.bottom - rc.top) / 2 - 2;
+                    rc.bottom = rc.top + 4;
+                    DrawEdge(hdc, &rc, EDGE_SUNKEN, BF_RECT);
+                    return CDRF_SKIPDEFAULT;
+                }
+            }
         }
         break;
     }
@@ -3509,36 +4362,40 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         int topHeight = height - inputHeight - toolHeight - margin * 4;
         int logWidth = width - listWidth - margin * 3;
         
-        MoveWindow(g_hLog, margin, margin, logWidth, topHeight, TRUE);
+        HDWP hdwp = BeginDeferWindowPos(15);
 
-        int listHeight = topHeight - roomBtnHeight - margin;
-        MoveWindow(g_hUserList, margin * 2 + logWidth, margin, listWidth, listHeight, TRUE);
+        hdwp = DeferWindowPos(hdwp, g_hLog, NULL, margin, margin, logWidth, topHeight, SWP_NOZORDER);
 
-        int halfList = (listWidth - margin) / 2;
-        int roomBtnY = margin * 2 + listHeight;
-        MoveWindow(g_hBtnMoveRoom, margin * 2 + logWidth, roomBtnY, listWidth, roomBtnHeight, TRUE);
+        int headerHeight = Scale(20);
+        int listHeight = topHeight - roomBtnHeight - margin - headerHeight;
+        hdwp = DeferWindowPos(hdwp, g_hUserListHeader, NULL, margin * 2 + logWidth, margin, listWidth, headerHeight, SWP_NOZORDER);
+        hdwp = DeferWindowPos(hdwp, g_hUserList, NULL, margin * 2 + logWidth, margin + headerHeight, listWidth, listHeight, SWP_NOZORDER);
+
+        int roomBtnY = margin + headerHeight + listHeight + margin;
+        hdwp = DeferWindowPos(hdwp, g_hBtnMoveRoom, NULL, margin * 2 + logWidth, roomBtnY, listWidth, roomBtnHeight, SWP_NOZORDER);
 
         int toolY = margin * 2 + topHeight;
-        MoveWindow(g_hBtnB, margin, toolY, Scale(24), toolHeight, TRUE);
-        MoveWindow(g_hBtnI, margin + Scale(28), toolY, Scale(24), toolHeight, TRUE);
-        MoveWindow(g_hBtnU, margin + Scale(56), toolY, Scale(24), toolHeight, TRUE);
-        MoveWindow(g_hComboSize, margin + Scale(84), toolY, Scale(60), Scale(400), TRUE);
+        hdwp = DeferWindowPos(hdwp, g_hBtnB, NULL, margin, toolY, Scale(24), toolHeight, SWP_NOZORDER);
+        hdwp = DeferWindowPos(hdwp, g_hBtnI, NULL, margin + Scale(28), toolY, Scale(24), toolHeight, SWP_NOZORDER);
+        hdwp = DeferWindowPos(hdwp, g_hBtnU, NULL, margin + Scale(56), toolY, Scale(24), toolHeight, SWP_NOZORDER);
+        hdwp = DeferWindowPos(hdwp, g_hComboSize, NULL, margin + Scale(84), toolY, Scale(60), Scale(400), SWP_NOZORDER);
         RECT rcCombo;
         GetWindowRect(g_hComboSize, &rcCombo);
         int currentHeight = rcCombo.bottom - rcCombo.top;
         int currentItemHeight = SendMessage(g_hComboSize, CB_GETITEMHEIGHT, (WPARAM)-1, 0);
         int nonItemHeight = currentHeight - currentItemHeight;
         SendMessage(g_hComboSize, CB_SETITEMHEIGHT, (WPARAM)-1, toolHeight - nonItemHeight);
-        MoveWindow(g_hBtnColor, margin + Scale(148), toolY, Scale(32), toolHeight, TRUE);
-        MoveWindow(g_hBtnVoice, margin + Scale(186), toolY, Scale(70), toolHeight, TRUE);
-        MoveWindow(g_hVolumeIndicator, margin + Scale(261), toolY, Scale(70), toolHeight, TRUE);
-        MoveWindow(g_hSpeakerIcon, margin + Scale(336), toolY, Scale(20), toolHeight, TRUE);
-        MoveWindow(g_hVolumeSlider, margin + Scale(356), toolY, Scale(100), toolHeight, TRUE);
-        // MoveWindow(g_hBtnVideo, margin + Scale(466), toolY, Scale(80), toolHeight, TRUE); // Hidden until video is restored
+        hdwp = DeferWindowPos(hdwp, g_hBtnColor, NULL, margin + Scale(148), toolY, Scale(32), toolHeight, SWP_NOZORDER);
+        hdwp = DeferWindowPos(hdwp, g_hBtnVoice, NULL, margin + Scale(186), toolY, Scale(70), toolHeight, SWP_NOZORDER);
+        hdwp = DeferWindowPos(hdwp, g_hVolumeIndicator, NULL, margin + Scale(261), toolY, Scale(70), toolHeight, SWP_NOZORDER);
+        hdwp = DeferWindowPos(hdwp, g_hSpeakerIcon, NULL, margin + Scale(336), toolY, Scale(20), toolHeight, SWP_NOZORDER);
+        hdwp = DeferWindowPos(hdwp, g_hVolumeSlider, NULL, margin + Scale(356), toolY, Scale(100), toolHeight, SWP_NOZORDER);
 
         int bottomY = margin * 3 + topHeight + toolHeight;
-        MoveWindow(g_hInput, margin, bottomY, width - btnWidth - margin * 3, inputHeight, TRUE);
-        MoveWindow(g_hSendBtn, width - btnWidth - margin, bottomY, btnWidth, inputHeight, TRUE);
+        hdwp = DeferWindowPos(hdwp, g_hInput, NULL, margin, bottomY, width - btnWidth - margin * 3, inputHeight, SWP_NOZORDER);
+        hdwp = DeferWindowPos(hdwp, g_hSendBtn, NULL, width - btnWidth - margin, bottomY, btnWidth, inputHeight, SWP_NOZORDER);
+
+        EndDeferWindowPos(hdwp);
 
         return 0;
     }
@@ -3584,7 +4441,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             cc.hwndOwner = hWnd;
             cc.lpCustColors = (LPDWORD)acrCustClr;
             cc.rgbResult = g_currentColor;
-            cc.Flags = CC_FULLOPEN | CC_RGBINIT;
+            cc.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLEHOOK;
+            cc.lpfnHook = ColorHookProc;
             if (ChooseColor(&cc)) {
                 g_currentColor = cc.rgbResult;
                 UpdateInputFormat();
@@ -3690,6 +4548,17 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             }
         }
         else if (wParam == 2) {
+            if (g_hUserListHeader) {
+                static int lastCount = -1;
+                int count = (int)SendMessage(g_hUserList, LB_GETCOUNT, 0, 0);
+                if (count != lastCount) {
+                    lastCount = count;
+                    WCHAR buf[256];
+                    swprintf_s(buf, L"ユーザー一覧 (%d)", count);
+                    SetWindowText(g_hUserListHeader, buf);
+                }
+            }
+
             bool listChanged = false;
             DWORD now = GetTickCount();
             {
@@ -3805,10 +4674,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     
     MSG msg;
     WNDCLASS wc = {
-        CS_HREDRAW | CS_VREDRAW,
+        0,
         WndProc, 0, 0, hInstance,
         LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON)), LoadCursor(0, IDC_ARROW),
-        (HBRUSH)(COLOR_BTNFACE + 1), 0, L"Retro Chat"
+        (HBRUSH)CreateSolidBrush(RGB(192, 192, 192)), 0, L"Retro Chat"
     };
     RegisterClass(&wc);
     
@@ -3821,6 +4690,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         CW_USEDEFAULT, 0, Scale(500), Scale(400),
         0, 0, hInstance, 0);
+        
+    // SetThemeAppProperties(0);
+    SetWindowTheme(hWnd, L" ", L" ");
+    SystemParametersInfo(SPI_SETGRADIENTCAPTIONS, 0, (PVOID)FALSE, 0);
+
+    ApplyClassicStyle(hWnd);
         
     ShowWindow(hWnd, SW_SHOWDEFAULT);
     UpdateWindow(hWnd);
