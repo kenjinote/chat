@@ -2390,6 +2390,7 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         SetWindowSubclass(hBtnCancel, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hEdit, EditSelectionColorProc, 0, 0);
         SetWindowSubclass(hEdit, ClientEdgeSubclassProc, 0, 0);
+        SetWindowTheme(hEdit, L" ", L" ");
         
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
         SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, FALSE);
@@ -2764,6 +2765,8 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         SetWindowSubclass(hEdit, ClientEdgeSubclassProc, 0, 0);
         SetWindowSubclass(hList, ScrollbarColorProc, 0, 0);
         SetWindowSubclass(hList, ClientEdgeSubclassProc, 0, 0);
+        SetWindowTheme(hEdit, L" ", L" ");
+        SetWindowTheme(hList, L" ", L" ");
         SendMessage(hList, LB_SETITEMHEIGHT, 0, Scale(16));
         
         s_roomNames.clear();
@@ -4093,7 +4096,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 int cy = rc.top + (rc.bottom - rc.top) / 2 - Scale(2);
 
                 Gdiplus::SolidBrush micBrush(Gdiplus::Color(255, 0, 0, 0));
-                Gdiplus::Pen micPen(Gdiplus::Color(255, 0, 0, 0), 1.5f);
+                Gdiplus::Pen micPen(Gdiplus::Color(255, 0, 0, 0), (Gdiplus::REAL)(Scale(1) * 1.5f));
                 
                 graphics.FillRectangle(&micBrush, cx - Scale(2), cy - Scale(4), Scale(4), Scale(6));
                 graphics.FillEllipse(&micBrush, cx - Scale(2), cy - Scale(6), Scale(4), Scale(4));
@@ -4146,7 +4149,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 Gdiplus::Graphics graphics(hdc);
                 graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
                 
-                Gdiplus::Pen pen(Gdiplus::Color(255, 0, 0, 0), 1.5f);
+                Gdiplus::Pen pen(Gdiplus::Color(255, 0, 0, 0), (Gdiplus::REAL)(Scale(1) * 1.5f));
                 Gdiplus::SolidBrush knobBrush(Gdiplus::Color(255, 0, 0, 0));
                 graphics.DrawRectangle(&pen, cx - Scale(6), cy - Scale(6), Scale(8), Scale(12));
                 graphics.FillEllipse(&knobBrush, cx - Scale(2), cy - Scale(1), Scale(2), Scale(2));
@@ -4437,9 +4440,12 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 Gdiplus::REAL positions[] = { 0.0f, 0.3f, 0.6f, 1.0f };
                 linGrBrush.SetInterpolationColors(colors, positions, 4);
                 
-                Gdiplus::Pen gradientPen(&linGrBrush, 1.5f);
-                Gdiplus::Pen blackPen(Gdiplus::Color(255, 40, 40, 40), 1.5f);
-                Gdiplus::SolidBrush blackBrush(Gdiplus::Color(255, 40, 40, 40));
+                Gdiplus::Pen gradientPen(&linGrBrush, (Gdiplus::REAL)(Scale(1) * 1.5f));
+                
+                bool isSelected = (lpdis->itemState & ODS_SELECTED);
+                Gdiplus::Color baseColor = isSelected ? Gdiplus::Color(255, 255, 255, 255) : Gdiplus::Color(255, 40, 40, 40);
+                Gdiplus::Pen basePen(baseColor, (Gdiplus::REAL)(Scale(1) * 1.5f));
+                Gdiplus::SolidBrush baseBrush(baseColor);
                 
                 auto DrawMic = [&](Gdiplus::Pen* pen, Gdiplus::Brush* brush) {
                     graphics.FillRectangle(brush, micX - Scale(2), micY - Scale(4), Scale(4), Scale(6));
@@ -4454,7 +4460,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 if (blackHeight > 0) {
                     Gdiplus::Rect blackClip(micX - Scale(10), micTop, Scale(20), blackHeight);
                     graphics.SetClip(blackClip);
-                    DrawMic(&blackPen, &blackBrush);
+                    DrawMic(&basePen, &baseBrush);
                     graphics.ResetClip();
                 }
                 
