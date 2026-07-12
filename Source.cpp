@@ -1746,12 +1746,21 @@ void ApplyClassicStyle(HWND hWnd) {
     GetWindowRect(hWnd, &rc);
     RECT rcFrame = { 0, 0, 0, 0 };
     AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
-    int cxCrop = -rcFrame.left - 2;
-    int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - 2;
-    int cyCropBottom = rcFrame.bottom - 2;
-    if (cxCrop < 1) cxCrop = 1;
-    if (cyCropTop < 1) cyCropTop = 1;
-    if (cyCropBottom < 1) cyCropBottom = 1;
+    int dpiY = 96;
+    HDC hdc = GetDC(hWnd);
+    if (hdc) {
+        dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+        ReleaseDC(hWnd, hdc);
+    }
+    int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+    int bw3 = bw1 * 3;
+
+    int cxCrop = -rcFrame.left - bw3;
+    int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - bw3;
+    int cyCropBottom = rcFrame.bottom - bw3;
+    if (cxCrop < 0) cxCrop = 0;
+    if (cyCropTop < 0) cyCropTop = 0;
+    if (cyCropBottom < 0) cyCropBottom = 0;
     HRGN hRgn = CreateRectRgn(cxCrop, cyCropTop, (rc.right - rc.left) - cxCrop, (rc.bottom - rc.top) - cyCropBottom);
     SetWindowRgn(hWnd, hRgn, FALSE);
 }
@@ -1999,14 +2008,23 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         *pResult = DefWindowProc(hWnd, msg, wParam, lParam);
         WINDOWPOS* pwp = (WINDOWPOS*)lParam;
         if (!(pwp->flags & SWP_NOSIZE)) {
+            int dpiY = 96;
+            HDC hdc = GetDC(hWnd);
+            if (hdc) {
+                dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                ReleaseDC(hWnd, hdc);
+            }
+            int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+            int bw3 = bw1 * 3;
+
             RECT rcFrame = { 0, 0, 0, 0 };
             AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
-            int cxCrop = -rcFrame.left - 2;
-            int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - 2;
-            int cyCropBottom = rcFrame.bottom - 2;
-            if (cxCrop < 1) cxCrop = 1;
-            if (cyCropTop < 1) cyCropTop = 1;
-            if (cyCropBottom < 1) cyCropBottom = 1;
+            int cxCrop = -rcFrame.left - bw3;
+            int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - bw3;
+            int cyCropBottom = rcFrame.bottom - bw3;
+            if (cxCrop < 0) cxCrop = 0;
+            if (cyCropTop < 0) cyCropTop = 0;
+            if (cyCropBottom < 0) cyCropBottom = 0;
             
             HRGN hRgn = CreateRectRgn(cxCrop, cyCropTop, pwp->cx - cxCrop, pwp->cy - cyCropBottom);
             SetWindowRgn(hWnd, hRgn, TRUE);
@@ -2036,12 +2054,21 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         if (bTop) { *pResult = HTTOP; return true; }
         if (bBottom) { *pResult = HTBOTTOM; return true; }
 
+        int dpiY = 96;
+        HDC hdc = GetDC(hWnd);
+        if (hdc) {
+            dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            ReleaseDC(hWnd, hdc);
+        }
+        int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+        int bw3 = bw1 * 3;
+
         RECT rcFrame = { 0, 0, 0, 0 };
         AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
-        int cxCrop = -rcFrame.left - 3;
-        int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - 3;
-        if (cxCrop < 1) cxCrop = 1;
-        if (cyCropTop < 1) cyCropTop = 1;
+        int cxCrop = -rcFrame.left - bw3;
+        int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - bw3;
+        if (cxCrop < 0) cxCrop = 0;
+        if (cyCropTop < 0) cyCropTop = 0;
 
         int visLeft = cxCrop;
         int visRight = (rc.right - rc.left) - cxCrop;
@@ -2105,22 +2132,23 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
 
                 RECT rcFrame = { 0, 0, 0, 0 };
                 AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
-                int cxCrop = -rcFrame.left - 3;
-                int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - 3;
-                int cyCropBottom = rcFrame.bottom - 3;
-                if (cxCrop < 1) cxCrop = 1;
-                if (cyCropTop < 1) cyCropTop = 1;
-                if (cyCropBottom < 1) cyCropBottom = 1;
-
-                int visLeft = cxCrop;
-                int visTop = cyCropTop;
-                int visRight = width - cxCrop;
-                int visBottom = height - cyCropBottom;
 
                 int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
                 int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
                 int bw2 = bw1 * 2;
                 int bw3 = bw1 * 3;
+
+                int cxCrop = -rcFrame.left - bw3;
+                int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - bw3;
+                int cyCropBottom = rcFrame.bottom - bw3;
+                if (cxCrop < 0) cxCrop = 0;
+                if (cyCropTop < 0) cyCropTop = 0;
+                if (cyCropBottom < 0) cyCropBottom = 0;
+
+                int visLeft = cxCrop;
+                int visTop = cyCropTop;
+                int visRight = width - cxCrop;
+                int visBottom = height - cyCropBottom;
 
                 HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
                 HBRUSH hWhite = CreateSolidBrush(RGB(255, 255, 255));
