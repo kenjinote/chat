@@ -4087,6 +4087,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         SetWindowTheme(g_hComboSize, L" ", L" ");
         SetWindowSubclass(g_hComboSize, ClientEdgeSubclassProc, 999, 0);
         SetWindowSubclass(g_hComboSize, ComboBoxSubclassProc, 0, 0);
+        SetWindowPos(g_hComboSize, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
         SetWindowSubclass(g_hInput, ClientEdgeSubclassProc, 0, 0);
 
         UpdateInputFormat();
@@ -4781,9 +4782,14 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 InvalidateRect(g_hSpeakerIcon, NULL, FALSE);
             }
         }
-        else if ((id >= 1003 && id <= 1005 && code == BN_CLICKED) || (id == 1006 && code == CBN_SELCHANGE)) {
-            UpdateInputFormat();
-            SetFocus(g_hInput);
+        else if ((id >= 1003 && id <= 1005 && code == BN_CLICKED) || (id == 1006 && (code == CBN_SELCHANGE || code == CBN_CLOSEUP))) {
+            if (id == 1006) {
+                InvalidateRect(g_hComboSize, NULL, FALSE);
+            }
+            if (code != CBN_CLOSEUP) {
+                UpdateInputFormat();
+                SetFocus(g_hInput);
+            }
         }
 
         else if (id == 1009 && code == BN_CLICKED) {
