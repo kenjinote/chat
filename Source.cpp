@@ -94,7 +94,7 @@ CAudioSessionEvents* g_pAudioEvents = nullptr;
 
 HRESULT STDMETHODCALLTYPE CAudioSessionEvents::OnSimpleVolumeChanged(float NewVolume, BOOL NewMute, LPCGUID EventContext) {
     if (g_hVolumeSlider) {
-        PostMessage(GetParent(g_hVolumeSlider), WM_APP_VOLUME_CHANGED, (WPARAM)(NewVolume * 100), 0);
+        PostMessage(GetParent(g_hVolumeSlider), WM_APP_VOLUME_CHANGED, (WPARAM)(NewVolume * 100), (LPARAM)NewMute);
     }
     return S_OK;
 }
@@ -129,6 +129,7 @@ HFONT g_hFont;
 HFONT g_hFontBold;
 HFONT g_hFontI_btn;
 HFONT g_hFontU_btn;
+HFONT g_hFontCombo;
 
 std::map<std::wstring, int> g_publicRooms;
 std::wstring g_currentRoom = L"";
@@ -3067,6 +3068,22 @@ void AppendLog(const MsgData& data) {
     InvalidateRect(g_hLog, NULL, FALSE);
 }
 
+struct DecodeTaskData {
+    std::vector<uint8_t> jpegData;
+    std::wstring username;
+};
+
+DWORD WINAPI DecodeTaskProc(LPVOID lpParam) {
+    HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    DecodeTaskData* data = (DecodeTaskData*)lpParam;
+    DecodeJPEG(data->jpegData, data->username);
+    delete data;
+    if (SUCCEEDED(hr)) {
+        CoUninitialize();
+    }
+    return 0;
+}
+
 
 DWORD WINAPI RecvThread(LPVOID param) {
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
@@ -3321,11 +3338,12 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         }
                         
                         if (vbuf.totalFragments > 0 && vbuf.fragments.size() == vbuf.totalFragments) {
-                            std::vector<uint8_t> completeJpeg;
+                            DecodeTaskData* taskData = new DecodeTaskData();
+                            taskData->username = wname;
                             for (int i = 0; i < vbuf.totalFragments; i++) {
-                                completeJpeg.insert(completeJpeg.end(), vbuf.fragments[i].begin(), vbuf.fragments[i].end());
+                                taskData->jpegData.insert(taskData->jpegData.end(), vbuf.fragments[i].begin(), vbuf.fragments[i].end());
                             }
-                            DecodeJPEG(completeJpeg, wname);
+                            QueueUserWorkItem(DecodeTaskProc, taskData, WT_EXECUTEDEFAULT);
                             g_videoBuffers[wname].clear();
                         }
                         
@@ -3966,6 +3984,9 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         g_hFontU_btn = CreateFontW(Scale(12), 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE, SHIFTJIS_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
             DEFAULT_PITCH | FF_DONTCARE, L"MS UI Gothic");
+        g_hFontCombo = CreateFontW(Scale(15), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
+            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+            DEFAULT_PITCH | FF_DONTCARE, L"MS UI Gothic");
 
         // UI Creation
         g_hLog = CreateWindowEx(WS_EX_CLIENTEDGE, L"D2DLogViewClass", L"",
@@ -4005,7 +4026,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             0, 0, 0, 0, hWnd, (HMENU)1051, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
         g_hSpeakerIcon = CreateWindow(L"STATIC", L"", 
-            WS_CHILD | WS_VISIBLE | SS_OWNERDRAW,
+            WS_CHILD | WS_VISIBLE | SS_OWNERDRAW | SS_NOTIFY,
             0, 0, 0, 0, hWnd, (HMENU)1053, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
         g_hVolumeSlider = CreateWindow(TRACKBAR_CLASS, L"",
@@ -4062,7 +4083,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         SetWindowSubclass(g_hBtnI, ClassicButtonProc, 0, 0);
         SetWindowSubclass(g_hBtnU, ClassicButtonProc, 0, 0);
         SetWindowSubclass(g_hBtnVideo, ClassicButtonProc, 0, 0);
-        SendMessage(g_hComboSize, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        SendMessage(g_hComboSize, WM_SETFONT, (WPARAM)g_hFontCombo, TRUE);
+        SetWindowTheme(g_hComboSize, L" ", L" ");
         SetWindowSubclass(g_hComboSize, ClientEdgeSubclassProc, 999, 0);
         SetWindowSubclass(g_hComboSize, ComboBoxSubclassProc, 0, 0);
         SetWindowSubclass(g_hInput, ClientEdgeSubclassProc, 0, 0);
@@ -4256,26 +4278,36 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             HDC hdc = lpdis->hDC;
             RECT rc = lpdis->rcItem;
             
-            RECT rcBg = rc;
-            InflateRect(&rcBg, -1, -1);
             HBRUSH hFaceBrush = CreateSolidBrush(RGB(192, 192, 192));
-            FillRect(hdc, &rcBg, hFaceBrush);
+            FillRect(hdc, &rc, hFaceBrush);
             DeleteObject(hFaceBrush);
             
             if (g_isVoiceActive) {
-                int maxVolWidth = rc.right - rc.left - 2;
+                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
+                
+                int maxVolWidth = rc.right - rc.left - bw * 2;
                 int volWidth = (maxVolWidth * g_currentMicVolume) / 100;
                 if (volWidth > 0) {
                     Gdiplus::Graphics graphics(hdc);
-                    Gdiplus::SolidBrush brightGreen(Gdiplus::Color(255, 0, 255, 0));
-                    Gdiplus::Rect volRect(rc.left + 1, rc.top + 1, volWidth, rc.bottom - rc.top - 2);
-                    graphics.FillRectangle(&brightGreen, volRect);
+                    
+                    Gdiplus::Color colors[] = {
+                        Gdiplus::Color(255, 0, 220, 0),    // Green
+                        Gdiplus::Color(255, 255, 220, 0),  // Yellow
+                        Gdiplus::Color(255, 255, 0, 0)     // Red
+                    };
+                    Gdiplus::REAL positions[] = { 0.0f, 0.6f, 1.0f };
+                    
+                    Gdiplus::Rect gradRect(rc.left + bw, rc.top + bw, maxVolWidth, rc.bottom - rc.top - bw * 2);
+                    Gdiplus::LinearGradientBrush gradBrush(gradRect, colors[0], colors[2], Gdiplus::LinearGradientModeHorizontal);
+                    gradBrush.SetInterpolationColors(colors, positions, 3);
+                    
+                    Gdiplus::Rect volRect(rc.left + bw, rc.top + bw, volWidth, rc.bottom - rc.top - bw * 2);
+                    graphics.FillRectangle(&gradBrush, volRect);
                 }
             }
             
-            HBRUSH hGrayBrush = CreateSolidBrush(RGB(180, 180, 180));
-            FrameRect(hdc, &rc, hGrayBrush);
-            DeleteObject(hGrayBrush);
+            DrawScaledButtonBorder(hdc, rc, EDGE_SUNKEN);
             return TRUE;
         }
         else if (lpdis->CtlID == 1053) {
@@ -4292,6 +4324,13 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
             Gdiplus::SolidBrush blackBrush(Gdiplus::Color(255, 60, 60, 60));
             Gdiplus::Pen blackPen(Gdiplus::Color(255, 60, 60, 60), (Gdiplus::REAL)(Scale(1) * 1.5f));
+            BOOL isMuted = FALSE;
+            float masterVol = 1.0f;
+            if (g_pSimpleAudioVolume) {
+                g_pSimpleAudioVolume->GetMute(&isMuted);
+                g_pSimpleAudioVolume->GetMasterVolume(&masterVol);
+            }
+            bool showMute = isMuted || (masterVol <= 0.0f);
 
             int cx = rc.left + Scale(7);
             int cy = rc.top + (rc.bottom - rc.top) / 2;
@@ -4308,13 +4347,21 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             blackPen.SetLineJoin(Gdiplus::LineJoinRound);
             graphics.DrawPolygon(&blackPen, pts, 6);
 
-            // Sound waves (natural circular arcs, slightly smaller)
-            int waveCx = cx + Scale(2);
-            int r1 = Scale(5);
-            graphics.DrawArc(&blackPen, waveCx - r1, cy - r1, r1 * 2, r1 * 2, -45.0f, 90.0f);
-            
-            int r2 = Scale(9);
-            graphics.DrawArc(&blackPen, waveCx - r2, cy - r2, r2 * 2, r2 * 2, -45.0f, 90.0f);
+            if (showMute) {
+                int xCenter = cx + Scale(7);
+                int yCenter = cy;
+                int xSize = Scale(3);
+                graphics.DrawLine(&blackPen, xCenter - xSize, yCenter - xSize, xCenter + xSize, yCenter + xSize);
+                graphics.DrawLine(&blackPen, xCenter - xSize, yCenter + xSize, xCenter + xSize, yCenter - xSize);
+            } else {
+                // Sound waves (natural circular arcs, slightly smaller)
+                int waveCx = cx + Scale(2);
+                int r1 = Scale(5);
+                graphics.DrawArc(&blackPen, waveCx - r1, cy - r1, r1 * 2, r1 * 2, -45.0f, 90.0f);
+                
+                int r2 = Scale(9);
+                graphics.DrawArc(&blackPen, waveCx - r2, cy - r2, r2 * 2, r2 * 2, -45.0f, 90.0f);
+            }
 
             return TRUE;
         }
@@ -4601,21 +4648,59 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         hdwp = DeferWindowPos(hdwp, g_hBtnMoveRoom, NULL, margin * 2 + logWidth, roomBtnY, listWidth, roomBtnHeight, SWP_NOZORDER);
 
         int toolY = margin * 2 + topHeight;
-        hdwp = DeferWindowPos(hdwp, g_hBtnB, NULL, margin, toolY, Scale(24), toolHeight, SWP_NOZORDER);
-        hdwp = DeferWindowPos(hdwp, g_hBtnI, NULL, margin + Scale(28), toolY, Scale(24), toolHeight, SWP_NOZORDER);
-        hdwp = DeferWindowPos(hdwp, g_hBtnU, NULL, margin + Scale(56), toolY, Scale(24), toolHeight, SWP_NOZORDER);
-        hdwp = DeferWindowPos(hdwp, g_hComboSize, NULL, margin + Scale(84), toolY, Scale(60), Scale(400), SWP_NOZORDER);
-        RECT rcCombo;
-        GetWindowRect(g_hComboSize, &rcCombo);
-        int currentHeight = rcCombo.bottom - rcCombo.top;
+        int currentX = margin;
+        int gap = Scale(4);
+
+        hdwp = DeferWindowPos(hdwp, g_hBtnB, NULL, currentX, toolY, Scale(24), toolHeight, SWP_NOZORDER);
+        currentX += Scale(24) + gap;
+
+        hdwp = DeferWindowPos(hdwp, g_hBtnI, NULL, currentX, toolY, Scale(24), toolHeight, SWP_NOZORDER);
+        currentX += Scale(24) + gap;
+
+        hdwp = DeferWindowPos(hdwp, g_hBtnU, NULL, currentX, toolY, Scale(24), toolHeight, SWP_NOZORDER);
+        currentX += Scale(24) + gap;
+
+        // g_hComboSize must not be handled by DeferWindowPos, as SetWindowPos on a combobox reverts its custom closed height.
+        // We conditionally position it to avoid reverting its height repeatedly during window resize.
+        int comboW = Scale(48);
+        RECT rcCurrentCombo;
+        GetWindowRect(g_hComboSize, &rcCurrentCombo);
+        POINT ptCombo = { rcCurrentCombo.left, rcCurrentCombo.top };
+        ScreenToClient(hWnd, &ptCombo);
+
+        if (ptCombo.x != currentX || ptCombo.y != toolY || (rcCurrentCombo.right - rcCurrentCombo.left) != comboW) {
+            SetWindowPos(g_hComboSize, NULL, currentX, toolY, comboW, Scale(400), SWP_NOZORDER);
+        }
+
+        GetWindowRect(g_hComboSize, &rcCurrentCombo);
+        int currentComboHeight = rcCurrentCombo.bottom - rcCurrentCombo.top;
         int currentItemHeight = SendMessage(g_hComboSize, CB_GETITEMHEIGHT, (WPARAM)-1, 0);
-        int nonItemHeight = currentHeight - currentItemHeight;
-        SendMessage(g_hComboSize, CB_SETITEMHEIGHT, (WPARAM)-1, toolHeight - nonItemHeight);
-        hdwp = DeferWindowPos(hdwp, g_hBtnColor, NULL, margin + Scale(148), toolY, Scale(32), toolHeight, SWP_NOZORDER);
-        hdwp = DeferWindowPos(hdwp, g_hBtnVoice, NULL, margin + Scale(186), toolY, Scale(70), toolHeight, SWP_NOZORDER);
-        hdwp = DeferWindowPos(hdwp, g_hVolumeIndicator, NULL, margin + Scale(261), toolY, Scale(70), toolHeight, SWP_NOZORDER);
-        hdwp = DeferWindowPos(hdwp, g_hSpeakerIcon, NULL, margin + Scale(336), toolY, Scale(20), toolHeight, SWP_NOZORDER);
-        hdwp = DeferWindowPos(hdwp, g_hVolumeSlider, NULL, margin + Scale(356), toolY, Scale(100), toolHeight, SWP_NOZORDER);
+        int nonItemHeight = currentComboHeight - currentItemHeight;
+
+        static int lastGoodNonItemHeight = Scale(6);
+        if (nonItemHeight > 0 && nonItemHeight < Scale(20)) {
+            lastGoodNonItemHeight = nonItemHeight;
+        }
+
+        int targetItemHeight = toolHeight - lastGoodNonItemHeight;
+        if (currentItemHeight != targetItemHeight) {
+            SendMessage(g_hComboSize, CB_SETITEMHEIGHT, (WPARAM)-1, targetItemHeight);
+        }
+        currentX += comboW + gap;
+
+        hdwp = DeferWindowPos(hdwp, g_hBtnColor, NULL, currentX, toolY, Scale(32), toolHeight, SWP_NOZORDER);
+        currentX += Scale(32) + gap;
+
+        hdwp = DeferWindowPos(hdwp, g_hBtnVoice, NULL, currentX, toolY, Scale(70), toolHeight, SWP_NOZORDER);
+        currentX += Scale(70) + gap;
+
+        hdwp = DeferWindowPos(hdwp, g_hVolumeIndicator, NULL, currentX, toolY, Scale(70), toolHeight, SWP_NOZORDER);
+        currentX += Scale(70) + gap;
+
+        hdwp = DeferWindowPos(hdwp, g_hSpeakerIcon, NULL, currentX, toolY, Scale(20), toolHeight, SWP_NOZORDER);
+        currentX += Scale(20) + gap;
+
+        hdwp = DeferWindowPos(hdwp, g_hVolumeSlider, NULL, currentX, toolY, Scale(100), toolHeight, SWP_NOZORDER);
 
         int bottomY = margin * 3 + topHeight + toolHeight;
         hdwp = DeferWindowPos(hdwp, g_hInput, NULL, margin, bottomY, width - btnWidth - margin * 3, inputHeight, SWP_NOZORDER);
@@ -4631,7 +4716,15 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             if (g_pSimpleAudioVolume) {
                 int pos = SendMessage(g_hVolumeSlider, TBM_GETPOS, 0, 0);
                 float volume = pos / 100.0f;
+                BOOL isMuted = FALSE;
+                g_pSimpleAudioVolume->GetMute(&isMuted);
+                if (isMuted && volume > 0.0f) {
+                    g_pSimpleAudioVolume->SetMute(FALSE, NULL);
+                }
                 g_pSimpleAudioVolume->SetMasterVolume(volume, NULL);
+                if (g_hSpeakerIcon) {
+                    InvalidateRect(g_hSpeakerIcon, NULL, FALSE);
+                }
             }
         }
         return 0;
@@ -4639,7 +4732,12 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
     case WM_APP_VOLUME_CHANGED: {
         if (g_hVolumeSlider) {
-            SendMessage(g_hVolumeSlider, TBM_SETPOS, TRUE, wParam);
+            BOOL isMuted = (BOOL)lParam;
+            int displayPos = isMuted ? 0 : (int)wParam;
+            SendMessage(g_hVolumeSlider, TBM_SETPOS, TRUE, displayPos);
+            if (g_hSpeakerIcon) {
+                InvalidateRect(g_hSpeakerIcon, NULL, FALSE);
+            }
         }
         return 0;
     }
@@ -4673,6 +4771,14 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 g_currentColor = cc.rgbResult;
                 UpdateInputFormat();
                 SetFocus(g_hInput);
+            }
+        }
+        else if (id == 1053 && code == STN_CLICKED) {
+            if (g_pSimpleAudioVolume) {
+                BOOL isMuted = FALSE;
+                g_pSimpleAudioVolume->GetMute(&isMuted);
+                g_pSimpleAudioVolume->SetMute(!isMuted, NULL);
+                InvalidateRect(g_hSpeakerIcon, NULL, FALSE);
             }
         }
         else if ((id >= 1003 && id <= 1005 && code == BN_CLICKED) || (id == 1006 && code == CBN_SELCHANGE)) {
@@ -4867,6 +4973,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         DeleteObject(g_hFontBold);
         DeleteObject(g_hFontI_btn);
         DeleteObject(g_hFontU_btn);
+        DeleteObject(g_hFontCombo);
         if (g_pAudioSessionControl && g_pAudioEvents) {
             g_pAudioSessionControl->UnregisterAudioSessionNotification(g_pAudioEvents);
             g_pAudioEvents->Release();
