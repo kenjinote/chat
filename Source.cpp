@@ -1756,6 +1756,104 @@ void ApplyClassicStyle(HWND hWnd) {
     SetWindowRgn(hWnd, hRgn, FALSE);
 }
 
+void DrawScaledClientEdge(HDC hdc, RECT rc) {
+    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+    int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+    int bw2 = bw1 * 2;
+
+    HBRUSH hWhite = CreateSolidBrush(RGB(255, 255, 255));
+    HBRUSH hDarkGray = CreateSolidBrush(RGB(128, 128, 128));
+    HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
+    HBRUSH hLightGray = CreateSolidBrush(RGB(223, 223, 223));
+
+    RECT rcTop = { rc.left, rc.top, rc.right, rc.top + bw1 }; FillRect(hdc, &rcTop, hDarkGray);
+    RECT rcLeft = { rc.left, rc.top, rc.left + bw1, rc.bottom }; FillRect(hdc, &rcLeft, hDarkGray);
+    RECT rcBottom = { rc.left, rc.bottom - bw1, rc.right, rc.bottom }; FillRect(hdc, &rcBottom, hWhite);
+    RECT rcRight = { rc.right - bw1, rc.top, rc.right, rc.bottom }; FillRect(hdc, &rcRight, hWhite);
+
+    RECT rcTop2 = { rc.left + bw1, rc.top + bw1, rc.right - bw1, rc.top + bw2 }; FillRect(hdc, &rcTop2, hBlack);
+    RECT rcLeft2 = { rc.left + bw1, rc.top + bw1, rc.left + bw2, rc.bottom - bw1 }; FillRect(hdc, &rcLeft2, hBlack);
+    RECT rcBottom2 = { rc.left + bw1, rc.bottom - bw2, rc.right - bw1, rc.bottom - bw1 }; FillRect(hdc, &rcBottom2, hLightGray);
+    RECT rcRight2 = { rc.right - bw2, rc.top + bw1, rc.right - bw1, rc.bottom - bw1 }; FillRect(hdc, &rcRight2, hLightGray);
+
+    DeleteObject(hWhite); DeleteObject(hDarkGray); DeleteObject(hBlack); DeleteObject(hLightGray);
+}
+
+void DrawScaledButtonBorder(HDC hdc, RECT rc, UINT edge) {
+    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+    int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+    int bw2 = bw1 * 2;
+
+    HBRUSH hWhite = CreateSolidBrush(RGB(255, 255, 255));
+    HBRUSH hDarkGray = CreateSolidBrush(RGB(128, 128, 128));
+    HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
+    HBRUSH hLightGray = CreateSolidBrush(RGB(223, 223, 223));
+
+    RECT r = rc;
+    if (edge == EDGE_RAISED) {
+        RECT rcTop = { r.left, r.top, r.right, r.top + bw1 }; FillRect(hdc, &rcTop, hWhite);
+        RECT rcLeft = { r.left, r.top, r.left + bw1, r.bottom }; FillRect(hdc, &rcLeft, hWhite);
+        RECT rcBottom = { r.left, r.bottom - bw1, r.right, r.bottom }; FillRect(hdc, &rcBottom, hBlack);
+        RECT rcRight = { r.right - bw1, r.top, r.right, r.bottom }; FillRect(hdc, &rcRight, hBlack);
+        
+        RECT rcTop2 = { r.left + bw1, r.top + bw1, r.right - bw1, r.top + bw2 }; FillRect(hdc, &rcTop2, hLightGray);
+        RECT rcLeft2 = { r.left + bw1, r.top + bw1, r.left + bw2, r.bottom - bw1 }; FillRect(hdc, &rcLeft2, hLightGray);
+        RECT rcBottom2 = { r.left + bw1, r.bottom - bw2, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcBottom2, hDarkGray);
+        RECT rcRight2 = { r.right - bw2, r.top + bw1, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcRight2, hDarkGray);
+    } else {
+        RECT rcTop = { r.left, r.top, r.right, r.top + bw1 }; FillRect(hdc, &rcTop, hBlack);
+        RECT rcLeft = { r.left, r.top, r.left + bw1, r.bottom }; FillRect(hdc, &rcLeft, hBlack);
+        RECT rcBottom = { r.left, r.bottom - bw1, r.right, r.bottom }; FillRect(hdc, &rcBottom, hWhite);
+        RECT rcRight = { r.right - bw1, r.top, r.right, r.bottom }; FillRect(hdc, &rcRight, hWhite);
+
+        RECT rcTop2 = { r.left + bw1, r.top + bw1, r.right - bw1, r.top + bw2 }; FillRect(hdc, &rcTop2, hDarkGray);
+        RECT rcLeft2 = { r.left + bw1, r.top + bw1, r.left + bw2, r.bottom - bw1 }; FillRect(hdc, &rcLeft2, hDarkGray);
+        RECT rcBottom2 = { r.left + bw1, r.bottom - bw2, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcBottom2, hLightGray);
+        RECT rcRight2 = { r.right - bw2, r.top + bw1, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcRight2, hLightGray);
+    }
+    DeleteObject(hWhite); DeleteObject(hDarkGray); DeleteObject(hBlack); DeleteObject(hLightGray);
+}
+
+LRESULT CALLBACK ClientEdgeSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (msg == WM_NCCALCSIZE) {
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        if (wParam == TRUE && (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_CLIENTEDGE)) {
+            NCCALCSIZE_PARAMS* params = (NCCALCSIZE_PARAMS*)lParam;
+            HDC hdc = GetWindowDC(hWnd);
+            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            ReleaseDC(hWnd, hdc);
+            int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
+            int offset = bw - GetSystemMetrics(SM_CXEDGE);
+            if (offset > 0) {
+                params->rgrc[0].left += offset;
+                params->rgrc[0].top += offset;
+                params->rgrc[0].right -= offset;
+                params->rgrc[0].bottom -= offset;
+            }
+        }
+        return res;
+    } else if (msg == WM_NCPAINT) {
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        if (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_CLIENTEDGE) {
+            HDC hdc = GetWindowDC(hWnd);
+            RECT rcWin; GetWindowRect(hWnd, &rcWin);
+            RECT rc = {0, 0, rcWin.right - rcWin.left, rcWin.bottom - rcWin.top};
+            DrawScaledClientEdge(hdc, rc);
+            ReleaseDC(hWnd, hdc);
+        }
+        return res;
+    } else if (msg == WM_PAINT && uIdSubclass == 999) { // 999 means it's a combobox or similar without NC area
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        HDC hdc = GetWindowDC(hWnd);
+        RECT rcWin; GetWindowRect(hWnd, &rcWin);
+        RECT rc = {0, 0, rcWin.right - rcWin.left, rcWin.bottom - rcWin.top};
+        DrawScaledClientEdge(hdc, rc);
+        ReleaseDC(hWnd, hdc);
+        return res;
+    }
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
+}
+
 bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult);
 extern LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
 
@@ -3599,46 +3697,13 @@ LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
         isPressed = (SendMessage(hWnd, BM_GETSTATE, 0, 0) & BST_PUSHED) != 0;
 
         UINT edge = (isPressed || isChecked) ? EDGE_SUNKEN : EDGE_RAISED;
-        int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
-        int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
-        int bw2 = bw1 * 2;
-
-        HBRUSH hWhite = CreateSolidBrush(RGB(255, 255, 255));
-        HBRUSH hDarkGray = CreateSolidBrush(RGB(128, 128, 128));
-        HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
-        HBRUSH hLightGray = CreateSolidBrush(RGB(223, 223, 223));
-
-        RECT r = rc;
-        if (edge == EDGE_RAISED) {
-            RECT rcTop = { r.left, r.top, r.right, r.top + bw1 }; FillRect(hdc, &rcTop, hWhite);
-            RECT rcLeft = { r.left, r.top, r.left + bw1, r.bottom }; FillRect(hdc, &rcLeft, hWhite);
-            RECT rcBottom = { r.left, r.bottom - bw1, r.right, r.bottom }; FillRect(hdc, &rcBottom, hBlack);
-            RECT rcRight = { r.right - bw1, r.top, r.right, r.bottom }; FillRect(hdc, &rcRight, hBlack);
-            
-            RECT rcTop2 = { r.left + bw1, r.top + bw1, r.right - bw1, r.top + bw2 }; FillRect(hdc, &rcTop2, hLightGray);
-            RECT rcLeft2 = { r.left + bw1, r.top + bw1, r.left + bw2, r.bottom - bw1 }; FillRect(hdc, &rcLeft2, hLightGray);
-            RECT rcBottom2 = { r.left + bw1, r.bottom - bw2, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcBottom2, hDarkGray);
-            RECT rcRight2 = { r.right - bw2, r.top + bw1, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcRight2, hDarkGray);
-        } else {
-            RECT rcTop = { r.left, r.top, r.right, r.top + bw1 }; FillRect(hdc, &rcTop, hBlack);
-            RECT rcLeft = { r.left, r.top, r.left + bw1, r.bottom }; FillRect(hdc, &rcLeft, hBlack);
-            RECT rcBottom = { r.left, r.bottom - bw1, r.right, r.bottom }; FillRect(hdc, &rcBottom, hWhite);
-            RECT rcRight = { r.right - bw1, r.top, r.right, r.bottom }; FillRect(hdc, &rcRight, hWhite);
-
-            RECT rcTop2 = { r.left + bw1, r.top + bw1, r.right - bw1, r.top + bw2 }; FillRect(hdc, &rcTop2, hDarkGray);
-            RECT rcLeft2 = { r.left + bw1, r.top + bw1, r.left + bw2, r.bottom - bw1 }; FillRect(hdc, &rcLeft2, hDarkGray);
-            RECT rcBottom2 = { r.left + bw1, r.bottom - bw2, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcBottom2, hLightGray);
-            RECT rcRight2 = { r.right - bw2, r.top + bw1, r.right - bw1, r.bottom - bw1 }; FillRect(hdc, &rcRight2, hLightGray);
-        }
-
-        DeleteObject(hWhite);
-        DeleteObject(hDarkGray);
-        DeleteObject(hBlack);
-        DeleteObject(hLightGray);
+        DrawScaledButtonBorder(hdc, rc, edge);
 
         if (GetFocus() == hWnd) {
+            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
             RECT rcFocus = rc;
-            InflateRect(&rcFocus, -bw2 * 2, -bw2 * 2);
+            InflateRect(&rcFocus, -bw * 2, -bw * 2);
             DrawFocusRect(hdc, &rcFocus);
         }
 
@@ -3652,8 +3717,10 @@ LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
 
             RECT rcText = rc;
             if (isPressed || isChecked) {
-                rcText.left += bw2;
-                rcText.top += bw2;
+                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+                rcText.left += bw1 * 2;
+                rcText.top += bw1 * 2;
             }
             DrawTextW(hdc, text, -1, &rcText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
             SelectObject(hdc, hOld);
@@ -3687,9 +3754,13 @@ LRESULT CALLBACK ComboBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             GetWindowRect(hWnd, &rc);
             int width = rc.right - rc.left;
             int height = rc.bottom - rc.top;
+
+            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+            int bw2 = bw1 * 2;
             
             int btnWidth = GetSystemMetrics(SM_CXVSCROLL);
-            RECT rcBtn = { width - btnWidth - 2, 2, width - 2, height - 2 };
+            RECT rcBtn = { width - btnWidth - bw2, bw2, width - bw2, height - bw2 };
             
             HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
             FillRect(hdc, &rcBtn, hBg);
@@ -3697,21 +3768,22 @@ LRESULT CALLBACK ComboBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             
             bool isPressed = (SendMessage(hWnd, CB_GETDROPPEDSTATE, 0, 0) != 0);
             
-            DrawEdge(hdc, &rcBtn, isPressed ? EDGE_SUNKEN : EDGE_RAISED, BF_RECT);
+            DrawScaledButtonBorder(hdc, rcBtn, isPressed ? EDGE_SUNKEN : EDGE_RAISED);
             
-            int cx = rcBtn.left + btnWidth / 2;
-            int cy = rcBtn.top + (height - 4) / 2;
-            if (isPressed) { cx++; cy++; }
+            int cx = rcBtn.left + (rcBtn.right - rcBtn.left) / 2;
+            int cy = rcBtn.top + (rcBtn.bottom - rcBtn.top) / 2;
+            if (isPressed) { cx += bw1; cy += bw1; }
             
-            HPEN hBlack = CreatePen(PS_SOLID, 1, RGB(0,0,0));
+            int s = bw1;
+            HPEN hBlack = CreatePen(PS_SOLID, s, RGB(0,0,0));
             HBRUSH hBlackBrush = CreateSolidBrush(RGB(0,0,0));
             HPEN hOldP = (HPEN)SelectObject(hdc, hBlack);
             HBRUSH hOldB = (HBRUSH)SelectObject(hdc, hBlackBrush);
             
             POINT pts[3] = {
-                { cx - 2, cy - 1 },
-                { cx + 3, cy - 1 },
-                { cx, cy + 2 }
+                { cx - 3*s, cy - 1*s },
+                { cx + 3*s, cy - 1*s },
+                { cx, cy + 2*s }
             };
             Polygon(hdc, pts, 3);
             
@@ -3853,6 +3925,10 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         SetWindowTheme(g_hUserList, L" ", L" ");
         SetWindowTheme(g_hUserListHeader, L" ", L" ");
         
+        SetWindowSubclass(g_hLog, ClientEdgeSubclassProc, 0, 0);
+        SetWindowSubclass(g_hUserList, ClientEdgeSubclassProc, 0, 0);
+        SetWindowSubclass(g_hUserListHeader, ClientEdgeSubclassProc, 0, 0);
+
         SetWindowSubclass(g_hLog, ScrollbarColorProc, 0, 0);
         SetWindowSubclass(g_hUserList, ScrollbarColorProc, 0, 0);
 
@@ -3928,7 +4004,9 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         SetWindowSubclass(g_hBtnU, ClassicButtonProc, 0, 0);
         SetWindowSubclass(g_hBtnVideo, ClassicButtonProc, 0, 0);
         SendMessage(g_hComboSize, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        SetWindowSubclass(g_hComboSize, ClientEdgeSubclassProc, 999, 0);
         SetWindowSubclass(g_hComboSize, ComboBoxSubclassProc, 0, 0);
+        SetWindowSubclass(g_hInput, ClientEdgeSubclassProc, 0, 0);
 
         UpdateInputFormat();
         SetWindowTitle(hWnd);
@@ -3983,11 +4061,13 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 DeleteObject(hFaceBrush);
             }
             UINT edge = ((lpdis->itemState & ODS_SELECTED) || g_isVoiceActive) ? EDGE_SUNKEN : EDGE_RAISED;
-            DrawEdge(hdc, &rc, edge, BF_RECT);
+            DrawScaledButtonBorder(hdc, rc, edge);
             
             if (lpdis->itemState & ODS_FOCUS) {
+                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
                 RECT rcFocus = rc;
-                InflateRect(&rcFocus, -4, -4);
+                InflateRect(&rcFocus, -bw*2, -bw*2);
                 DrawFocusRect(hdc, &rcFocus);
             }
 
@@ -4028,9 +4108,11 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             FillRect(hdc, &rc, hFaceBrush);
             DeleteObject(hFaceBrush);
             UINT edge = (lpdis->itemState & ODS_SELECTED) ? EDGE_SUNKEN : EDGE_RAISED;
-            DrawEdge(hdc, &rc, edge, BF_RECT);
+            DrawScaledButtonBorder(hdc, rc, edge);
             if (lpdis->itemState & ODS_FOCUS) {
-                RECT rcFocus = rc; InflateRect(&rcFocus, -4, -4); DrawFocusRect(hdc, &rcFocus);
+                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
+                RECT rcFocus = rc; InflateRect(&rcFocus, -bw*2, -bw*2); DrawFocusRect(hdc, &rcFocus);
             }
 
             GdiFlush(); // Ensure GDI background is drawn before GDI+ draws on top
@@ -4075,9 +4157,11 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             FillRect(hdc, &rc, hFaceBrush);
             DeleteObject(hFaceBrush);
             UINT edge = (lpdis->itemState & ODS_SELECTED) ? EDGE_SUNKEN : EDGE_RAISED;
-            DrawEdge(hdc, &rc, edge, BF_RECT);
+            DrawScaledButtonBorder(hdc, rc, edge);
             if (lpdis->itemState & ODS_FOCUS) {
-                RECT rcFocus = rc; InflateRect(&rcFocus, -4, -4); DrawFocusRect(hdc, &rcFocus);
+                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
+                RECT rcFocus = rc; InflateRect(&rcFocus, -bw*2, -bw*2); DrawFocusRect(hdc, &rcFocus);
             }
             
             GdiFlush(); // Ensure GDI background is drawn before GDI+ draws on top
