@@ -3082,7 +3082,7 @@ void SetWindowTitle(HWND hWnd) {
 }
 
 void AppendLog(const MsgData& data) {
-    if (!data.user.empty()) {
+    if (!data.user.empty() && !data.isSystemEvent) {
         {
             std::lock_guard<std::mutex> lock(g_ignoredMutex);
             if (g_ignoredUsers.count(data.user) > 0) return;
