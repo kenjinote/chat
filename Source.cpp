@@ -135,6 +135,9 @@ std::map<std::wstring, int> g_publicRooms;
 std::wstring g_currentRoom = L"";
 bool g_isPrivateRoom = false;
 
+#define WM_USER_ROOM_LIST_UPDATED (WM_USER + 2)
+HWND g_hMoveRoomDlg = NULL;
+
 ID2D1Factory* g_pD2DFactory = nullptr;
 IDWriteFactory* g_pDWriteFactory = nullptr;
 
@@ -2876,6 +2879,12 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         SendMessage(hBtnOK, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hBtnCancel, WM_SETFONT, (WPARAM)hFont, FALSE);
         SetFocus(hEdit);
+
+        g_hMoveRoomDlg = hWnd;
+        json11::Json getRoomsMsg = json11::Json::object { {"type", "get_rooms"} };
+        std::string str = getRoomsMsg.dump() + "\n";
+        send(g_tcpSocket, str.c_str(), (int)str.length(), 0);
+
         return 0;
     }
     case WM_COMMAND: {
@@ -2966,6 +2975,38 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         g_moveBoxOK = false;
         DestroyWindow(hWnd);
         return 0;
+    case WM_DESTROY: {
+        if (g_hMoveRoomDlg == hWnd) {
+            g_hMoveRoomDlg = NULL;
+            if (g_tcpSocket != INVALID_SOCKET) {
+                json11::Json closeRoomsMsg = json11::Json::object { {"type", "close_rooms"} };
+                std::string str = closeRoomsMsg.dump() + "\n";
+                send(g_tcpSocket, str.c_str(), (int)str.length(), 0);
+            }
+        }
+        return 0;
+    }
+    case WM_USER_ROOM_LIST_UPDATED: {
+        HWND hEdit = GetDlgItem(hWnd, 101);
+        HWND hList = GetDlgItem(hWnd, 102);
+        int len = GetWindowTextLength(hEdit);
+        std::vector<WCHAR> buf(len + 1);
+        GetWindowText(hEdit, buf.data(), len + 1);
+        std::wstring search = buf.data();
+        
+        SendMessage(hList, LB_RESETCONTENT, 0, 0);
+        s_roomNames.clear();
+        for (const auto& r : g_publicRooms) {
+            if (r.second <= 0) continue;
+            if (search.empty() || r.first.find(search) != std::wstring::npos) {
+                std::wstring display = r.first + L" (" + std::to_wstring(r.second) + L")";
+                int idx = (int)SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)display.c_str());
+                s_roomNames.push_back(r.first);
+                SendMessage(hList, LB_SETITEMDATA, idx, (LPARAM)(s_roomNames.size() - 1));
+            }
+        }
+        return 0;
+    }
     }
     return DefWindowProc(hWnd, msg, wParam, lParam);
 }
@@ -3301,15 +3342,6 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                                 }
                             }
-                            else if (type == "announce") {
-                                std::string rmStr = json["rm"].string_value();
-                                if (!rmStr.empty()) {
-                                    std::wstring wrm = a2w(rmStr.c_str());
-                                    if (g_publicRooms.find(wrm) == g_publicRooms.end()) {
-                                        g_publicRooms[wrm] = 1;
-                                    }
-                                }
-                            }
                             else if (type == "room_list") {
                                 g_publicRooms.clear();
                                 auto arr = json["rooms"].array_items();
@@ -3317,6 +3349,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     std::string name = item["name"].string_value();
                                     int count = item["count"].int_value();
                                     g_publicRooms[a2w(name.c_str())] = count;
+                                }
+                                if (g_hMoveRoomDlg && IsWindow(g_hMoveRoomDlg)) {
+                                    PostMessage(g_hMoveRoomDlg, WM_USER_ROOM_LIST_UPDATED, 0, 0);
                                 }
                             }
                         }
