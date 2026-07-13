@@ -4026,10 +4026,10 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
     case WM_TIMER: {
         if (wParam == 1 && pUser && g_sock != INVALID_SOCKET) {
             std::string targetA;
-            int size_needed = WideCharToMultiByte(CP_UTF8, 0, pUser->c_str(), -1, NULL, 0, NULL, NULL);
+            int size_needed = WideCharToMultiByte(CP_UTF8, 0, pUser->c_str(), pUser->length(), NULL, 0, NULL, NULL);
             if (size_needed > 0) {
-                targetA.resize(size_needed - 1);
-                WideCharToMultiByte(CP_UTF8, 0, pUser->c_str(), -1, &targetA[0], size_needed - 1, NULL, NULL);
+                targetA.resize(size_needed);
+                WideCharToMultiByte(CP_UTF8, 0, pUser->c_str(), pUser->length(), &targetA[0], size_needed, NULL, NULL);
             }
             
             MediaHeader hdr = {0};
