@@ -430,7 +430,12 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
     pFrame->SetSize(width, height);
     WICPixelFormatGUID format = GUID_WICPixelFormat24bppBGR;
     pFrame->SetPixelFormat(&format);
-    pFrame->WriteSource(pWicBitmap, NULL);
+    IWICFormatConverter* pConverter = NULL;
+    if (SUCCEEDED(g_pWICFactory->CreateFormatConverter(&pConverter))) {
+        pConverter->Initialize(pWicBitmap, GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, NULL, 0.0f, WICBitmapPaletteTypeCustom);
+        pFrame->WriteSource(pConverter, NULL);
+        pConverter->Release();
+    }
     pFrame->Commit();
     pEncoder->Commit();
     
@@ -4085,7 +4090,7 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         if (!g_videoRts[hwnd]) {
             D2D1_RENDER_TARGET_PROPERTIES props = D2D1::RenderTargetProperties(
                 D2D1_RENDER_TARGET_TYPE_DEFAULT,
-                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED));
+                D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE));
             g_pD2DFactory->CreateHwndRenderTarget(props, D2D1::HwndRenderTargetProperties(hwnd, D2D1::SizeU(rc.right, rc.bottom)), &g_videoRts[hwnd]);
         }
         
@@ -4100,7 +4105,7 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                 if (!pixels.empty()) {
                     ID2D1Bitmap* pBitmap = NULL;
                     pRT->CreateBitmap(D2D1::SizeU(sz.first, sz.second), pixels.data(), sz.first * 4, 
-                        D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_PREMULTIPLIED)), &pBitmap);
+                        D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)), &pBitmap);
                     if (pBitmap) {
                         float vW = (float)sz.first;
                         float vH = (float)sz.second;
