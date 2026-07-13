@@ -814,7 +814,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     IDWriteTextFormat* pFormat = nullptr;
                     HRESULT hr = g_pDWriteFactory->CreateTextFormat(
                         L"MS UI Gothic", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                        12.0f * 1.5f, L"ja-JP", &pFormat); // MS UI Gothic
+                        9.0f * 1.5f, L"ja-JP", &pFormat); // MS UI Gothic
                         
                     if (SUCCEEDED(hr) && pFormat) {
                         std::wstring fullText;
@@ -1232,7 +1232,7 @@ IDWriteTextLayout* CreateInputLayout(HWND hWnd) {
     bool i = SendMessage(g_hBtnI, BM_GETCHECK, 0, 0) == BST_CHECKED;
     
     int sizeIndex = (int)SendMessage(g_hComboSize, CB_GETCURSEL, 0, 0);
-    int tsize = 12;
+    int tsize = 10;
     if (sizeIndex != CB_ERR) {
         WCHAR szText[32];
         SendMessage(g_hComboSize, CB_GETLBTEXT, sizeIndex, (LPARAM)szText);
@@ -3151,7 +3151,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 pData->b = json["b"].bool_value();
                                 pData->i = json["i"].bool_value();
                                 pData->u = json["u"].bool_value();
-                                pData->size = json["sz"].is_number() ? json["sz"].int_value() : 12;
+                                pData->size = json["sz"].is_number() ? json["sz"].int_value() : 10;
                                 pData->color = json["clr"].is_number() ? json["clr"].int_value() : RGB(0,0,0);
                                 PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                             }
@@ -3671,6 +3671,39 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             g_username = newName;
                             SaveSettings();
                             
+                            if (g_videoWindows.count(oldName)) {
+                                HWND hVid = g_videoWindows[oldName];
+                                g_videoWindows.erase(oldName);
+                                if (IsWindow(hVid)) {
+                                    g_videoWindows[newName] = hVid;
+                                    SetWindowTextW(hVid, newName.c_str());
+                                    std::wstring* pUser = (std::wstring*)GetWindowLongPtr(hVid, GWLP_USERDATA);
+                                    if (pUser) *pUser = newName;
+                                }
+                            }
+                            {
+                                std::lock_guard<std::mutex> lock(g_videoMutex);
+                                if (g_videoSizeMap.count(oldName)) {
+                                    g_videoSizeMap[newName] = g_videoSizeMap[oldName];
+                                    g_videoSizeMap.erase(oldName);
+                                }
+                                if (g_videoPixelsMap.count(oldName)) {
+                                    g_videoPixelsMap[newName] = std::move(g_videoPixelsMap[oldName]);
+                                    g_videoPixelsMap.erase(oldName);
+                                }
+                            }
+                            if (g_videoViewers.count(oldName)) {
+                                g_videoViewers[newName] = std::move(g_videoViewers[oldName]);
+                                g_videoViewers.erase(oldName);
+                            }
+                            {
+                                std::lock_guard<std::mutex> lock(g_streamerMutex);
+                                if (g_videoStreamers.count(oldName)) {
+                                    g_videoStreamers[newName] = g_videoStreamers[oldName];
+                                    g_videoStreamers.erase(oldName);
+                                }
+                            }
+                            
                             int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)oldName.c_str());
                             if (idx != LB_ERR) {
                                 SendMessage(g_hUserList, LB_DELETESTRING, idx, 0);
@@ -3891,7 +3924,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     case WM_GETMINMAXINFO: {
         MINMAXINFO* pmmi = (MINMAXINFO*)lParam;
-        int minClientWidth = Scale(5) * 2 + Scale(456);
+        int minClientWidth = Scale(5) * 2 + Scale(444);
         int minClientHeight = Scale(300);
 
         RECT rc = { 0, 0, minClientWidth, minClientHeight };
@@ -3997,7 +4030,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT,
             0, 0, 0, 0, hWnd, (HMENU)1050, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
-        g_hUserListHeader = CreateWindowEx(WS_EX_CLIENTEDGE, L"STATIC", L"ユーザー一覧 (0)",
+        g_hUserListHeader = CreateWindowEx(WS_EX_CLIENTEDGE, L"STATIC", L"ユーザ一覧 (0)",
             WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
             0, 0, 0, 0, hWnd, (HMENU)1054, ((LPCREATESTRUCT)lParam)->hInstance, 0);
             
@@ -4067,7 +4100,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
         const WCHAR* sizes[] = { L"8", L"9", L"10", L"11", L"12", L"14", L"16", L"18", L"20", L"22", L"24", L"28", L"32" };
         for (auto sz : sizes) SendMessage(g_hComboSize, CB_ADDSTRING, 0, (LPARAM)sz);
-        SendMessage(g_hComboSize, CB_SETCURSEL, 4, 0);
+        SendMessage(g_hComboSize, CB_SETCURSEL, 2, 0);
 
         SendMessage(g_hUserList, WM_SETFONT, (WPARAM)g_hFont, TRUE);
         SendMessage(g_hUserListHeader, WM_SETFONT, (WPARAM)g_hFont, TRUE);
@@ -4122,7 +4155,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
     case WM_MEASUREITEM: {
         LPMEASUREITEMSTRUCT lpmis = (LPMEASUREITEMSTRUCT)lParam;
         if (lpmis->CtlID == 1050) {
-            lpmis->itemHeight = Scale(24);
+            lpmis->itemHeight = Scale(28);
             return TRUE;
         }
         break;
@@ -4466,7 +4499,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 
                 // Antenna
                 Gdiplus::Pen antennaPen(Gdiplus::Color(255, 150, 150, 150), 1.5f);
-                int antBaseX = tvX + (iconSize + Scale(2)) / 2;
+                int antBaseX = tvX + (iconSize + Scale(2)) / 2 + Scale(1);
                 graphics.DrawLine(&antennaPen, antBaseX, tvY, antBaseX - Scale(5), tvY - Scale(6));
                 graphics.DrawLine(&antennaPen, antBaseX, tvY, antBaseX + Scale(5), tvY - Scale(6));
                 
@@ -4506,16 +4539,27 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             if (isIgnored) isVoicing = false;
             
             if (isVoicing) {
-                int micX = rc.right - Scale(8);
-                int micY = cy + Scale(6);
+                float margin = Scale(2);
+                float visTop = rc.top + margin + Scale(1);
+                float visBotForU = rc.bottom - margin - Scale(5);
+                float visH = visBotForU - visTop;
+                float u = visH / 14.0f;
+                float mx = std::round(rc.right - 8.0f * u) + Scale(1);
+                float my = std::round(visTop + 6.0f * u);
                 
-                int micTop = micY - Scale(6);
-                int micBottom = micY + Scale(8);
-                int totalHeight = micBottom - micTop;
-                int fillHeight = (totalHeight * currentVolume) / 100;
-                if (fillHeight > totalHeight) fillHeight = totalHeight;
+                float visBot = visBotForU + Scale(1);
                 
-                Gdiplus::Rect fullMicRect(micX - Scale(6), micTop, Scale(12), totalHeight);
+                float penWidth = (float)Scale(1);
+                if (penWidth < 1.0f) penWidth = 1.0f;
+                
+                float clipTop = visTop - penWidth;
+                float clipBot = visBot + penWidth;
+                float clipH = clipBot - clipTop;
+                
+                float fillHeight = (clipH * currentVolume) / 100.0f;
+                if (fillHeight > clipH) fillHeight = clipH;
+                
+                Gdiplus::RectF fullMicRect(mx - 6*u, clipTop, 12*u, clipH);
                 Gdiplus::LinearGradientBrush linGrBrush(
                     fullMicRect,
                     Gdiplus::Color(255, 255, 0, 0),
@@ -4531,32 +4575,36 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 Gdiplus::REAL positions[] = { 0.0f, 0.3f, 0.6f, 1.0f };
                 linGrBrush.SetInterpolationColors(colors, positions, 4);
                 
-                Gdiplus::Pen gradientPen(&linGrBrush, (Gdiplus::REAL)(Scale(1) * 1.5f));
+                Gdiplus::Pen gradientPen(&linGrBrush, penWidth);
                 
                 bool isSelected = (lpdis->itemState & ODS_SELECTED);
                 Gdiplus::Color baseColor = isSelected ? Gdiplus::Color(255, 255, 255, 255) : Gdiplus::Color(255, 40, 40, 40);
-                Gdiplus::Pen basePen(baseColor, (Gdiplus::REAL)(Scale(1) * 1.5f));
+                Gdiplus::Pen basePen(baseColor, penWidth);
                 Gdiplus::SolidBrush baseBrush(baseColor);
                 
                 auto DrawMic = [&](Gdiplus::Pen* pen, Gdiplus::Brush* brush) {
-                    graphics.FillRectangle(brush, micX - Scale(2), micY - Scale(4), Scale(4), Scale(6));
-                    graphics.FillEllipse(brush, micX - Scale(2), micY - Scale(6), Scale(4), Scale(4));
-                    graphics.FillEllipse(brush, micX - Scale(2), micY, Scale(4), Scale(4));
-                    graphics.DrawArc(pen, micX - Scale(5), micY - Scale(2), Scale(10), Scale(8), 0.0f, 180.0f);
-                    graphics.DrawLine(pen, micX, micY + Scale(6), micX, micY + Scale(8));
-                    graphics.DrawLine(pen, micX - Scale(3), micY + Scale(8), micX + Scale(3), micY + Scale(8));
+                    graphics.FillRectangle(brush, mx - 2*u, my - 4*u, 4*u, 6*u);
+                    graphics.FillEllipse(brush, mx - 2*u, my - 6*u, 4*u, 4*u);
+                    graphics.FillEllipse(brush, mx - 2*u, my, 4*u, 4*u);
+                    
+                    Gdiplus::SmoothingMode oldMode = graphics.GetSmoothingMode();
+                    graphics.SetSmoothingMode(Gdiplus::SmoothingModeNone);
+                    graphics.DrawArc(pen, mx - 4*u, my - 2*u, 8*u, 8*u, 0.0f, 180.0f);
+                    graphics.DrawLine(pen, mx, my + 6*u, mx, visBot);
+                    graphics.DrawLine(pen, mx - 3*u, visBot, mx + 3*u, visBot);
+                    graphics.SetSmoothingMode(oldMode);
                 };
                 
-                int blackHeight = totalHeight - fillHeight;
+                float blackHeight = clipH - fillHeight;
                 if (blackHeight > 0) {
-                    Gdiplus::Rect blackClip(micX - Scale(10), micTop, Scale(20), blackHeight);
+                    Gdiplus::RectF blackClip(mx - 10*u, clipTop, 20*u, blackHeight);
                     graphics.SetClip(blackClip);
                     DrawMic(&basePen, &baseBrush);
                     graphics.ResetClip();
                 }
                 
                 if (fillHeight > 0) {
-                    Gdiplus::Rect gradientClip(micX - Scale(10), micBottom - fillHeight, Scale(20), fillHeight);
+                    Gdiplus::RectF gradientClip(mx - 10*u, clipBot - fillHeight, 20*u, fillHeight);
                     graphics.SetClip(gradientClip);
                     DrawMic(&gradientPen, &linGrBrush);
                     graphics.ResetClip();
@@ -4892,7 +4940,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 if (count != lastCount) {
                     lastCount = count;
                     WCHAR buf[256];
-                    swprintf_s(buf, L"ユーザー一覧 (%d)", count);
+                    swprintf_s(buf, L"ユーザ一覧 (%d)", count);
                     SetWindowText(g_hUserListHeader, buf);
                 }
             }
@@ -5024,10 +5072,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
     Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
+    int minClientWidth = Scale(5) * 2 + Scale(444);
+    int minClientHeight = Scale(300);
+    RECT rcMin = { 0, 0, minClientWidth, minClientHeight };
+    AdjustWindowRectEx(&rcMin, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, FALSE, 0);
+
     HWND hWnd = CreateWindow(
         L"Retro Chat", GetString(IDS_WINDOW_TITLE).c_str(),
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
-        CW_USEDEFAULT, 0, Scale(500), Scale(400),
+        CW_USEDEFAULT, 0, rcMin.right - rcMin.left, rcMin.bottom - rcMin.top,
         0, 0, hInstance, 0);
         
     // SetThemeAppProperties(0);
