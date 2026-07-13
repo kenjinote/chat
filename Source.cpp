@@ -148,6 +148,7 @@ IDWriteFactory* g_pDWriteFactory = nullptr;
 #include <shlwapi.h>
 #include <mutex>
 #include <map>
+#include <wincrypt.h>
 #pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "mf.lib")
 #pragma comment(lib, "mfplat.lib")
@@ -3095,6 +3096,37 @@ LPSTR w2a(LPCWSTR lpszText) {
     return lpszReturnText;
 }
 
+std::string HashRoomName(const std::wstring& roomName) {
+    HCRYPTPROV hProv = 0;
+    HCRYPTHASH hHash = 0;
+    std::string result = "";
+    if (CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) {
+        if (CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash)) {
+            LPSTR utf8Str = w2a(roomName.c_str());
+            if (utf8Str) {
+                if (CryptHashData(hHash, (const BYTE*)utf8Str, (DWORD)strlen(utf8Str), 0)) {
+                    DWORD hashLen = 0;
+                    DWORD cbHashLen = sizeof(DWORD);
+                    if (CryptGetHashParam(hHash, HP_HASHSIZE, (BYTE*)&hashLen, &cbHashLen, 0)) {
+                        std::vector<BYTE> buffer(hashLen);
+                        if (CryptGetHashParam(hHash, HP_HASHVAL, buffer.data(), &hashLen, 0)) {
+                            char hex[3];
+                            for (DWORD i = 0; i < hashLen; i++) {
+                                sprintf_s(hex, "%02x", buffer[i]);
+                                result += hex;
+                            }
+                        }
+                    }
+                }
+                GlobalFree(utf8Str);
+            }
+            CryptDestroyHash(hHash);
+        }
+        CryptReleaseContext(hProv, 0);
+    }
+    return "private_" + result;
+}
+
 void UpdateUserList(const std::wstring& username) {
     int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)username.c_str());
     if (idx == LB_ERR) {
@@ -3316,10 +3348,20 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     g_isServerUdpAddrResolved = false; // Force re-resolve for UDP
     
                                     if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
+                                        std::string finalRoomName;
+                                        if (g_isPrivateRoom) {
+                                            finalRoomName = HashRoomName(g_currentRoom);
+                                        } else {
+                                            LPSTR roomA_ptr = w2a(g_currentRoom.c_str());
+                                            finalRoomName = roomA_ptr;
+                                            GlobalFree(roomA_ptr);
+                                        }
+
                                         json11::Json joinMsg = json11::Json::object {
                                             {"type", "join"},
                                             {"userId", w2a(g_username.c_str())},
-                                            {"roomName", w2a(g_currentRoom.c_str())}
+                                            {"roomName", finalRoomName},
+                                            {"pub", !g_isPrivateRoom}
                                         };
                                         std::string joinStr = joinMsg.dump() + "\n";
                                         send(g_tcpSocket, joinStr.c_str(), (int)joinStr.length(), 0);
@@ -3499,10 +3541,20 @@ DWORD WINAPI RecvThread(LPVOID param) {
                     
                     if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
                         g_isServerUdpAddrResolved = false;
+                        std::string finalRoomName;
+                        if (g_isPrivateRoom) {
+                            finalRoomName = HashRoomName(g_currentRoom);
+                        } else {
+                            LPSTR roomA_ptr = w2a(g_currentRoom.c_str());
+                            finalRoomName = roomA_ptr;
+                            GlobalFree(roomA_ptr);
+                        }
+
                         json11::Json joinMsg = json11::Json::object {
                             {"type", "join"},
                             {"userId", w2a(g_username.c_str())},
-                            {"roomName", w2a(g_currentRoom.c_str())}
+                            {"roomName", finalRoomName},
+                            {"pub", !g_isPrivateRoom}
                         };
                         std::string joinStr = joinMsg.dump() + "\n";
                         send(g_tcpSocket, joinStr.c_str(), (int)joinStr.length(), 0);
@@ -3523,14 +3575,21 @@ void UpdateInputFormat() {
 
 void SendLeaveRequest(const std::wstring& roomName) {
     LPSTR userA_ptr = w2a(g_username.c_str());
-    LPSTR roomA_ptr = w2a(roomName.c_str());
+    std::string finalRoomName;
+    if (g_isPrivateRoom) {
+        finalRoomName = HashRoomName(roomName);
+    } else {
+        LPSTR roomA_ptr = w2a(roomName.c_str());
+        finalRoomName = roomA_ptr;
+        GlobalFree(roomA_ptr);
+    }
+    
     json11::Json leaveMsg = json11::Json::object {
         {"type", "leave"},
         {"userId", std::string(userA_ptr)},
-        {"roomName", std::string(roomA_ptr)}
+        {"roomName", finalRoomName}
     };
     GlobalFree(userA_ptr);
-    GlobalFree(roomA_ptr);
     
     std::string leaveStr = leaveMsg.dump() + "\n";
     if (g_tcpSocket != INVALID_SOCKET) {
@@ -3538,16 +3597,24 @@ void SendLeaveRequest(const std::wstring& roomName) {
     }
 }
 
-void SendJoinRequest(const std::wstring& roomName) {
+void SendJoinRequest(const std::wstring& roomName, bool isPrivate = false) {
     LPSTR userA_ptr = w2a(g_username.c_str());
-    LPSTR roomA_ptr = w2a(roomName.c_str());
+    std::string finalRoomName;
+    if (isPrivate) {
+        finalRoomName = HashRoomName(roomName);
+    } else {
+        LPSTR roomA_ptr = w2a(roomName.c_str());
+        finalRoomName = roomA_ptr;
+        GlobalFree(roomA_ptr);
+    }
+    
     json11::Json joinMsg = json11::Json::object {
         {"type", "join"},
         {"userId", std::string(userA_ptr)},
-        {"roomName", std::string(roomA_ptr)}
+        {"roomName", finalRoomName},
+        {"pub", !isPrivate}
     };
     GlobalFree(userA_ptr);
-    GlobalFree(roomA_ptr);
     
     std::string joinStr = joinMsg.dump() + "\n";
     if (g_tcpSocket != INVALID_SOCKET) {
@@ -3821,7 +3888,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             }
                             UpdateUserList(newName);
                             
-                            SendJoinRequest(g_currentRoom);
+                            SendJoinRequest(g_currentRoom, g_isPrivateRoom);
                         }
                     }
                 } else {
@@ -3920,7 +3987,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             g_videoStreamers.erase(oldName);
                         }
                         UpdateUserList(newName);
-                        SendJoinRequest(g_currentRoom);
+                        SendJoinRequest(g_currentRoom, g_isPrivateRoom);
                     }
                 }
             }
@@ -4304,7 +4371,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
         // Send initial join after all UI controls are fully created
         EnableWindow(g_hSendBtn, FALSE);
-        SendJoinRequest(g_currentRoom);
+        SendJoinRequest(g_currentRoom, g_isPrivateRoom);
         CreateThread(0, 0, RecvThread, hWnd, 0, 0);
         SetTimer(hWnd, 1, 3000, NULL);
         SetTimer(hWnd, 2, 100, NULL);
@@ -5040,7 +5107,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 }
                 g_videoWindows.clear();
 
-                SendJoinRequest(newRoom);
+                SendJoinRequest(newRoom, isPrivate);
                 g_currentRoom = newRoom;
                 g_isPrivateRoom = isPrivate;
                 if (!isPrivate) {
@@ -5168,7 +5235,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
     case WM_REVERT_ROOM: {
         SendLeaveRequest(g_currentRoom);
         g_currentRoom = GetString(IDS_LOBBY);
-        SendJoinRequest(g_currentRoom);
+        g_isPrivateRoom = false;
+        SendJoinRequest(g_currentRoom, g_isPrivateRoom);
         ClearLogAndUsers();
         SetWindowTitle(hWnd);
         MsgData sysMsg;
