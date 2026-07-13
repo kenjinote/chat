@@ -3789,7 +3789,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         vbuf.lastUpdate = GetTickCount();
                         vbuf.fragments[fragIdx].assign(udpBuf + sizeof(MediaHeader), udpBuf + sizeof(MediaHeader) + len);
                         
-                        if (mhdr->flags & 2) { 
+                        if (mhdr->flags & 1) { 
                             vbuf.totalFragments = fragIdx + 1;
                         }
                         
@@ -4177,7 +4177,10 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                         std::wstring newName;
                         if (ShowChangeNameDialog(GetParent(hwnd), newName) && !newName.empty() && newName != g_username) {
                             g_username = newName;
+                            g_userNames[g_userId] = g_username;
                             SaveSettings();
+                            SortUserList();
+                            InvalidateRect(hwnd, NULL, TRUE);
                             SendRenameRequest();
                         }
                     }
@@ -4267,7 +4270,10 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     std::wstring newName;
                     if (ShowChangeNameDialog(GetParent(hwnd), newName) && !newName.empty() && newName != g_username) {
                         g_username = newName;
+                        g_userNames[g_userId] = g_username;
                         SaveSettings();
+                        SortUserList();
+                        InvalidateRect(hwnd, NULL, TRUE);
                         SendRenameRequest();
                     }
                 }
