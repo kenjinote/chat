@@ -572,7 +572,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         QueryPerformanceCounter(&current);
                     } while (current.QuadPart - start.QuadPart < delay_counts);
                 }
-                DecodeJPEG(jpegData, g_username);
+                DecodeJPEG(jpegData, g_userId);
             }
             pBuffer->Unlock();
             pBuffer->Release();
