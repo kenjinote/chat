@@ -496,6 +496,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     LARGE_INTEGER start, current;
                     QueryPerformanceCounter(&start);
                     do {
+                        Sleep(0);
                         QueryPerformanceCounter(&current);
                     } while (current.QuadPart - start.QuadPart < delay_counts);
                 }
@@ -666,6 +667,17 @@ float g_logTotalHeight = 0.0f;
 bool g_autoScroll = true;
 
 std::wstring g_inputText;
+
+bool g_isRoomJoined = false;
+void UpdateSendBtnState() {
+    if (g_hSendBtn && IsWindow(g_hSendBtn)) {
+        bool shouldEnable = g_isRoomJoined && (g_inputText.length() > 0);
+        bool isEnabled = (IsWindowEnabled(g_hSendBtn) != FALSE);
+        if (isEnabled != shouldEnable) {
+            EnableWindow(g_hSendBtn, shouldEnable);
+        }
+    }
+}
 int g_caretPos = 0;
 int g_anchorPos = 0;
 bool g_caretVisible = true;
@@ -1380,6 +1392,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         InvalidateRect(hWnd, NULL, FALSE);
         break;
     case WM_PAINT: {
+        UpdateSendBtnState();
         PAINTSTRUCT ps;
         BeginPaint(hWnd, &ps);
         
@@ -1616,7 +1629,9 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 }
             }
         } else if (wParam == VK_RETURN) {
-            SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(1001, BN_CLICKED), 0);
+            if (IsWindowEnabled(g_hSendBtn)) {
+                SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(1001, BN_CLICKED), 0);
+            }
         } else if (wParam == 'V' && GetKeyState(VK_CONTROL) < 0) {
             SendMessage(hWnd, WM_PASTE, 0, 0);
         } else if (wParam == 'C' && GetKeyState(VK_CONTROL) < 0) {
@@ -1906,8 +1921,8 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         HDC hdcStatic = (HDC)wParam;
         int id = GetDlgCtrlID((HWND)lParam);
         if (id == 1054) {
-            SetBkColor(hdcStatic, RGB(192, 230, 192));
-            static HBRUSH hbrHeader = CreateSolidBrush(RGB(192, 230, 192));
+            SetBkColor(hdcStatic, RGB(192, 192, 192));
+            static HBRUSH hbrHeader = CreateSolidBrush(RGB(192, 192, 192));
             *pResult = (LRESULT)hbrHeader;
             return true;
         }
@@ -3182,6 +3197,18 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)g_username.c_str());
                                 }
                                 SortUserList();
+                                
+                                g_isRoomJoined = true;
+                                UpdateSendBtnState();
+                                
+                                MsgData* pData = new MsgData();
+                                pData->user = g_username;
+                                pData->msg = GetString(IDS_ENTERED);
+                                pData->b = false; pData->i = false; pData->u = false;
+                                pData->size = 9;
+                                pData->color = RGB(128, 128, 128);
+                                pData->isSystemEvent = true;
+                                PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                             }
                             else if (type == "join") {
                                 std::string uid = json["userId"].string_value();
@@ -3344,7 +3371,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 taskData->jpegData.insert(taskData->jpegData.end(), vbuf.fragments[i].begin(), vbuf.fragments[i].end());
                             }
                             QueueUserWorkItem(DecodeTaskProc, taskData, WT_EXECUTEDEFAULT);
-                            g_videoBuffers[wname].clear();
+                            g_videoBuffers[wname].erase(seq);
                         }
                         
                         // Cleanup old incomplete frames
@@ -3562,7 +3589,8 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             }
             WCHAR viewBuf[256];
             swprintf_s(viewBuf, GetString(IDS_VIEWING_COUNT).c_str(), count);
-            std::wstring title = *pUser + viewBuf;
+            std::wstring dispName = pUser->substr(0, pUser->find(L'#'));
+            std::wstring title = dispName + viewBuf;
             SetWindowTextW(hwnd, title.c_str());
         }
         return 0;
@@ -3654,8 +3682,9 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                         } else {
                             g_isWebcamActive = true;
                             if (!g_videoWindows[g_username] || !IsWindow(g_videoWindows[g_username])) {
-                                HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", g_username.c_str(),
-                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(640), Scale(480), NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_username.c_str());
+                                std::wstring titleName = g_username.substr(0, g_username.find(L'#'));
+                                HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(),
+                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_username.c_str());
                                 ApplyClassicStyle(hVid);
                                 g_videoWindows[g_username] = hVid;
                             } else {
@@ -3676,7 +3705,8 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                                 g_videoWindows.erase(oldName);
                                 if (IsWindow(hVid)) {
                                     g_videoWindows[newName] = hVid;
-                                    SetWindowTextW(hVid, newName.c_str());
+                                    std::wstring titleName = newName.substr(0, newName.find(L'#'));
+                                    SetWindowTextW(hVid, titleName.c_str());
                                     std::wstring* pUser = (std::wstring*)GetWindowLongPtr(hVid, GWLP_USERDATA);
                                     if (pUser) *pUser = newName;
                                 }
@@ -3733,8 +3763,9 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     DestroyMenu(hMenu);
                     if (cmd == 2 && hasStreamer) {
                         if (!g_videoWindows[clickedUser] || !IsWindow(g_videoWindows[clickedUser])) {
-                            HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", clickedUser.c_str(),
-                                WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(640), Scale(480), NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
+                            std::wstring titleName = clickedUser.substr(0, clickedUser.find(L'#'));
+                            HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(),
+                                WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
                             ApplyClassicStyle(hVid);
                             g_videoWindows[clickedUser] = hVid;
                         } else {
@@ -3782,6 +3813,39 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
             }
         }
         return 0;
+    } else if (msg == WM_LBUTTONDBLCLK) {
+        POINT pt = { LOWORD(lParam), HIWORD(lParam) };
+        LRESULT res = SendMessage(hwnd, LB_ITEMFROMPOINT, 0, MAKELPARAM(pt.x, pt.y));
+        if (HIWORD(res) == 0) {
+            int item = LOWORD(res);
+            int len = (int)SendMessage(hwnd, LB_GETTEXTLEN, item, 0);
+            if (len != LB_ERR && len >= 0) {
+                std::vector<WCHAR> buf(len + 1, 0);
+                SendMessage(hwnd, LB_GETTEXT, item, (LPARAM)buf.data());
+                std::wstring clickedUser(buf.data());
+                if (clickedUser == g_username) {
+                    std::wstring newName;
+                    if (ShowChangeNameDialog(GetParent(hwnd), newName) && !newName.empty() && newName != g_username) {
+                        std::wstring oldName = g_username;
+                        SendLeaveRequest(g_currentRoom);
+                        g_username = newName;
+                        if (g_videoWindows[oldName]) {
+                            g_videoWindows[newName] = g_videoWindows[oldName];
+                            g_videoWindows.erase(oldName);
+                            SetWindowText(g_videoWindows[newName], newName.substr(0, newName.find(L'#')).c_str());
+                        }
+                        if (g_videoStreamers.count(oldName) > 0) {
+                            g_videoStreamers[newName] = g_videoStreamers[oldName];
+                            g_videoStreamers.erase(oldName);
+                        }
+                        UpdateUserList(newName);
+                        SendJoinRequest(g_currentRoom);
+                    }
+                }
+            }
+        }
+        // Let the default listbox procedure handle the selection first, then we did our logic.
+        // Actually, CallWindowProc will be called below.
     }
     return CallWindowProc(g_oldListProc, hwnd, msg, wParam, lParam);
 }
@@ -3821,7 +3885,6 @@ LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
         GetWindowText(hWnd, text, 256);
         if (wcslen(text) > 0) {
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(0, 0, 0));
             HFONT hFont = (HFONT)SendMessage(hWnd, WM_GETFONT, 0, 0);
             HFONT hOld = (HFONT)SelectObject(hdc, hFont);
 
@@ -3832,7 +3895,18 @@ LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
                 rcText.left += bw1 * 2;
                 rcText.top += bw1 * 2;
             }
-            DrawTextW(hdc, text, -1, &rcText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+            if (!IsWindowEnabled(hWnd)) {
+                RECT rcShadow = rcText;
+                rcShadow.left += 1; rcShadow.top += 1; rcShadow.right += 1; rcShadow.bottom += 1;
+                SetTextColor(hdc, RGB(255, 255, 255));
+                DrawTextW(hdc, text, -1, &rcShadow, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                SetTextColor(hdc, RGB(128, 128, 128));
+                DrawTextW(hdc, text, -1, &rcText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            } else {
+                SetTextColor(hdc, RGB(0, 0, 0));
+                DrawTextW(hdc, text, -1, &rcText, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            }
             SelectObject(hdc, hOld);
         }
 
@@ -3845,7 +3919,7 @@ LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
     else if (msg == BM_SETSTATE || msg == BM_SETCHECK || 
              msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_LBUTTONDBLCLK ||
              msg == WM_MOUSEMOVE || msg == WM_MOUSELEAVE || 
-             msg == WM_SETFOCUS || msg == WM_KILLFOCUS) {
+             msg == WM_SETFOCUS || msg == WM_KILLFOCUS || msg == WM_ENABLE) {
         LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
         InvalidateRect(hWnd, NULL, FALSE);
         UpdateWindow(hWnd);
@@ -4111,10 +4185,15 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         SendMessage(g_hBtnU, WM_SETFONT, (WPARAM)g_hFontU_btn, TRUE);
         SendMessage(g_hBtnVideo, WM_SETFONT, (WPARAM)g_hFont, TRUE);
         
+        SetWindowTheme(g_hSendBtn, L" ", L" ");
         SetWindowSubclass(g_hSendBtn, ClassicButtonProc, 0, 0);
+        SetWindowTheme(g_hBtnB, L" ", L" ");
         SetWindowSubclass(g_hBtnB, ClassicButtonProc, 0, 0);
+        SetWindowTheme(g_hBtnI, L" ", L" ");
         SetWindowSubclass(g_hBtnI, ClassicButtonProc, 0, 0);
+        SetWindowTheme(g_hBtnU, L" ", L" ");
         SetWindowSubclass(g_hBtnU, ClassicButtonProc, 0, 0);
+        SetWindowTheme(g_hBtnVideo, L" ", L" ");
         SetWindowSubclass(g_hBtnVideo, ClassicButtonProc, 0, 0);
         SendMessage(g_hComboSize, WM_SETFONT, (WPARAM)g_hFontCombo, TRUE);
         SetWindowTheme(g_hComboSize, L" ", L" ");
@@ -4143,6 +4222,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         AppendLog(sysMsg);
 
         // Send initial join after all UI controls are fully created
+        EnableWindow(g_hSendBtn, FALSE);
         SendJoinRequest(g_currentRoom);
         CreateThread(0, 0, RecvThread, hWnd, 0, 0);
         SetTimer(hWnd, 1, 3000, NULL);
