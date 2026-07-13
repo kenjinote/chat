@@ -3794,7 +3794,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         vbuf.lastUpdate = GetTickCount();
                         vbuf.fragments[fragIdx].assign(udpBuf + sizeof(MediaHeader), udpBuf + sizeof(MediaHeader) + len);
                         
-                        if (mhdr->flags & 1) { 
+                        if (mhdr->flags & 2) { 
                             vbuf.totalFragments = fragIdx + 1;
                         }
                         
