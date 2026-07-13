@@ -4068,9 +4068,10 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             
             WCHAR viewBuf[256];
             swprintf_s(viewBuf, GetString(IDS_VIEWING_COUNT).c_str(), count);
-            std::wstring dispName = pUser->substr(0, pUser->find(L'#'));
+            std::wstring dispName = *pUser;
             if (g_userNames.count(*pUser)) dispName = g_userNames[*pUser];
-            std::wstring title = dispName + viewBuf;
+            dispName = dispName.substr(0, dispName.find(L'#'));
+            std::wstring title = dispName + L" " + viewBuf;
             SetWindowTextW(hwnd, title.c_str());
         }
         return 0;
@@ -4200,7 +4201,9 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     DestroyMenu(hMenu);
                     if (cmd == 2 && hasStreamer) {
                         if (!g_videoWindows[clickedUser] || !IsWindow(g_videoWindows[clickedUser])) {
-                            std::wstring titleName = clickedUser.substr(0, clickedUser.find(L'#'));
+                            std::wstring titleName = clickedUser;
+                            if (g_userNames.count(clickedUser)) titleName = g_userNames[clickedUser];
+                            titleName = titleName.substr(0, titleName.find(L'#'));
                             HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(),
                                 WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
                             ApplyClassicStyle(hVid);
