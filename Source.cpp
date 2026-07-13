@@ -2132,6 +2132,19 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 if (PtInRect(&rcMax, wpt)) { *pResult = HTMAXBUTTON; return true; }
                 if (PtInRect(&rcMin, wpt)) { *pResult = HTMINBUTTON; return true; }
             }
+            
+            HICON hIcon = NULL;
+            if (!(GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_DLGMODALFRAME)) {
+                hIcon = (HICON)SendMessage(hWnd, WM_GETICON, ICON_SMALL, 0);
+                if (!hIcon) hIcon = (HICON)GetClassLongPtr(hWnd, GCLP_HICONSM);
+                if (!hIcon && (GetWindowLong(hWnd, GWL_STYLE) & WS_SYSMENU)) hIcon = LoadIcon(NULL, IDI_APPLICATION);
+            }
+            if (hIcon) {
+                int iconWidth = GetSystemMetrics(SM_CXSMICON);
+                RECT rcIcon = { rcCaption.left, rcCaption.top, rcCaption.left + 2 + iconWidth + 4, rcCaption.bottom };
+                if (PtInRect(&rcIcon, wpt)) { *pResult = HTSYSMENU; return true; }
+            }
+
             *pResult = HTCAPTION;
             return true;
         }
