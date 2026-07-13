@@ -45,7 +45,7 @@ BEGIN
     IDS_WATCH_VIDEO "ビデオを視聴"
     IDS_IGNORE "無視する"
     IDS_TALK "話す"
-    IDS_SEND "発言"
+    IDS_SEND "送信"
     IDS_JOINED_NETWORK "ネットワークに参加しました"
     IDS_SERVER_NOT_FOUND "サーバーが見つかりません。メンテナンスの可能性があります。"
     IDS_MOVED_TO "%s に移動しました"

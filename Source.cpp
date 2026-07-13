@@ -18,7 +18,7 @@
 #include <vector>
 #include <string>
 #include <set>
-#include <cmath>
+#include <cmath>8
 #include <algorithm>
 #include "json11.hpp"
 #include <mmsystem.h>
@@ -61,6 +61,10 @@ IAudioSessionControl* g_pAudioSessionControl = nullptr;
 
 int g_currentMicVolume = 0;
 COLORREF g_currentColor = RGB(0, 0, 0);
+COLORREF g_nameColor = 0xFFFFFFFF;
+std::map<std::wstring, COLORREF> g_userColors;
+std::map<std::wstring, std::wstring> g_userNames;
+bool g_isNameChanging = false;
 class CAudioSessionEvents : public IAudioSessionEvents {
     LONG _cRef;
 public:
@@ -121,6 +125,8 @@ IN_ADDR g_serverUdpAddr = {0};
 bool g_isServerUdpAddrResolved = false;
 
 uint32_t g_sessionId = 0;
+std::wstring g_secretId = L"";
+std::wstring g_userId = L"";
 std::wstring g_username;
 int g_dpi = 96;
 inline int Scale(int x) { return MulDiv(x, g_dpi, 96); }
@@ -129,6 +135,7 @@ HFONT g_hFont;
 HFONT g_hFontBold;
 HFONT g_hFontI_btn;
 HFONT g_hFontU_btn;
+HFONT g_hFontB_btn;
 HFONT g_hFontCombo;
 
 std::map<std::wstring, int> g_publicRooms;
@@ -148,6 +155,7 @@ IDWriteFactory* g_pDWriteFactory = nullptr;
 #include <shlwapi.h>
 #include <mutex>
 #include <map>
+#include <thread>
 #include <wincrypt.h>
 #pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "mf.lib")
@@ -155,6 +163,8 @@ IDWriteFactory* g_pDWriteFactory = nullptr;
 #pragma comment(lib, "mfreadwrite.lib")
 #pragma comment(lib, "mfuuid.lib")
 #pragma comment(lib, "shlwapi.lib")
+#include <Rpc.h>
+#pragma comment(lib, "Rpcrt4.lib")
 
 // --- Video Globals ---
 IWICImagingFactory* g_pWICFactory = NULL;
@@ -238,7 +248,11 @@ void SortUserList() {
             if (a_ignored != b_ignored) {
                 return !a_ignored; // false (not ignored) goes before true (ignored)
             }
-            return _wcsicmp(a.c_str(), b.c_str()) < 0;
+            std::wstring name_a = a;
+            if (g_userNames.count(a)) name_a = g_userNames[a];
+            std::wstring name_b = b;
+            if (g_userNames.count(b)) name_b = g_userNames[b];
+            return _wcsicmp(name_a.c_str(), name_b.c_str()) < 0;
         });
     }
 
@@ -323,6 +337,7 @@ void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& userna
 HWAVEIN g_hWaveIn = NULL;
 HWAVEOUT g_hWaveOut = NULL;
 bool g_isVoiceActive = false;
+bool g_suspectMicDead = false;
 
 #define AUDIO_BUF_SIZE 1280 // 40ms of 16000Hz 16-bit Mono
 #define AUDIO_BUF_COUNT 4
@@ -342,7 +357,39 @@ void LoadSettings() {
         if (RegQueryValueExW(hKey, L"Username", NULL, &type, (LPBYTE)buf, &cbData) == ERROR_SUCCESS) {
             if (wcslen(buf) > 0) g_username = buf;
         }
+        DWORD dwNameColor = 0;
+        cbData = sizeof(dwNameColor);
+        type = REG_DWORD;
+        if (RegQueryValueExW(hKey, L"NameColor", NULL, &type, (LPBYTE)&dwNameColor, &cbData) == ERROR_SUCCESS) {
+            g_nameColor = dwNameColor;
+        }
+        if (RegQueryValueExW(hKey, L"SecretId", NULL, &type, (LPBYTE)buf, &cbData) == ERROR_SUCCESS) {
+            if (wcslen(buf) > 0) g_secretId = buf;
+        }
         RegCloseKey(hKey);
+    }
+    
+    if (g_secretId.empty()) {
+        UUID uuid;
+        UuidCreate(&uuid);
+        RPC_WSTR str;
+        if (UuidToStringW(&uuid, &str) == RPC_S_OK) {
+            g_secretId = (WCHAR*)str;
+            RpcStringFreeW(&str);
+        } else {
+            g_secretId = L"fallback-uuid";
+        }
+    }
+
+    if (g_nameColor == 0xFFFFFFFF) {
+        srand(GetTickCount());
+        COLORREF palette[] = {
+            RGB(200, 50, 50), RGB(50, 150, 50), RGB(50, 50, 200),
+            RGB(180, 180, 50), RGB(180, 50, 180), RGB(50, 180, 180),
+            RGB(255, 128, 0), RGB(128, 0, 255), RGB(0, 128, 255),
+            RGB(128, 200, 0), RGB(255, 0, 128), RGB(0, 200, 128)
+        };
+        g_nameColor = palette[rand() % 12];
     }
 }
 
@@ -350,6 +397,8 @@ void SaveSettings() {
     HKEY hKey;
     if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\RetroChat", 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
         RegSetValueExW(hKey, L"Username", 0, REG_SZ, (const BYTE*)g_username.c_str(), (DWORD)((g_username.length() + 1) * sizeof(WCHAR)));
+        RegSetValueExW(hKey, L"SecretId", 0, REG_SZ, (const BYTE*)g_secretId.c_str(), (DWORD)((g_secretId.length() + 1) * sizeof(WCHAR)));
+        RegSetValueExW(hKey, L"NameColor", 0, REG_DWORD, (const BYTE*)&g_nameColor, sizeof(DWORD));
         RegCloseKey(hKey);
     }
 }
@@ -361,7 +410,7 @@ struct MediaHeader {
     uint8_t payloadType; // 1 = Audio, 2 = Video, 255 = HolePunch
     uint8_t flags;
     uint32_t timestamp;
-    wchar_t username[32];
+    wchar_t userId[40];
 };
 #pragma pack(pop)
 
@@ -460,7 +509,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 mhdr->sessionId = g_sessionId;
                 mhdr->payloadType = 4; // StreamStatus
                 mhdr->timestamp = GetTickCount();
-                wcsncpy_s(mhdr->username, 32, g_username.c_str(), _TRUNCATE);
+                wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
                 sockaddr_in serverUdp = {0};
                 serverUdp.sin_family = AF_INET;
                 serverUdp.sin_port = htons(4001);
@@ -503,7 +552,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     mhdr->payloadType = 2; 
                     mhdr->flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
                     mhdr->timestamp = i; 
-                    wcsncpy_s(mhdr->username, 32, g_username.c_str(), _TRUNCATE);
+                    wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
                     
                     memcpy(udpPkt + sizeof(MediaHeader), jpegData.data() + offset, len);
                     
@@ -564,7 +613,7 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
             mhdr->payloadType = 1;
             mhdr->flags = 0;
             mhdr->timestamp = GetTickCount();
-            wcsncpy_s(mhdr->username, 32, g_username.c_str(), _TRUNCATE);
+            wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
             
             memcpy(udpPkt + sizeof(MediaHeader), pHdr->lpData, pHdr->dwBytesRecorded);
             
@@ -578,7 +627,19 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
             
             sendto(g_sock, udpPkt, sizeof(MediaHeader) + pHdr->dwBytesRecorded, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
         }
-        waveInAddBuffer(hwi, pHdr, sizeof(WAVEHDR));
+        if (g_isVoiceActive) {
+            // If the buffer was aborted (e.g. unplugged), do not re-add it.
+            // Calling waveInAddBuffer on a dead device causes a permanent deadlock in winmm.
+            if (pHdr->dwBytesRecorded < AUDIO_BUF_SIZE) {
+                g_suspectMicDead = true;
+                g_hWaveIn = NULL;
+            } else {
+                if (waveInAddBuffer(hwi, pHdr, sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
+                    g_suspectMicDead = true;
+                    g_hWaveIn = NULL;
+                }
+            }
+        }
     }
 }
 
@@ -619,7 +680,9 @@ void InitVolumeSync(HWND hWnd) {
     }
 }
 
-void InitAudio() {
+bool InitAudioIn() {
+    if (g_hWaveIn) return true;
+
     WAVEFORMATEX wfx = {0};
     wfx.wFormatTag = WAVE_FORMAT_PCM;
     wfx.nChannels = 1;
@@ -628,8 +691,10 @@ void InitAudio() {
     wfx.nBlockAlign = wfx.nChannels * wfx.wBitsPerSample / 8;
     wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
 
-    waveInOpen(&g_hWaveIn, WAVE_MAPPER, &wfx, (DWORD_PTR)waveInProc, 0, CALLBACK_FUNCTION);
-    waveOutOpen(&g_hWaveOut, WAVE_MAPPER, &wfx, 0, 0, CALLBACK_NULL);
+    if (waveInOpen(&g_hWaveIn, WAVE_MAPPER, &wfx, (DWORD_PTR)waveInProc, 0, CALLBACK_FUNCTION) != MMSYSERR_NOERROR) {
+        g_hWaveIn = NULL;
+        return false;
+    }
 
     for (int i = 0; i < AUDIO_BUF_COUNT; i++) {
         g_waveInHdr[i].lpData = g_waveInBuf[i];
@@ -638,7 +703,45 @@ void InitAudio() {
         waveInPrepareHeader(g_hWaveIn, &g_waveInHdr[i], sizeof(WAVEHDR));
         waveInAddBuffer(g_hWaveIn, &g_waveInHdr[i], sizeof(WAVEHDR));
     }
-    
+    return true;
+}
+
+void CleanupAudioIn() {
+    if (g_hWaveIn) {
+        MMTIME mmt;
+        mmt.wType = TIME_BYTES;
+        bool isDead = false;
+        if (waveInGetPosition(g_hWaveIn, &mmt, sizeof(mmt)) != MMSYSERR_NOERROR) isDead = true;
+
+        if (isDead || g_suspectMicDead) {
+            // Avoid winmm deadlock on disconnected devices
+            g_hWaveIn = NULL;
+            g_suspectMicDead = false;
+            return;
+        }
+
+        waveInStop(g_hWaveIn);
+        waveInReset(g_hWaveIn);
+        for (int i = 0; i < AUDIO_BUF_COUNT; i++) {
+            waveInUnprepareHeader(g_hWaveIn, &g_waveInHdr[i], sizeof(WAVEHDR));
+        }
+        waveInClose(g_hWaveIn);
+        g_hWaveIn = NULL;
+    }
+}
+
+void InitAudio() {
+
+    WAVEFORMATEX wfx = {0};
+    wfx.wFormatTag = WAVE_FORMAT_PCM;
+    wfx.nChannels = 1;
+    wfx.nSamplesPerSec = 16000;
+    wfx.wBitsPerSample = 16;
+    wfx.nBlockAlign = wfx.nChannels * wfx.wBitsPerSample / 8;
+    wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
+
+    waveOutOpen(&g_hWaveOut, WAVE_MAPPER, &wfx, 0, 0, CALLBACK_NULL);
+
     for (int i = 0; i < AUDIO_OUT_BUF_COUNT; i++) {
         g_waveOutHdr[i].lpData = g_waveOutBuf[i];
         g_waveOutHdr[i].dwBufferLength = AUDIO_BUF_SIZE;
@@ -676,6 +779,7 @@ struct MsgData {
     bool u;
     int size;
     COLORREF color;
+    COLORREF nameColor = 0xFFFFFFFF;
     bool isSystemEvent = false;
 };
 
@@ -902,7 +1006,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                                     RGB(255, 128, 0), RGB(128, 0, 255), RGB(0, 128, 255),
                                     RGB(128, 200, 0), RGB(255, 0, 128), RGB(0, 200, 128)
                                 };
-                                COLORREF uCol = palette[hash % 12];
+                                COLORREF uCol = (entry.data.nameColor != 0xFFFFFFFF) ? entry.data.nameColor : palette[hash % 12];
                                 ID2D1SolidColorBrush* pUserBrush = nullptr;
                                 if (SUCCEEDED(pRT->CreateSolidColorBrush(
                                     D2D1::ColorF(GetRValue(uCol)/255.0f, GetGValue(uCol)/255.0f, GetBValue(uCol)/255.0f), 
@@ -1072,7 +1176,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                                 RGB(255, 128, 0), RGB(128, 0, 255), RGB(0, 128, 255),
                                 RGB(128, 200, 0), RGB(255, 0, 128), RGB(0, 200, 128)
                             };
-                            COLORREF uCol = palette[hash % 12];
+                            COLORREF uCol = (entry.data.nameColor != 0xFFFFFFFF) ? entry.data.nameColor : palette[hash % 12];
                             ID2D1SolidColorBrush* pUserBrush = nullptr;
                             if (SUCCEEDED(pRT->CreateSolidColorBrush(
                                 D2D1::ColorF(GetRValue(uCol)/255.0f, GetGValue(uCol)/255.0f, GetBValue(uCol)/255.0f), 
@@ -1292,6 +1396,47 @@ IDWriteTextLayout* CreateInputLayout(HWND hWnd) {
     return pLayout;
 }
 
+void UpdateImeWindowPos(HWND hWnd) {
+    HIMC hImc = ImmGetContext(hWnd);
+    if (!hImc) return;
+
+    IDWriteTextLayout* pLayout = CreateInputLayout(hWnd);
+    if (pLayout) {
+        float cx = 5, cy = 5;
+        DWRITE_HIT_TEST_METRICS hm = {0};
+        if (g_inputText.length() == 0) {
+            int sizeIndex = (int)SendMessage(g_hComboSize, CB_GETCURSEL, 0, 0);
+            int tsize = 12;
+            if (sizeIndex != CB_ERR) {
+                WCHAR szText[32];
+                SendMessage(g_hComboSize, CB_GETLBTEXT, sizeIndex, (LPARAM)szText);
+                tsize = _wtoi(szText);
+            }
+            hm.height = tsize * 1.5f;
+        } else if (g_caretPos >= g_inputText.length()) {
+            pLayout->HitTestTextPosition((UINT32)g_inputText.length() - 1, TRUE, &cx, &cy, &hm);
+            cx += 5; cy += 5;
+        } else {
+            pLayout->HitTestTextPosition((UINT32)g_caretPos, FALSE, &cx, &cy, &hm);
+            cx += 5; cy += 5;
+        }
+        
+        COMPOSITIONFORM cf = { 0 };
+        cf.dwStyle = CFS_POINT;
+        cf.ptCurrentPos.x = Scale((LONG)cx);
+        cf.ptCurrentPos.y = Scale((LONG)cy);
+        ImmSetCompositionWindow(hImc, &cf);
+
+        LOGFONTW lf = { 0 };
+        lf.lfHeight = -Scale((LONG)(hm.height));
+        wcscpy_s(lf.lfFaceName, L"MS UI Gothic");
+        ImmSetCompositionFontW(hImc, &lf);
+
+        pLayout->Release();
+    }
+    ImmReleaseContext(hWnd, hImc);
+}
+
 LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     static ID2D1HwndRenderTarget* pRT = nullptr;
     switch (msg) {
@@ -1406,8 +1551,46 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         g_caretVisible = false;
         InvalidateRect(hWnd, NULL, FALSE);
         return 0;
+    case WM_IME_COMPOSITION: {
+        if (lParam & GCS_RESULTSTR) {
+            HIMC hImc = ImmGetContext(hWnd);
+            if (hImc) {
+                LONG size = ImmGetCompositionStringW(hImc, GCS_RESULTSTR, NULL, 0);
+                if (size > 0) {
+                    WCHAR* buf = new WCHAR[size / 2 + 1];
+                    ImmGetCompositionStringW(hImc, GCS_RESULTSTR, buf, size);
+                    buf[size / 2] = 0;
+                    
+                    if (g_caretPos != g_anchorPos) {
+                        int start = min(g_caretPos, g_anchorPos);
+                        int end = max(g_caretPos, g_anchorPos);
+                        g_inputText.erase(start, end - start);
+                        g_caretPos = start;
+                        g_anchorPos = start;
+                    }
+                    if (g_inputText.length() + wcslen(buf) < 1024) {
+                        g_inputText.insert(g_caretPos, buf);
+                        g_caretPos += (int)wcslen(buf);
+                        g_anchorPos = g_caretPos;
+                        g_caretVisible = true;
+                    } else {
+                        MessageBeep(MB_OK);
+                    }
+                    delete[] buf;
+                    
+                    UpdateImeWindowPos(hWnd);
+                    InvalidateRect(hWnd, NULL, FALSE);
+                }
+                ImmReleaseContext(hWnd, hImc);
+            }
+            lParam &= ~GCS_RESULTSTR;
+        }
+        if (lParam == 0) return 0;
+        break;
+    }
     case WM_IME_STARTCOMPOSITION:
         g_isIMEComposing = true;
+        UpdateImeWindowPos(hWnd);
         InvalidateRect(hWnd, NULL, FALSE);
         break;
     case WM_IME_ENDCOMPOSITION:
@@ -1513,27 +1696,15 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         ID2D1SolidColorBrush* pCaretBrush = nullptr;
                         if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Black), &pCaretBrush)) && pCaretBrush) {
                             D2D1_ANTIALIAS_MODE oldMode = pRT->GetAntialiasMode();
-                            pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
-                            pRT->DrawLine(D2D1::Point2F(cx, cy), D2D1::Point2F(cx, cy + hm.height), pCaretBrush, 2.0f * 96.0f / g_dpi);
+                            bool isItalic = SendMessage(g_hBtnI, BM_GETCHECK, 0, 0) == BST_CHECKED;
+                            if (!isItalic) pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
+                            float slant = isItalic ? (hm.height * 0.25f) : 0.0f;
+                            pRT->DrawLine(D2D1::Point2F(cx + slant, cy), D2D1::Point2F(cx, cy + hm.height), pCaretBrush, 2.0f * 96.0f / g_dpi);
                             pRT->SetAntialiasMode(oldMode);
                             pCaretBrush->Release();
                         }
-
-                        HIMC hImc = ImmGetContext(hWnd);
-                        if (hImc) {
-                            COMPOSITIONFORM cf = { 0 };
-                            cf.dwStyle = CFS_POINT;
-                            cf.ptCurrentPos.x = Scale((LONG)cx);
-                            cf.ptCurrentPos.y = Scale((LONG)cy);
-                            ImmSetCompositionWindow(hImc, &cf);
-
-                            LOGFONTW lf = { 0 };
-                            lf.lfHeight = -Scale((LONG)(hm.height));
-                            wcscpy_s(lf.lfFaceName, L"MS UI Gothic");
-                            ImmSetCompositionFontW(hImc, &lf);
-
-                            ImmReleaseContext(hWnd, hImc);
-                        }
+                        
+                        UpdateImeWindowPos(hWnd);
                     }
                     pBrush->Release();
                 }
@@ -1664,6 +1835,18 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         } else if (wParam == 'A' && GetKeyState(VK_CONTROL) < 0) {
             g_anchorPos = 0;
             g_caretPos = (int)g_inputText.length();
+        } else if (wParam == 'B' && GetKeyState(VK_CONTROL) < 0) {
+            bool checked = SendMessage(g_hBtnB, BM_GETCHECK, 0, 0) == BST_CHECKED;
+            SendMessage(g_hBtnB, BM_SETCHECK, checked ? BST_UNCHECKED : BST_CHECKED, 0);
+            SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(1003, BN_CLICKED), (LPARAM)g_hBtnB);
+        } else if (wParam == 'I' && GetKeyState(VK_CONTROL) < 0) {
+            bool checked = SendMessage(g_hBtnI, BM_GETCHECK, 0, 0) == BST_CHECKED;
+            SendMessage(g_hBtnI, BM_SETCHECK, checked ? BST_UNCHECKED : BST_CHECKED, 0);
+            SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(1004, BN_CLICKED), (LPARAM)g_hBtnI);
+        } else if (wParam == 'U' && GetKeyState(VK_CONTROL) < 0) {
+            bool checked = SendMessage(g_hBtnU, BM_GETCHECK, 0, 0) == BST_CHECKED;
+            SendMessage(g_hBtnU, BM_SETCHECK, checked ? BST_UNCHECKED : BST_CHECKED, 0);
+            SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(1005, BN_CLICKED), (LPARAM)g_hBtnU);
         }
         if (pLayout) pLayout->Release();
         
@@ -2451,6 +2634,41 @@ LRESULT CALLBACK EditSelectionColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
 std::wstring g_changeNameResult;
 bool g_changeNameOK = false;
 
+void DrawColorButton(LPDRAWITEMSTRUCT lpdis, COLORREF colorToDraw) {
+    HDC hdc = lpdis->hDC;
+    RECT rc = lpdis->rcItem;
+    HBRUSH hFaceBrush = CreateSolidBrush(RGB(192, 192, 192));
+    FillRect(hdc, &rc, hFaceBrush);
+    DeleteObject(hFaceBrush);
+    UINT edge = (lpdis->itemState & ODS_SELECTED) ? EDGE_SUNKEN : EDGE_RAISED;
+    DrawScaledButtonBorder(hdc, rc, edge);
+    if (lpdis->itemState & ODS_FOCUS) {
+        int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+        int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
+        RECT rcFocus = rc; InflateRect(&rcFocus, -bw*2, -bw*2); DrawFocusRect(hdc, &rcFocus);
+    }
+    
+    GdiFlush(); // Ensure GDI background is drawn before GDI+ draws on top
+
+    {
+        Gdiplus::Graphics graphics(hdc);
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        
+        int cx = rc.left + (rc.right - rc.left) / 2 - Scale(1);
+        int cy = rc.top + (rc.bottom - rc.top) / 2 - Scale(1);
+        
+        int size = Scale(13);
+        
+        graphics.SetSmoothingMode(Gdiplus::SmoothingModeNone);
+        
+        Gdiplus::SolidBrush colorBrush(Gdiplus::Color(255, GetRValue(colorToDraw), GetGValue(colorToDraw), GetBValue(colorToDraw)));
+        Gdiplus::Pen blackPen(Gdiplus::Color(255, 0, 0, 0), (Gdiplus::REAL)(Scale(1)));
+
+        graphics.FillRectangle(&colorBrush, cx - size / 2, cy - size / 2, size, size);
+        graphics.DrawRectangle(&blackPen, cx - size / 2, cy - size / 2, size, size);
+    }
+}
+
 LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     LRESULT classicResult = 0;
     if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult)) return classicResult;
@@ -2478,6 +2696,10 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         hBtnCancel = CreateWindow(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             cancelX, y, btnWidth, btnHeight, hWnd, (HMENU)2, GetModuleHandle(0), 0);
             
+        static HWND hBtnColorLocal;
+        hBtnColorLocal = CreateWindow(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
+            margin, y, Scale(32), btnHeight, hWnd, (HMENU)1002, GetModuleHandle(0), 0);
+            
         SetWindowSubclass(hBtnOK, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hBtnCancel, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hEdit, EditSelectionColorProc, 0, 0);
@@ -2503,7 +2725,16 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             WCHAR buf[256] = {0};
             GetWindowTextW(hEdit, buf, 255);
             std::wstring newName = buf;
-            if (!newName.empty() && newName.find(L'#') == std::wstring::npos) {
+            std::wstring oldBaseName = g_username;
+            size_t hashPos = oldBaseName.find(L'#');
+            std::wstring oldTag = L"";
+            if (hashPos != std::wstring::npos) {
+                oldTag = oldBaseName.substr(hashPos);
+                oldBaseName = oldBaseName.substr(0, hashPos);
+            }
+            if (newName == oldBaseName) {
+                newName += oldTag;
+            } else if (!newName.empty() && newName.find(L'#') == std::wstring::npos) {
                 srand(GetTickCount());
                 wchar_t tag[16];
                 swprintf_s(tag, L"#%04d", rand() % 10000);
@@ -2514,8 +2745,33 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             DestroyWindow(hWnd);
         } else if (LOWORD(wParam) == 2) { // Cancel
             DestroyWindow(hWnd);
+        } else if (LOWORD(wParam) == 1002 && HIWORD(wParam) == BN_CLICKED) {
+            CHOOSECOLOR cc;
+            static COLORREF acrCustClr[16]; 
+            ZeroMemory(&cc, sizeof(cc));
+            cc.lStructSize = sizeof(cc);
+            cc.hwndOwner = hWnd;
+            cc.lpCustColors = (LPDWORD)acrCustClr;
+            cc.rgbResult = g_nameColor;
+            cc.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ENABLEHOOK;
+            cc.lpfnHook = ColorHookProc;
+            if (ChooseColor(&cc)) {
+                g_nameColor = cc.rgbResult;
+                InvalidateRect(GetDlgItem(hWnd, 1002), NULL, FALSE);
+                if (g_hLog) InvalidateRect(g_hLog, NULL, FALSE);
+                if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
+                SaveSettings();
+            }
         }
         return 0;
+    }
+    case WM_DRAWITEM: {
+        LPDRAWITEMSTRUCT lpdis = (LPDRAWITEMSTRUCT)lParam;
+        if (lpdis->CtlID == 1002) {
+            DrawColorButton(lpdis, g_nameColor);
+            return TRUE;
+        }
+        break;
     }
     case WM_DESTROY:
         EnableWindow(GetParent(hWnd), TRUE);
@@ -3127,12 +3383,7 @@ std::string HashRoomName(const std::wstring& roomName) {
     return "private_" + result;
 }
 
-void UpdateUserList(const std::wstring& username) {
-    int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)username.c_str());
-    if (idx == LB_ERR) {
-        SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)username.c_str());
-    }
-}
+
 
 void ClearLogAndUsers() {
     for (auto& entry : g_logEntries) {
@@ -3160,7 +3411,6 @@ void AppendLog(const MsgData& data) {
             std::lock_guard<std::mutex> lock(g_ignoredMutex);
             if (g_ignoredUsers.count(data.user) > 0) return;
         }
-        UpdateUserList(data.user);
     }
     MsgData filteredData = data;
     filteredData.msg = FilterProfanity(filteredData.msg);
@@ -3243,36 +3493,51 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         if (err.empty()) {
                             std::string type = json["type"].string_value();
                             if (type == "welcome") {
-                                g_sessionId = json["sessionId"].int_value();
-                                
-                                MediaHeader hdr = {0};
-                                hdr.sessionId = g_sessionId;
-                                hdr.payloadType = 255;
-                                
-                                sockaddr_in serverUdp = {0};
-                                serverUdp.sin_family = AF_INET;
-                                serverUdp.sin_port = htons(4001);
-                                if (!g_isServerUdpAddrResolved) {
-                        g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
-                    }
-                    serverUdp.sin_addr = g_serverUdpAddr;
-                                sendto(g_sock, (char*)&hdr, sizeof(hdr), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                                if (json["sessionId"].is_number()) {
+                                    g_sessionId = json["sessionId"].int_value();
+                                    
+                                    MediaHeader hdr = {0};
+                                    hdr.sessionId = g_sessionId;
+                                    hdr.payloadType = 255;
+                                    
+                                    sockaddr_in serverUdp = {0};
+                                    serverUdp.sin_family = AF_INET;
+                                    serverUdp.sin_port = htons(4001);
+                                    if (!g_isServerUdpAddrResolved) {
+                                        g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                                    }
+                                    serverUdp.sin_addr = g_serverUdpAddr;
+                                    sendto(g_sock, (char*)&hdr, sizeof(hdr), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
 
-                                json11::Json getRoomsMsg = json11::Json::object {
-                                    {"type", "get_rooms"}
-                                };
-                                std::string getRoomsStr = getRoomsMsg.dump() + "\n";
-                                send(g_tcpSocket, getRoomsStr.c_str(), (int)getRoomsStr.length(), 0);
+                                    json11::Json getRoomsMsg = json11::Json::object {
+                                        {"type", "get_rooms"}
+                                    };
+                                    std::string getRoomsStr = getRoomsMsg.dump() + "\n";
+                                    send(g_tcpSocket, getRoomsStr.c_str(), (int)getRoomsStr.length(), 0);
+                                }
+                                
+                                std::string newId = json["userId"].string_value();
+                                if (!newId.empty()) {
+                                    g_userId = a2w(newId.c_str());
+                                }
                             }
                             else if (type == "chat") {
                                 MsgData* pData = new MsgData();
-                                pData->user = a2w(json["user"].string_value().c_str());
+                                std::wstring wuid = a2w(json["userId"].string_value().c_str());
+                                pData->user = a2w(json["userName"].string_value().c_str());
                                 pData->msg = a2w(json["msg"].string_value().c_str());
                                 pData->b = json["b"].bool_value();
                                 pData->i = json["i"].bool_value();
                                 pData->u = json["u"].bool_value();
                                 pData->size = json["sz"].is_number() ? json["sz"].int_value() : 10;
                                 pData->color = json["clr"].is_number() ? json["clr"].int_value() : RGB(0,0,0);
+                                pData->nameColor = json["nclr"].is_number() ? json["nclr"].int_value() : 0xFFFFFFFF;
+                                if (pData->nameColor != 0xFFFFFFFF) {
+                                    g_userColors[wuid] = pData->nameColor;
+                                    g_userNames[wuid] = pData->user;
+                                    if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
+                                }
+                                pData->isSystemEvent = false;
                                 PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
                             }
                             else if (type == "error") {
@@ -3290,46 +3555,82 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 SendMessage(g_hUserList, LB_RESETCONTENT, 0, 0);
                                 auto arr = json["users"].array_items();
                                 for (auto& item : arr) {
-                                    std::wstring wname = a2w(item.string_value().c_str());
-                                    int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wname.c_str());
+                                    std::wstring wuid = a2w(item["userId"].string_value().c_str());
+                                    std::wstring wname = a2w(item["userName"].string_value().c_str());
+                                    g_userNames[wuid] = wname;
+                                    g_userColors[wuid] = item["nclr"].int_value();
+                                    int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wuid.c_str());
                                     if (idx == LB_ERR) {
-                                        SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wname.c_str());
+                                        SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wuid.c_str());
                                     }
                                 }
                                 // Ensure local user is always in the list
-                                int localIdx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)g_username.c_str());
+                                g_userNames[g_userId] = g_username;
+                                g_userColors[g_userId] = g_nameColor;
+                                int localIdx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)g_userId.c_str());
                                 if (localIdx == LB_ERR) {
-                                    SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)g_username.c_str());
+                                    SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)g_userId.c_str());
                                 }
                                 SortUserList();
                                 
                                 g_isRoomJoined = true;
                                 UpdateSendBtnState();
                                 
-                                MsgData* pData = new MsgData();
-                                pData->user = g_username;
-                                pData->msg = GetString(IDS_ENTERED);
-                                pData->b = false; pData->i = false; pData->u = false;
-                                pData->size = 9;
-                                pData->color = RGB(128, 128, 128);
-                                pData->isSystemEvent = true;
-                                PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
-                            }
-                            else if (type == "join") {
-                                std::string uid = json["userId"].string_value();
-                                std::wstring wuid = a2w(uid.c_str());
-                                int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wuid.c_str());
-                                if (idx == LB_ERR) {
-                                    SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wuid.c_str());
-                                    SortUserList();
+                                if (g_isNameChanging) {
+                                    g_isNameChanging = false;
+                                } else {
                                     MsgData* pData = new MsgData();
-                                    pData->user = wuid;
+                                    pData->user = g_username;
                                     pData->msg = GetString(IDS_ENTERED);
                                     pData->b = false; pData->i = false; pData->u = false;
                                     pData->size = 9;
                                     pData->color = RGB(128, 128, 128);
+                                    pData->nameColor = g_nameColor;
                                     pData->isSystemEvent = true;
                                     PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
+                                }
+                            }
+                            else if (type == "rename") {
+                                std::string uid = json["userId"].string_value();
+                                std::wstring wuid = a2w(uid.c_str());
+                                std::wstring wname = a2w(json["userName"].string_value().c_str());
+                                int nclr = json["nclr"].int_value();
+                                g_userNames[wuid] = wname;
+                                g_userColors[wuid] = nclr;
+                                if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
+                                SortUserList();
+                                if (g_videoWindows[wuid] && IsWindow(g_videoWindows[wuid])) {
+                                    std::wstring titleName = wname.substr(0, wname.find(L'#'));
+                                    SetWindowText(g_videoWindows[wuid], titleName.c_str());
+                                }
+                            }
+                            else if (type == "join") {
+                                std::string uid = json["userId"].string_value();
+                                std::wstring wuid = a2w(uid.c_str());
+                                std::wstring wname = a2w(json["userName"].string_value().c_str());
+                                COLORREF joinNameColor = json["nclr"].is_number() ? json["nclr"].int_value() : 0xFFFFFFFF;
+                                
+                                g_userNames[wuid] = wname;
+                                if (joinNameColor != 0xFFFFFFFF) {
+                                    g_userColors[wuid] = joinNameColor;
+                                }
+                                if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
+                                
+                                int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wuid.c_str());
+                                if (idx == LB_ERR) {
+                                    SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wuid.c_str());
+                                    SortUserList();
+                                    if (wuid != g_userId) {
+                                        MsgData* pData = new MsgData();
+                                        pData->user = wname;
+                                        pData->msg = GetString(IDS_ENTERED);
+                                        pData->b = false; pData->i = false; pData->u = false;
+                                        pData->size = 9;
+                                        pData->color = RGB(128, 128, 128);
+                                        pData->nameColor = joinNameColor;
+                                        pData->isSystemEvent = true;
+                                        PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
+                                    }
                                 }
                             }
                             else if (type == "redirect") {
@@ -3359,9 +3660,11 @@ DWORD WINAPI RecvThread(LPVOID param) {
 
                                         json11::Json joinMsg = json11::Json::object {
                                             {"type", "join"},
-                                            {"userId", w2a(g_username.c_str())},
+                                            {"secretId", w2a(g_secretId.c_str())},
+                                            {"userName", w2a(g_username.c_str())},
                                             {"roomName", finalRoomName},
-                                            {"pub", !g_isPrivateRoom}
+                                            {"pub", !g_isPrivateRoom},
+                                            {"nclr", (int)g_nameColor}
                                         };
                                         std::string joinStr = joinMsg.dump() + "\n";
                                         send(g_tcpSocket, joinStr.c_str(), (int)joinStr.length(), 0);
@@ -3374,14 +3677,17 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wuid.c_str());
                                 if (idx != LB_ERR) {
                                     SendMessage(g_hUserList, LB_DELETESTRING, idx, 0);
-                                    MsgData* pData = new MsgData();
-                                    pData->user = wuid;
-                                    pData->msg = GetString(IDS_LEFT);
-                                    pData->b = false; pData->i = false; pData->u = false;
-                                    pData->size = 9;
-                                    pData->color = RGB(128, 128, 128);
-                                    pData->isSystemEvent = true;
-                                    PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
+                                    if (wuid != g_userId) {
+                                        MsgData* pData = new MsgData();
+                                        pData->user = g_userNames[wuid];
+                                        pData->msg = GetString(IDS_LEFT);
+                                        pData->b = false; pData->i = false; pData->u = false;
+                                        pData->size = 9;
+                                        pData->color = RGB(128, 128, 128);
+                                        pData->nameColor = g_userColors[wuid];
+                                        pData->isSystemEvent = true;
+                                        PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
+                                    }
                                 }
                             }
                             else if (type == "room_list") {
@@ -3414,7 +3720,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                     
                     bool isIgnored = false;
                     {
-                        std::wstring fromUser = mhdr->username;
+                        std::wstring fromUser = mhdr->userId;
                         std::lock_guard<std::mutex> lock(g_ignoredMutex);
                         isIgnored = (g_ignoredUsers.count(fromUser) > 0);
                     }
@@ -3422,7 +3728,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
 
                     if (mhdr->payloadType == 1) { // Audio
                         PlayAudioFrame(udpBuf + sizeof(MediaHeader), res - sizeof(MediaHeader));
-                        std::wstring wname = mhdr->username;
+                        std::wstring wname = mhdr->userId;
                         
                         int audioLen = res - sizeof(MediaHeader);
                         short* samples = (short*)(udpBuf + sizeof(MediaHeader));
@@ -3448,7 +3754,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         if (newlySpeaking && g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
                     }
                     else if (mhdr->payloadType == 4) {
-                        std::wstring wname = mhdr->username;
+                        std::wstring wname = mhdr->userId;
                         bool stateChanged = false;
                         {
                             std::lock_guard<std::mutex> lock(g_streamerMutex);
@@ -3462,7 +3768,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         }
                     }
                     else if (mhdr->payloadType == 2) {
-                        std::wstring wname = mhdr->username;
+                        std::wstring wname = mhdr->userId;
                         uint16_t seq = mhdr->seqNum;
                         int fragIdx = mhdr->timestamp;
                         int len = res - sizeof(MediaHeader);
@@ -3508,7 +3814,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         }
                     }
                     else if (mhdr->payloadType == 3) {
-                        std::wstring viewer = mhdr->username;
+                        std::wstring viewer = mhdr->userId;
                         int len = res - sizeof(MediaHeader);
                         if (len > 0) {
                             std::string targetA((char*)(udpBuf + sizeof(MediaHeader)), len);
@@ -3552,9 +3858,11 @@ DWORD WINAPI RecvThread(LPVOID param) {
 
                         json11::Json joinMsg = json11::Json::object {
                             {"type", "join"},
-                            {"userId", w2a(g_username.c_str())},
+                            {"secretId", w2a(g_secretId.c_str())},
+                            {"userName", w2a(g_username.c_str())},
                             {"roomName", finalRoomName},
-                            {"pub", !g_isPrivateRoom}
+                            {"pub", !g_isPrivateRoom},
+                            {"nclr", (int)g_nameColor}
                         };
                         std::string joinStr = joinMsg.dump() + "\n";
                         send(g_tcpSocket, joinStr.c_str(), (int)joinStr.length(), 0);
@@ -3610,15 +3918,28 @@ void SendJoinRequest(const std::wstring& roomName, bool isPrivate = false) {
     
     json11::Json joinMsg = json11::Json::object {
         {"type", "join"},
-        {"userId", std::string(userA_ptr)},
+        {"secretId", w2a(g_secretId.c_str())},
+        {"userName", w2a(g_username.c_str())},
         {"roomName", finalRoomName},
-        {"pub", !isPrivate}
+        {"pub", !isPrivate},
+        {"nclr", (int)g_nameColor}
     };
-    GlobalFree(userA_ptr);
     
     std::string joinStr = joinMsg.dump() + "\n";
     if (g_tcpSocket != INVALID_SOCKET) {
         send(g_tcpSocket, joinStr.c_str(), (int)joinStr.length(), 0);
+    }
+}
+
+void SendRenameRequest() {
+    json11::Json renameMsg = json11::Json::object {
+        {"type", "rename"},
+        {"userName", w2a(g_username.c_str())},
+        {"nclr", (int)g_nameColor}
+    };
+    std::string renameStr = renameMsg.dump() + "\n";
+    if (g_tcpSocket != INVALID_SOCKET) {
+        send(g_tcpSocket, renameStr.c_str(), (int)renameStr.length(), 0);
     }
 }
 
@@ -3646,7 +3967,8 @@ void SendChatMessage(const std::wstring& msg) {
         {"i", i},
         {"u", u},
         {"sz", size},
-        {"clr", (int)g_currentColor}
+        {"clr", (int)g_currentColor},
+        {"nclr", (int)g_nameColor}
     };
     std::string jsonStr = json.dump() + "\n";
     
@@ -3663,6 +3985,7 @@ void SendChatMessage(const std::wstring& msg) {
     pData->u = u;
     pData->size = size;
     pData->color = g_currentColor;
+    pData->nameColor = g_nameColor;
     PostMessage(GetParent(g_hInput), WM_USER_MSG, 0, (LPARAM)pData);
     
     GlobalFree(userA_ptr);
@@ -3692,7 +4015,7 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             g_videoRts.erase(hwnd);
         }
         if (pUser) {
-            if (*pUser == g_username) {
+            if (*pUser == g_userId) {
                 g_isWebcamActive = false;
                 InvalidateRect(g_hUserList, NULL, FALSE);
             }
@@ -3713,7 +4036,7 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             hdr.sessionId = g_sessionId;
             hdr.payloadType = 3;
             hdr.timestamp = GetTickCount();
-            wcsncpy_s(hdr.username, g_username.c_str(), 31);
+            wcsncpy_s(hdr.userId, 40, g_userId.c_str(), _TRUNCATE);
             
             char pkt[1024];
             memcpy(pkt, &hdr, sizeof(hdr));
@@ -3732,12 +4055,21 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             
             int count = 0;
             DWORD now = GetTickCount();
+            std::wstring viewerText = L"Viewers: ";
             for (auto& pair : g_videoViewers[*pUser]) {
-                if (now - pair.second < 5000) count++;
+                if (now - pair.second < 5000) {
+                    count++;
+                    std::wstring vname = pair.first;
+                    if (g_userNames.count(pair.first)) vname = g_userNames[pair.first];
+                    viewerText += vname + L", ";
+                }
             }
+            if (count > 0) viewerText = viewerText.substr(0, viewerText.length() - 2);
+            
             WCHAR viewBuf[256];
             swprintf_s(viewBuf, GetString(IDS_VIEWING_COUNT).c_str(), count);
             std::wstring dispName = pUser->substr(0, pUser->find(L'#'));
+            if (g_userNames.count(*pUser)) dispName = g_userNames[*pUser];
             std::wstring title = dispName + viewBuf;
             SetWindowTextW(hwnd, title.c_str());
         }
@@ -3814,7 +4146,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 SendMessage(hwnd, LB_GETTEXT, item, (LPARAM)buf.data());
                 std::wstring clickedUser(buf.data());
                 
-                if (clickedUser == g_username) {
+                if (clickedUser == g_userId) {
                     HMENU hMenu = CreatePopupMenu();
                     AppendMenuW(hMenu, MF_STRING | (g_isWebcamActive ? MF_CHECKED : MF_UNCHECKED), 1, GetString(IDS_VIDEO_STREAM).c_str());
                     AppendMenuW(hMenu, MF_STRING, 3, GetString(IDS_CHANGE_NAME_TITLE).c_str()); 
@@ -3824,71 +4156,28 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     if (cmd == 1) {
                         if (g_isWebcamActive) {
                             g_isWebcamActive = false;
-                            if (g_videoWindows[g_username] && IsWindow(g_videoWindows[g_username])) {
-                                DestroyWindow(g_videoWindows[g_username]);
+                            if (g_videoWindows[g_userId] && IsWindow(g_videoWindows[g_userId])) {
+                                DestroyWindow(g_videoWindows[g_userId]);
                             }
                         } else {
                             g_isWebcamActive = true;
-                            if (!g_videoWindows[g_username] || !IsWindow(g_videoWindows[g_username])) {
+                            if (!g_videoWindows[g_userId] || !IsWindow(g_videoWindows[g_userId])) {
                                 std::wstring titleName = g_username.substr(0, g_username.find(L'#'));
                                 HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(),
-                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_username.c_str());
+                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_userId.c_str());
                                 ApplyClassicStyle(hVid);
-                                g_videoWindows[g_username] = hVid;
+                                g_videoWindows[g_userId] = hVid;
                             } else {
-                                SetForegroundWindow(g_videoWindows[g_username]);
+                                SetForegroundWindow(g_videoWindows[g_userId]);
                             }
                         }
                         InvalidateRect(hwnd, NULL, FALSE);
                     } else if (cmd == 3) {
                         std::wstring newName;
                         if (ShowChangeNameDialog(GetParent(hwnd), newName) && !newName.empty() && newName != g_username) {
-                            std::wstring oldName = g_username;
-                            SendLeaveRequest(g_currentRoom);
                             g_username = newName;
                             SaveSettings();
-                            
-                            if (g_videoWindows.count(oldName)) {
-                                HWND hVid = g_videoWindows[oldName];
-                                g_videoWindows.erase(oldName);
-                                if (IsWindow(hVid)) {
-                                    g_videoWindows[newName] = hVid;
-                                    std::wstring titleName = newName.substr(0, newName.find(L'#'));
-                                    SetWindowTextW(hVid, titleName.c_str());
-                                    std::wstring* pUser = (std::wstring*)GetWindowLongPtr(hVid, GWLP_USERDATA);
-                                    if (pUser) *pUser = newName;
-                                }
-                            }
-                            {
-                                std::lock_guard<std::mutex> lock(g_videoMutex);
-                                if (g_videoSizeMap.count(oldName)) {
-                                    g_videoSizeMap[newName] = g_videoSizeMap[oldName];
-                                    g_videoSizeMap.erase(oldName);
-                                }
-                                if (g_videoPixelsMap.count(oldName)) {
-                                    g_videoPixelsMap[newName] = std::move(g_videoPixelsMap[oldName]);
-                                    g_videoPixelsMap.erase(oldName);
-                                }
-                            }
-                            if (g_videoViewers.count(oldName)) {
-                                g_videoViewers[newName] = std::move(g_videoViewers[oldName]);
-                                g_videoViewers.erase(oldName);
-                            }
-                            {
-                                std::lock_guard<std::mutex> lock(g_streamerMutex);
-                                if (g_videoStreamers.count(oldName)) {
-                                    g_videoStreamers[newName] = g_videoStreamers[oldName];
-                                    g_videoStreamers.erase(oldName);
-                                }
-                            }
-                            
-                            int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)oldName.c_str());
-                            if (idx != LB_ERR) {
-                                SendMessage(g_hUserList, LB_DELETESTRING, idx, 0);
-                            }
-                            UpdateUserList(newName);
-                            
-                            SendJoinRequest(g_currentRoom, g_isPrivateRoom);
+                            SendRenameRequest();
                         }
                     }
                 } else {
@@ -3971,23 +4260,12 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 std::vector<WCHAR> buf(len + 1, 0);
                 SendMessage(hwnd, LB_GETTEXT, item, (LPARAM)buf.data());
                 std::wstring clickedUser(buf.data());
-                if (clickedUser == g_username) {
+                if (clickedUser == g_userId) {
                     std::wstring newName;
                     if (ShowChangeNameDialog(GetParent(hwnd), newName) && !newName.empty() && newName != g_username) {
-                        std::wstring oldName = g_username;
-                        SendLeaveRequest(g_currentRoom);
                         g_username = newName;
-                        if (g_videoWindows[oldName]) {
-                            g_videoWindows[newName] = g_videoWindows[oldName];
-                            g_videoWindows.erase(oldName);
-                            SetWindowText(g_videoWindows[newName], newName.substr(0, newName.find(L'#')).c_str());
-                        }
-                        if (g_videoStreamers.count(oldName) > 0) {
-                            g_videoStreamers[newName] = g_videoStreamers[oldName];
-                            g_videoStreamers.erase(oldName);
-                        }
-                        UpdateUserList(newName);
-                        SendJoinRequest(g_currentRoom, g_isPrivateRoom);
+                        SaveSettings();
+                        SendRenameRequest();
                     }
                 }
             }
@@ -4233,12 +4511,14 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         g_hFontBold = CreateFontW(Scale(12), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
             DEFAULT_PITCH | FF_DONTCARE, L"MS UI Gothic");
-        g_hFontI_btn = CreateFontW(Scale(12), 0, 0, 0, FW_NORMAL, TRUE, FALSE, FALSE, SHIFTJIS_CHARSET,
-            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-            DEFAULT_PITCH | FF_DONTCARE, L"MS UI Gothic");
-        g_hFontU_btn = CreateFontW(Scale(12), 0, 0, 0, FW_NORMAL, FALSE, TRUE, FALSE, SHIFTJIS_CHARSET,
-            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-            DEFAULT_PITCH | FF_DONTCARE, L"MS UI Gothic");
+        g_hFontI_btn = CreateFontW(Scale(15), 0, 0, 0, FW_BOLD, TRUE, FALSE, FALSE, DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Times New Roman");
+            
+        g_hFontU_btn = CreateFontW(Scale(15), 0, 0, 0, FW_BOLD, FALSE, TRUE, FALSE, DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Times New Roman");
+            
+        g_hFontB_btn = CreateFontW(Scale(15), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+            OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Times New Roman");
         g_hFontCombo = CreateFontW(Scale(15), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
             OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
             DEFAULT_PITCH | FF_DONTCARE, L"MS UI Gothic");
@@ -4277,7 +4557,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             0, 0, 0, 0, hWnd, (HMENU)1009, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
         g_hVolumeIndicator = CreateWindow(L"STATIC", L"", 
-            WS_CHILD | WS_VISIBLE | SS_OWNERDRAW,
+            WS_CHILD | SS_OWNERDRAW,
             0, 0, 0, 0, hWnd, (HMENU)1051, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
         g_hSpeakerIcon = CreateWindow(L"STATIC", L"", 
@@ -4288,6 +4568,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_AUTOTICKS | TBS_TOOLTIPS,
             0, 0, 0, 0, hWnd, (HMENU)1052, ((LPCREATESTRUCT)lParam)->hInstance, 0);
         SendMessage(g_hVolumeSlider, TBM_SETRANGE, TRUE, MAKELPARAM(0, 100));
+        SendMessage(g_hVolumeSlider, TBM_SETTICFREQ, 10, 0);
+        SetWindowTheme(g_hVolumeSlider, L" ", L" ");
 
         g_hBtnVideo = CreateWindow(L"BUTTON", L"Video: OFF", 
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
@@ -4328,7 +4610,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         SendMessage(g_hUserListHeader, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
         SendMessage(g_hSendBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-        SendMessage(g_hBtnB, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+        SendMessage(g_hBtnB, WM_SETFONT, (WPARAM)g_hFontB_btn, TRUE);
         SendMessage(g_hBtnI, WM_SETFONT, (WPARAM)g_hFontI_btn, TRUE);
         SendMessage(g_hBtnU, WM_SETFONT, (WPARAM)g_hFontU_btn, TRUE);
         SendMessage(g_hBtnVideo, WM_SETFONT, (WPARAM)g_hFont, TRUE);
@@ -4494,46 +4776,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             return TRUE;
         }
         else if (lpdis->CtlID == 1002) {
-            HDC hdc = lpdis->hDC;
-            RECT rc = lpdis->rcItem;
-            HBRUSH hFaceBrush = CreateSolidBrush(RGB(192, 192, 192));
-            FillRect(hdc, &rc, hFaceBrush);
-            DeleteObject(hFaceBrush);
-            UINT edge = (lpdis->itemState & ODS_SELECTED) ? EDGE_SUNKEN : EDGE_RAISED;
-            DrawScaledButtonBorder(hdc, rc, edge);
-            if (lpdis->itemState & ODS_FOCUS) {
-                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
-                int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
-                RECT rcFocus = rc; InflateRect(&rcFocus, -bw*2, -bw*2); DrawFocusRect(hdc, &rcFocus);
-            }
-            
-            GdiFlush(); // Ensure GDI background is drawn before GDI+ draws on top
-
-            {
-                Gdiplus::Graphics graphics(hdc);
-                graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-                
-                int cx = rc.left + (rc.right - rc.left) / 2;
-                int cy = rc.top + (rc.bottom - rc.top) / 2 - 1;
-                
-                Gdiplus::SolidBrush palBrush(Gdiplus::Color(255, 245, 225, 170));
-                graphics.FillEllipse(&palBrush, cx - Scale(10), cy - Scale(7), Scale(20), Scale(14));
-
-                COLORREF btnFace = RGB(192, 192, 192);
-                Gdiplus::SolidBrush bgBrush(Gdiplus::Color(255, GetRValue(btnFace), GetGValue(btnFace), GetBValue(btnFace)));
-                graphics.FillEllipse(&bgBrush, cx + Scale(3), cy - Scale(3), Scale(6), Scale(6));
-
-                Gdiplus::SolidBrush yellow(Gdiplus::Color(255, 240, 200, 40));
-                Gdiplus::SolidBrush red(Gdiplus::Color(255, 230, 50, 50));
-                Gdiplus::SolidBrush blue(Gdiplus::Color(255, 50, 150, 230));
-                Gdiplus::SolidBrush brown(Gdiplus::Color(255, 150, 80, 30));
-
-                graphics.FillEllipse(&yellow, cx - Scale(2), cy - Scale(5), Scale(4), Scale(4));
-                graphics.FillEllipse(&red, cx - Scale(6), cy - Scale(3), Scale(4), Scale(4));
-                graphics.FillEllipse(&blue, cx - Scale(7), cy + Scale(1), Scale(4), Scale(4));
-                graphics.FillEllipse(&brown, cx - Scale(3), cy + Scale(3), Scale(4), Scale(4));
-            }
-            
+            DrawColorButton(lpdis, g_currentColor);
             return TRUE;
         }
         else if (lpdis->CtlID == 1051) {
@@ -4545,27 +4788,37 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             DeleteObject(hFaceBrush);
             
             if (g_isVoiceActive) {
-                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
-                int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
-                
-                int maxVolWidth = rc.right - rc.left - bw * 2;
-                int volWidth = (maxVolWidth * g_currentMicVolume) / 100;
-                if (volWidth > 0) {
-                    Gdiplus::Graphics graphics(hdc);
+                if (!g_hWaveIn) {
+                    SetBkMode(hdc, TRANSPARENT);
+                    SetTextColor(hdc, RGB(255, 0, 0));
+                    HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
+                    RECT textRc = rc;
+                    DrawText(hdc, L"接続なし", -1, &textRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    SelectObject(hdc, hOldFont);
+                } else {
+                    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                    int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
                     
-                    Gdiplus::Color colors[] = {
-                        Gdiplus::Color(255, 0, 220, 0),    // Green
-                        Gdiplus::Color(255, 255, 220, 0),  // Yellow
-                        Gdiplus::Color(255, 255, 0, 0)     // Red
-                    };
-                    Gdiplus::REAL positions[] = { 0.0f, 0.6f, 1.0f };
-                    
-                    Gdiplus::Rect gradRect(rc.left + bw, rc.top + bw, maxVolWidth, rc.bottom - rc.top - bw * 2);
-                    Gdiplus::LinearGradientBrush gradBrush(gradRect, colors[0], colors[2], Gdiplus::LinearGradientModeHorizontal);
-                    gradBrush.SetInterpolationColors(colors, positions, 3);
-                    
-                    Gdiplus::Rect volRect(rc.left + bw, rc.top + bw, volWidth, rc.bottom - rc.top - bw * 2);
-                    graphics.FillRectangle(&gradBrush, volRect);
+                    int maxVolWidth = rc.right - rc.left - bw * 2;
+                    int volWidth = (maxVolWidth * g_currentMicVolume) / 100;
+                    if (volWidth > 0) {
+                        Gdiplus::Graphics graphics(hdc);
+                        
+                        Gdiplus::Color colors[] = {
+                            Gdiplus::Color(255, 0, 220, 0),    // Green
+                            Gdiplus::Color(255, 255, 220, 0),  // Yellow
+                            Gdiplus::Color(255, 255, 0, 0)     // Red
+                        };
+                        float positions[] = { 0.0f, 0.7f, 1.0f };
+                        
+                        Gdiplus::LinearGradientBrush linBrush(
+                            Gdiplus::Point(rc.left + bw, rc.top + bw),
+                            Gdiplus::Point(rc.right - bw, rc.top + bw),
+                            colors[0], colors[2]);
+                        linBrush.SetInterpolationColors(colors, positions, 3);
+                        
+                        graphics.FillRectangle(&linBrush, rc.left + bw, rc.top + bw, volWidth, rc.bottom - rc.top - bw * 2);
+                    }
                 }
             }
             
@@ -4638,7 +4891,12 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             
             WCHAR szText[256] = {0};
             SendMessage(lpdis->hwndItem, LB_GETTEXT, lpdis->itemID, (LPARAM)szText);
-            std::wstring user(szText);
+            std::wstring user(szText); // This is the userId
+
+            std::wstring displayUser = user;
+            if (g_userNames.count(user)) {
+                displayUser = g_userNames[user];
+            }
 
             bool isIgnored = false;
             {
@@ -4648,15 +4906,21 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
             COLORREF userColor = GetSysColor(COLOR_WINDOWTEXT);
             if (!isIgnored) {
-                size_t hash = 0;
-                for (wchar_t c : user) hash = hash * 31 + c;
-                COLORREF palette[] = {
-                    RGB(200, 50, 50), RGB(50, 150, 50), RGB(50, 50, 200),
-                    RGB(180, 180, 50), RGB(180, 50, 180), RGB(50, 180, 180),
-                    RGB(255, 128, 0), RGB(128, 0, 255), RGB(0, 128, 255),
-                    RGB(128, 200, 0), RGB(255, 0, 128), RGB(0, 200, 128)
-                };
-                userColor = palette[hash % 12];
+                if (user == g_userId && g_nameColor != 0xFFFFFFFF) {
+                    userColor = g_nameColor;
+                } else if (g_userColors.count(user) > 0) {
+                    userColor = g_userColors[user];
+                } else {
+                    size_t hash = 0;
+                    for (wchar_t c : displayUser) hash = hash * 31 + c;
+                    COLORREF palette[] = {
+                        RGB(200, 50, 50), RGB(50, 150, 50), RGB(50, 50, 200),
+                        RGB(180, 180, 50), RGB(180, 50, 180), RGB(50, 180, 180),
+                        RGB(255, 128, 0), RGB(128, 0, 255), RGB(0, 128, 255),
+                        RGB(128, 200, 0), RGB(255, 0, 128), RGB(0, 200, 128)
+                    };
+                    userColor = palette[hash % 12];
+                }
             }
 
             if (lpdis->itemState & ODS_SELECTED) {
@@ -4689,7 +4953,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                     if (GetTickCount() - g_videoStreamers[user] < 5000) isStreaming = true;
                 }
             }
-            if (user == g_username && g_isWebcamActive) isStreaming = true;
+            if (user == g_userId && g_isWebcamActive) isStreaming = true;
             if (isIgnored) isStreaming = false;
 
             if (isStreaming) {
@@ -4760,7 +5024,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                     }
                 }
             }
-            if (user == g_username && g_isVoiceActive) {
+            if (user == g_userId && g_isVoiceActive) {
                 isVoicing = true;
                 currentVolume = g_currentMicVolume;
             }
@@ -4844,11 +5108,10 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             HFONT hOldMemFont = (HFONT)SelectObject(hdc, hListFont);
             
             HFONT hOldFont = NULL;
-            if (user == g_username) {
+            if (user == g_userId) {
                 hOldFont = (HFONT)SelectObject(hdc, g_hFontBold);
             }
             
-            std::wstring displayUser = user;
             size_t hashPos = displayUser.find(L'#');
             if (hashPos != std::wstring::npos) displayUser = displayUser.substr(0, hashPos);
             
@@ -4873,6 +5136,34 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         if (nmhdr->hwndFrom == g_hVolumeSlider && nmhdr->code == NM_CUSTOMDRAW) {
             NMCUSTOMDRAW* pcd = (NMCUSTOMDRAW*)lParam;
             if (pcd->dwDrawStage == CDDS_PREPAINT) {
+                HDC hdc = pcd->hdc;
+                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int s = MulDiv(1, dpiY, 96); if (s < 1) s = 1;
+                HPEN hPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
+                HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+                
+                RECT rcChannel;
+                SendMessage(g_hVolumeSlider, TBM_GETCHANNELRECT, 0, (LPARAM)&rcChannel);
+                
+                int thumbW = 10 * s;
+                int xStart = rcChannel.left + thumbW / 2;
+                int xEnd = rcChannel.right - thumbW / 2;
+                
+                int tick1_Y1 = rcChannel.bottom + 3 * s;
+                int tick1_Y2 = tick1_Y1 + 2 * s;
+                
+                int tick2_Y2 = rcChannel.top - 3 * s;
+                int tick2_Y1 = tick2_Y2 - 2 * s;
+                
+                for (int i = 0; i <= 10; i++) {
+                    int x = xStart + (xEnd - xStart) * i / 10;
+                    MoveToEx(hdc, x, tick1_Y1, NULL);
+                    LineTo(hdc, x, tick1_Y2);
+                    MoveToEx(hdc, x, tick2_Y1, NULL);
+                    LineTo(hdc, x, tick2_Y2);
+                }
+                SelectObject(hdc, hOldPen);
+                DeleteObject(hPen);
                 return CDRF_NOTIFYITEMDRAW;
             } else if (pcd->dwDrawStage == CDDS_ITEMPREPAINT) {
                 if (pcd->dwItemSpec == TBCD_THUMB) {
@@ -4891,6 +5182,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                     rc.top += (rc.bottom - rc.top) / 2 - 2*s;
                     rc.bottom = rc.top + 4*s;
                     DrawScaledButtonBorder(hdc, rc, EDGE_SUNKEN);
+                    return CDRF_SKIPDEFAULT;
+                } else if (pcd->dwItemSpec == TBCD_TICS) {
                     return CDRF_SKIPDEFAULT;
                 }
             }
@@ -5046,6 +5339,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             cc.lpfnHook = ColorHookProc;
             if (ChooseColor(&cc)) {
                 g_currentColor = cc.rgbResult;
+                InvalidateRect(g_hBtnColor, NULL, FALSE);
                 UpdateInputFormat();
                 SetFocus(g_hInput);
             }
@@ -5069,19 +5363,24 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         }
 
         else if (id == 1009 && code == BN_CLICKED) {
-            g_isVoiceActive = !g_isVoiceActive;
-            if (g_isVoiceActive) {
-                waveInStart(g_hWaveIn);
+            if (!g_isVoiceActive) {
+                g_isVoiceActive = true;
+                if (InitAudioIn()) {
+                    waveInStart(g_hWaveIn);
+                }
+                ShowWindow(g_hVolumeIndicator, SW_SHOW);
             } else {
-                waveInStop(g_hWaveIn);
+                g_isVoiceActive = false;
+                CleanupAudioIn();
                 g_currentMicVolume = 0;
-                InvalidateRect(g_hVolumeIndicator, NULL, FALSE);
+                ShowWindow(g_hVolumeIndicator, SW_HIDE);
             }
+            InvalidateRect(g_hVolumeIndicator, NULL, FALSE);
             InvalidateRect(g_hBtnVoice, NULL, FALSE);
             
             // ユーザリスト上の自分のマイクアイコンを再描画
             if (g_hUserList) {
-                int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)g_username.c_str());
+                int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)g_userId.c_str());
                 if (idx != LB_ERR) {
                     RECT rc;
                     SendMessage(g_hUserList, LB_GETITEMRECT, idx, (LPARAM)&rc);
@@ -5199,13 +5498,14 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 InvalidateRect(g_hUserList, NULL, FALSE);
             }
             if (g_isVoiceActive && g_hUserList) {
-                int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)g_username.c_str());
+                int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)g_userId.c_str());
                 if (idx != LB_ERR) {
                     RECT rc;
                     SendMessage(g_hUserList, LB_GETITEMRECT, idx, (LPARAM)&rc);
                     InvalidateRect(g_hUserList, &rc, FALSE);
                 }
             }
+
         }
         return 0;
     }
@@ -5256,6 +5556,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         DeleteObject(g_hFontBold);
         DeleteObject(g_hFontI_btn);
         DeleteObject(g_hFontU_btn);
+        DeleteObject(g_hFontB_btn);
         DeleteObject(g_hFontCombo);
         if (g_pAudioSessionControl && g_pAudioEvents) {
             g_pAudioSessionControl->UnregisterAudioSessionNotification(g_pAudioEvents);
@@ -5311,6 +5612,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         CW_USEDEFAULT, 0, rcMin.right - rcMin.left, rcMin.bottom - rcMin.top,
         0, 0, hInstance, 0);
+        
+    HANDLE hIconBig = LoadImage(hInstance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON, 256, 256, LR_DEFAULTCOLOR);
+    if (!hIconBig) hIconBig = LoadImage(hInstance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
+    SendMessage(hWnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+
+    HANDLE hIconSmall = LoadImage(hInstance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
+    SendMessage(hWnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
         
     // SetThemeAppProperties(0);
     SetWindowTheme(hWnd, L" ", L" ");
