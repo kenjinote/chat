@@ -448,6 +448,25 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
         LONGLONG timestamp;
         HRESULT hr = pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &streamIndex, &flags, &timestamp, &pSample);
         if (SUCCEEDED(hr) && pSample) {
+            static DWORD lastStreamStatusTime = 0;
+            if (GetTickCount() - lastStreamStatusTime > 2000) {
+                lastStreamStatusTime = GetTickCount();
+                char udpPkt[sizeof(MediaHeader)] = {0};
+                MediaHeader* mhdr = (MediaHeader*)udpPkt;
+                mhdr->sessionId = g_sessionId;
+                mhdr->payloadType = 4; // StreamStatus
+                mhdr->timestamp = GetTickCount();
+                wcsncpy_s(mhdr->username, 32, g_username.c_str(), _TRUNCATE);
+                sockaddr_in serverUdp = {0};
+                serverUdp.sin_family = AF_INET;
+                serverUdp.sin_port = htons(4001);
+                if (!g_isServerUdpAddrResolved) {
+                    g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                }
+                serverUdp.sin_addr = g_serverUdpAddr;
+                sendto(g_sock, udpPkt, sizeof(MediaHeader), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+            }
+
             IMFMediaBuffer* pBuffer = NULL;
             pSample->ConvertToContiguousBuffer(&pBuffer);
             BYTE* pData = NULL;
@@ -3337,6 +3356,20 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             g_voiceVolumes[wname] = volume;
                         }
                         if (newlySpeaking && g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
+                    }
+                    else if (mhdr->payloadType == 4) {
+                        std::wstring wname = mhdr->username;
+                        bool stateChanged = false;
+                        {
+                            std::lock_guard<std::mutex> lock(g_streamerMutex);
+                            if (g_videoStreamers.find(wname) == g_videoStreamers.end() || (GetTickCount() - g_videoStreamers[wname] > 5000)) {
+                                stateChanged = true;
+                            }
+                            g_videoStreamers[wname] = GetTickCount();
+                        }
+                        if (stateChanged) {
+                            InvalidateRect(g_hUserList, NULL, FALSE);
+                        }
                     }
                     else if (mhdr->payloadType == 2) {
                         std::wstring wname = mhdr->username;
