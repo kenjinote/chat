@@ -48,6 +48,11 @@ std::wstring GetString(UINT id) {
 
 #define PORT 54321
 #define WM_USER_MSG (WM_APP + 2)
+
+void LogToFile(const std::string& msg) {
+    std::ofstream out("prod_log.txt", std::ios_base::app);
+    out << GetTickCount() << ": " << msg << std::endl;
+}
 #define WM_NEW_ROOM (WM_APP + 3)
 #define WM_REVERT_ROOM (WM_APP + 4)
 
@@ -568,7 +573,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
                     }
                     serverUdp.sin_addr = g_serverUdpAddr;
-                    sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                    int sent = sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                    LogToFile("UDP Sending Video Fragment, len=" + std::to_string(len) + ", sent=" + std::to_string(sent));
 
                     LARGE_INTEGER start, current;
                     QueryPerformanceCounter(&start);
@@ -630,7 +636,8 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
             }
             serverUdp.sin_addr = g_serverUdpAddr;
             
-            sendto(g_sock, udpPkt, sizeof(MediaHeader) + pHdr->dwBytesRecorded, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+            int sent = sendto(g_sock, udpPkt, sizeof(MediaHeader) + pHdr->dwBytesRecorded, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+            LogToFile("UDP Sending Audio Packet, len=" + std::to_string(pHdr->dwBytesRecorded) + ", sent=" + std::to_string(sent));
         }
         if (g_isVoiceActive) {
             // If the buffer was aborted (e.g. unplugged), do not re-add it.
@@ -1666,7 +1673,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         float tb = GetBValue(hlText) / 255.0f;
                         ID2D1SolidColorBrush* pTextBrush = nullptr;
                         if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(tr, tg, tb, 1.0f), &pTextBrush)) && pTextBrush) {
-                            DWRITE_TEXT_RANGE selRange = { (UINT32)selStart, (UINT32)selLen };
+                            DWRITE_TEXT_RANGE selRange = { (UINT32)selStart, (UINT32)(selLen) };
                             pLayout->SetDrawingEffect(pTextBrush, selRange);
                             pTextBrush->Release();
                         }
@@ -3649,11 +3656,13 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     sockaddr_in serverAddr;
                                     serverAddr.sin_family = AF_INET;
                                     serverAddr.sin_port = htons(newPort);
-                                    ResolveIP(newIp, serverAddr.sin_addr);
+                                    bool ok = ResolveIP(newIp, serverAddr.sin_addr);
+                                    LogToFile("Redirect resolving " + newIp + " result: " + (ok ? "OK" : "FAILED"));
                                     g_serverIp = newIp; // Update global server IP
                                     g_isServerUdpAddrResolved = false; // Force re-resolve for UDP
     
                                     if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
+                                        LogToFile("Redirect TCP connect OK");
                                         std::string finalRoomName;
                                         if (g_isPrivateRoom) {
                                             finalRoomName = HashRoomName(g_currentRoom);
@@ -3720,7 +3729,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                 sockaddr_in from;
                 int fromlen = sizeof(from);
                 int res = recvfrom(g_sock, udpBuf, sizeof(udpBuf), 0, (sockaddr*)&from, &fromlen);
-                if (res != SOCKET_ERROR && res >= (int)sizeof(MediaHeader)) {
+                if (res > 0 && res >= sizeof(MediaHeader)) {
+                    // UDP packet received
+                    LogToFile("UDP Received bytes: " + std::to_string(res));
                     MediaHeader* mhdr = (MediaHeader*)udpBuf;
                     
                     bool isIgnored = false;
@@ -3819,6 +3830,8 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         }
                     }
                     else if (mhdr->payloadType == 3) {
+                        // Watching packet
+                        LogToFile("UDP Received Watching Packet, bytes: " + std::to_string(res));
                         std::wstring viewer = mhdr->userId;
                         int len = res - sizeof(MediaHeader);
                         if (len > 0) {
@@ -3848,7 +3861,8 @@ DWORD WINAPI RecvThread(LPVOID param) {
                     sockaddr_in serverAddr = { 0 };
                     serverAddr.sin_family = AF_INET;
                     serverAddr.sin_port = htons(4000);
-                    ResolveIP(g_serverIp, serverAddr.sin_addr);
+                    bool ok = ResolveIP(g_serverIp, serverAddr.sin_addr);
+                    LogToFile("Initial resolving " + g_serverIp + " result: " + (ok ? "OK" : "FAILED"));
                     
                     if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
                         g_isServerUdpAddrResolved = false;
@@ -4052,9 +4066,11 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             serverUdp.sin_port = htons(4001);
             if (!g_isServerUdpAddrResolved) {
                 g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                LogToFile("Resolve UDP " + g_serverIp + ": " + (g_isServerUdpAddrResolved ? "OK" : "FAILED"));
             }
             serverUdp.sin_addr = g_serverUdpAddr;
-            sendto(g_sock, pkt, sizeof(hdr) + (int)targetA.length(), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+            int sent = sendto(g_sock, pkt, sizeof(hdr) + (int)targetA.length(), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+            LogToFile("UDP Sending watch packet to " + targetA + ", sent=" + std::to_string(sent));
             
             g_videoViewers[*pUser][g_username] = GetTickCount();
             
