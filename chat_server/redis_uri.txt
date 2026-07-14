@@ -1,0 +1,1 @@
+﻿tcp://your-redis-host.example.com:6379
