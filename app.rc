@@ -52,7 +52,7 @@ BEGIN
     IDS_RETURNED_TO_LOBBY "ロビーに戻りました"
     IDS_WINDOW_TITLE "Retro Chat"
     IDS_MOVE_ROOM_BTN "部屋移動"
-    IDS_VIEWING_COUNT " (視聴中: %d人)"
+    IDS_VIEWING_COUNT " (視聴: %d人)"
     IDS_ENTERED " が入室しました。"
     IDS_LEFT " が退出しました。"
     IDS_ERROR_TITLE "エラー"

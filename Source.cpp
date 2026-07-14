@@ -4070,13 +4070,15 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             int sent = sendto(g_sock, pkt, sizeof(hdr) + (int)targetA.length(), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
             LogToFile("UDP Sending watch packet to " + targetA + ", sent=" + std::to_string(sent));
             
-            g_videoViewers[*pUser][g_username] = GetTickCount();
+            g_videoViewers[*pUser][g_userId] = GetTickCount();
             
             int count = 0;
             DWORD now = GetTickCount();
             std::wstring viewerText = L"Viewers: ";
             for (auto& pair : g_videoViewers[*pUser]) {
                 if (now - pair.second < 5000) {
+                    if (pair.first == *pUser) continue;
+                    
                     count++;
                     std::wstring vname = pair.first;
                     if (g_userNames.count(pair.first)) vname = g_userNames[pair.first];
@@ -4662,6 +4664,14 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
         UpdateInputFormat();
         SetWindowTitle(hWnd);
+
+        // Set the 16x16 icon for the title bar. 
+        // We leave ICON_BIG as NULL so the Windows Shell will extract the best icon (like 24x24) natively from the EXE!
+//        HICON hIcon16 = (HICON)LoadImage(((LPCREATESTRUCT)lParam)->hInstance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON, 16, 16, LR_DEFAULTCOLOR);
+//        if (hIcon16) {
+//            SendMessage(hWnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon16);
+//        }
+
 
         MsgData sysMsg;
         sysMsg.user = L"";
@@ -5658,7 +5668,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     WNDCLASS wc = {
         0,
         WndProc, 0, 0, hInstance,
-        LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON)), LoadCursor(0, IDC_ARROW),
+        LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON)), LoadCursor(0, IDC_ARROW), // hIcon is NULL
         (HBRUSH)CreateSolidBrush(RGB(192, 192, 192)), 0, L"Retro Chat"
     };
     RegisterClass(&wc);
@@ -5677,13 +5687,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         CW_USEDEFAULT, 0, rcMin.right - rcMin.left, rcMin.bottom - rcMin.top,
         0, 0, hInstance, 0);
-        
-    HANDLE hIconBig = LoadImage(hInstance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON, 256, 256, LR_DEFAULTCOLOR);
-    if (!hIconBig) hIconBig = LoadImage(hInstance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
-    SendMessage(hWnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
-
-    HANDLE hIconSmall = LoadImage(hInstance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR);
-    SendMessage(hWnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
         
     // SetThemeAppProperties(0);
     SetWindowTheme(hWnd, L" ", L" ");
