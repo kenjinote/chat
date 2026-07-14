@@ -50,8 +50,6 @@ std::wstring GetString(UINT id) {
 #define WM_USER_MSG (WM_APP + 2)
 
 void LogToFile(const std::string& msg) {
-    std::ofstream out("prod_log.txt", std::ios_base::app);
-    out << GetTickCount() << ": " << msg << std::endl;
 }
 #define WM_NEW_ROOM (WM_APP + 3)
 #define WM_REVERT_ROOM (WM_APP + 4)
