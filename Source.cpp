@@ -4630,9 +4630,9 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
             0, 0, 0, 0, hWnd, (HMENU)1002, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
-        const WCHAR* sizes[] = { L"8", L"9", L"10", L"11", L"12", L"14", L"16", L"18", L"20", L"22", L"24", L"28", L"32" };
+        const WCHAR* sizes[] = { L"6", L"7", L"8", L"9", L"10", L"11", L"12", L"14", L"16", L"18", L"20", L"22", L"24", L"28", L"32" };
         for (auto sz : sizes) SendMessage(g_hComboSize, CB_ADDSTRING, 0, (LPARAM)sz);
-        SendMessage(g_hComboSize, CB_SETCURSEL, 2, 0);
+        SendMessage(g_hComboSize, CB_SETCURSEL, 4, 0);
 
         SendMessage(g_hUserList, WM_SETFONT, (WPARAM)g_hFont, TRUE);
         SendMessage(g_hUserListHeader, WM_SETFONT, (WPARAM)g_hFont, TRUE);
@@ -4703,8 +4703,13 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         LPDRAWITEMSTRUCT lpdis = (LPDRAWITEMSTRUCT)lParam;
         
         if (lpdis->CtlID == 1009) {
-            HDC hdc = lpdis->hDC;
+            HDC hdcPaint = lpdis->hDC;
             RECT rc = lpdis->rcItem;
+            
+            HDC hdc = CreateCompatibleDC(hdcPaint);
+            HBITMAP hBmp = CreateCompatibleBitmap(hdcPaint, rc.right - rc.left, rc.bottom - rc.top);
+            HBITMAP hOldBmp = (HBITMAP)SelectObject(hdc, hBmp);
+
             if (g_isVoiceActive) {
                 SetDCBrushColor(hdc, RGB(100, 255, 100));
                 FillRect(hdc, &rc, (HBRUSH)GetStockObject(DC_BRUSH));
@@ -4723,8 +4728,6 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 InflateRect(&rcFocus, -bw*2, -bw*2);
                 DrawFocusRect(hdc, &rcFocus);
             }
-
-            GdiFlush(); // Ensure GDI background is drawn before GDI+ draws on top
 
             {
                 Gdiplus::Graphics graphics(hdc);
@@ -4752,11 +4755,22 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             rcText.left += Scale(28);
             DrawTextW(hdc, text, -1, &rcText, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
             SelectObject(hdc, hOldFont);
+
+            BitBlt(hdcPaint, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, hdc, 0, 0, SRCCOPY);
+            SelectObject(hdc, hOldBmp);
+            DeleteObject(hBmp);
+            DeleteDC(hdc);
+
             return TRUE;
         }
         else if (lpdis->CtlID == 1008) {
-            HDC hdc = lpdis->hDC;
+            HDC hdcPaint = lpdis->hDC;
             RECT rc = lpdis->rcItem;
+            
+            HDC hdc = CreateCompatibleDC(hdcPaint);
+            HBITMAP hBmp = CreateCompatibleBitmap(hdcPaint, rc.right - rc.left, rc.bottom - rc.top);
+            HBITMAP hOldBmp = (HBITMAP)SelectObject(hdc, hBmp);
+
             HBRUSH hFaceBrush = CreateSolidBrush(RGB(192, 192, 192));
             FillRect(hdc, &rc, hFaceBrush);
             DeleteObject(hFaceBrush);
@@ -4767,8 +4781,6 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
                 RECT rcFocus = rc; InflateRect(&rcFocus, -bw*2, -bw*2); DrawFocusRect(hdc, &rcFocus);
             }
-
-            GdiFlush(); // Ensure GDI background is drawn before GDI+ draws on top
 
             HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
             std::wstring moveStr = GetString(IDS_MOVE_ROOM_BTN);
@@ -4801,6 +4813,12 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             rcText.left = startX + iconWidth + gap;
             DrawTextW(hdc, text, -1, &rcText, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
             SelectObject(hdc, hOldFont);
+
+            BitBlt(hdcPaint, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, hdc, 0, 0, SRCCOPY);
+            SelectObject(hdc, hOldBmp);
+            DeleteObject(hBmp);
+            DeleteDC(hdc);
+
             return TRUE;
         }
         else if (lpdis->CtlID == 1002) {
@@ -4808,8 +4826,12 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             return TRUE;
         }
         else if (lpdis->CtlID == 1051) {
-            HDC hdc = lpdis->hDC;
+            HDC hdcPaint = lpdis->hDC;
             RECT rc = lpdis->rcItem;
+            
+            HDC hdc = CreateCompatibleDC(hdcPaint);
+            HBITMAP hBmp = CreateCompatibleBitmap(hdcPaint, rc.right - rc.left, rc.bottom - rc.top);
+            HBITMAP hOldBmp = (HBITMAP)SelectObject(hdc, hBmp);
             
             HBRUSH hFaceBrush = CreateSolidBrush(RGB(192, 192, 192));
             FillRect(hdc, &rc, hFaceBrush);
@@ -4851,6 +4873,12 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             }
             
             DrawScaledButtonBorder(hdc, rc, EDGE_SUNKEN);
+
+            BitBlt(hdcPaint, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, hdc, 0, 0, SRCCOPY);
+            SelectObject(hdc, hOldBmp);
+            DeleteObject(hBmp);
+            DeleteDC(hdc);
+
             return TRUE;
         }
         else if (lpdis->CtlID == 1053) {
@@ -5165,6 +5193,11 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             NMCUSTOMDRAW* pcd = (NMCUSTOMDRAW*)lParam;
             if (pcd->dwDrawStage == CDDS_PREPAINT) {
                 HDC hdc = pcd->hdc;
+                RECT rcBg = pcd->rc;
+                HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
+                FillRect(hdc, &rcBg, hBg);
+                DeleteObject(hBg);
+                
                 int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
                 int s = MulDiv(1, dpiY, 96); if (s < 1) s = 1;
                 HPEN hPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
@@ -5477,8 +5510,12 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 std::lock_guard<std::mutex> lock(g_streamerMutex);
                 for (auto it = g_videoStreamers.begin(); it != g_videoStreamers.end(); ) {
                     if (now - it->second > 5000) {
+                        std::wstring deadUser = it->first;
                         listChanged = true;
                         it = g_videoStreamers.erase(it);
+                        if (g_videoWindows[deadUser] && IsWindow(g_videoWindows[deadUser])) {
+                            DestroyWindow(g_videoWindows[deadUser]);
+                        }
                     } else {
                         ++it;
                     }
