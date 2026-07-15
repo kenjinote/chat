@@ -53,6 +53,14 @@ std::wstring GetString(UINT id) {
 #define WM_USER_MSG (WM_APP + 2)
 
 void LogToFile(const std::string& msg) {
+    FILE* fp = NULL;
+    fopen_s(&fp, "chat.log", "a");
+    if (fp) {
+        SYSTEMTIME st;
+        GetLocalTime(&st);
+        fprintf(fp, "[%02d:%02d:%02d.%03d] %s\n", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, msg.c_str());
+        fclose(fp);
+    }
 }
 #define WM_NEW_ROOM (WM_APP + 3)
 #define WM_REVERT_ROOM (WM_APP + 4)
@@ -301,6 +309,10 @@ std::wstring FilterProfanity(std::wstring text) {
 }
 
 void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& username) {
+    if (jpegData.empty()) {
+        LogToFile("DecodeJPEG: jpegData is empty");
+        return;
+    }
     IStream* pStream = NULL;
     HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, jpegData.size());
     void* pData = GlobalLock(hGlobal);
@@ -309,33 +321,59 @@ void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& userna
     CreateStreamOnHGlobal(hGlobal, TRUE, &pStream);
     
     IWICBitmapDecoder* pDecoder = NULL;
-    if (SUCCEEDED(g_pWICFactory->CreateDecoderFromStream(pStream, NULL, WICDecodeMetadataCacheOnDemand, &pDecoder))) {
+    HRESULT hrDec = g_pWICFactory->CreateDecoderFromStream(pStream, NULL, WICDecodeMetadataCacheOnDemand, &pDecoder);
+    if (SUCCEEDED(hrDec)) {
         IWICBitmapFrameDecode* pFrame = NULL;
-        if (SUCCEEDED(pDecoder->GetFrame(0, &pFrame))) {
+        HRESULT hrFrame = pDecoder->GetFrame(0, &pFrame);
+        if (SUCCEEDED(hrFrame)) {
             UINT width, height;
             pFrame->GetSize(&width, &height);
             
             IWICFormatConverter* pConverter = NULL;
             g_pWICFactory->CreateFormatConverter(&pConverter);
-            pConverter->Initialize(pFrame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, NULL, 0.0f, WICBitmapPaletteTypeCustom);
-            
-            std::vector<uint8_t> pixels(width * height * 4);
-            pConverter->CopyPixels(NULL, width * 4, pixels.size(), pixels.data());
-            
-            {
-                std::lock_guard<std::mutex> lock(g_videoMutex);
-                g_videoSizeMap[username] = {width, height};
-                g_videoPixelsMap[username] = std::move(pixels);
+            HRESULT hrConv = pConverter->Initialize(pFrame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, NULL, 0.0f, WICBitmapPaletteTypeCustom);
+            if (SUCCEEDED(hrConv)) {
+                std::vector<uint8_t> pixels(width * height * 4);
+                HRESULT hrCopy = pConverter->CopyPixels(NULL, width * 4, pixels.size(), pixels.data());
+                if (SUCCEEDED(hrCopy)) {
+                    std::lock_guard<std::mutex> lock(g_videoMutex);
+                    g_videoSizeMap[username] = {width, height};
+                    g_videoPixelsMap[username] = std::move(pixels);
+                    static DWORD lastDecLog = 0;
+                    if (GetTickCount() - lastDecLog > 1000) {
+                        lastDecLog = GetTickCount();
+                        char buf[256];
+                        std::string unameA(username.begin(), username.end());
+                        sprintf_s(buf, "DecodeJPEG SUCCESS: %dx%d for %s", width, height, unameA.c_str());
+                        LogToFile(buf);
+                    }
+                } else {
+                    char buf[256]; sprintf_s(buf, "DecodeJPEG FAILED: CopyPixels hr=0x%X", hrCopy); LogToFile(buf);
+                }
+            } else {
+                char buf[256]; sprintf_s(buf, "DecodeJPEG FAILED: Initialize FormatConverter hr=0x%X", hrConv); LogToFile(buf);
             }
             pConverter->Release();
             pFrame->Release();
+        } else {
+            char buf[256]; sprintf_s(buf, "DecodeJPEG FAILED: GetFrame hr=0x%X", hrFrame); LogToFile(buf);
         }
         pDecoder->Release();
+    } else {
+        char buf[256]; sprintf_s(buf, "DecodeJPEG FAILED: CreateDecoderFromStream hr=0x%X", hrDec); LogToFile(buf);
     }
     pStream->Release();
-    HWND hView = g_videoWindows[username];
+    HWND hView = NULL;
+    auto it = g_videoWindows.find(username);
+    if (it != g_videoWindows.end()) {
+        hView = it->second;
+    }
+
     if (hView && IsWindow(hView)) {
         InvalidateRect(hView, NULL, FALSE);
+    } else {
+        std::string unameA(username.begin(), username.end());
+        LogToFile("DecodeJPEG: Target video window not found for " + unameA);
     }
 }
 
@@ -422,7 +460,13 @@ struct MediaHeader {
 
 bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<uint8_t>& outJpeg) {
     IWICBitmap* pWicBitmap = NULL;
-    if (FAILED(g_pWICFactory->CreateBitmapFromMemory(width, height, GUID_WICPixelFormat32bppBGRA, width * 4, cbData, pData, &pWicBitmap))) return false;
+    HRESULT hr = g_pWICFactory->CreateBitmapFromMemory(width, height, GUID_WICPixelFormat32bppBGRA, width * 4, cbData, pData, &pWicBitmap);
+    if (FAILED(hr)) {
+        char buf[256];
+        sprintf_s(buf, "EncodeJPEG FAILED: CreateBitmapFromMemory hr=0x%X, w=%u, h=%u, cbData=%u, expected=%u", hr, width, height, cbData, width * 4 * height);
+        LogToFile(buf);
+        return false;
+    }
     
     UINT targetWidth = 320;
     UINT targetHeight = 240;
@@ -446,18 +490,42 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
     
     IWICBitmapFrameEncode* pFrame = NULL;
     pEncoder->CreateNewFrame(&pFrame, NULL);
-    pFrame->Initialize(NULL);
+    HRESULT hrInit = pFrame->Initialize(NULL);
+    if (FAILED(hrInit)) {
+        char buf[256];
+        sprintf_s(buf, "pFrame->Initialize(NULL) FAILED: hr=0x%X", hrInit);
+        LogToFile(buf);
+        pFrame->Release(); pEncoder->Release(); pStream->Release(); pWicBitmap->Release();
+        if (pScaler) pScaler->Release();
+        return false;
+    }
     pFrame->SetSize(width, height);
     WICPixelFormatGUID format = GUID_WICPixelFormat24bppBGR;
     pFrame->SetPixelFormat(&format);
     IWICFormatConverter* pConverter = NULL;
     if (SUCCEEDED(g_pWICFactory->CreateFormatConverter(&pConverter))) {
         pConverter->Initialize(pSourceToConvert, GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, NULL, 0.0f, WICBitmapPaletteTypeCustom);
-        pFrame->WriteSource(pConverter, NULL);
+        HRESULT hrWrite = pFrame->WriteSource(pConverter, NULL);
+        if (FAILED(hrWrite)) {
+            char buf[256];
+            sprintf_s(buf, "pFrame->WriteSource FAILED: hr=0x%X", hrWrite);
+            LogToFile(buf);
+        }
         pConverter->Release();
     }
-    pFrame->Commit();
-    pEncoder->Commit();
+    
+    HRESULT hrCommitF = pFrame->Commit();
+    if (FAILED(hrCommitF)) {
+        char buf[256];
+        sprintf_s(buf, "pFrame->Commit FAILED: hr=0x%X", hrCommitF);
+        LogToFile(buf);
+    }
+    HRESULT hrCommitE = pEncoder->Commit();
+    if (FAILED(hrCommitE)) {
+        char buf[256];
+        sprintf_s(buf, "pEncoder->Commit FAILED: hr=0x%X", hrCommitE);
+        LogToFile(buf);
+    }
     
     STATSTG stat;
     pStream->Stat(&stat, STATFLAG_NONAME);
@@ -469,9 +537,13 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
     ULONG bytesRead;
     pStream->Read(outJpeg.data(), jpegSize, &bytesRead);
     
+    if (jpegSize == 0) {
+        LogToFile("EncodeJPEG warning: Output JPEG size is 0 bytes!");
+    }
+    
     pFrame->Release(); pEncoder->Release(); pStream->Release(); pWicBitmap->Release();
     if (pScaler) pScaler->Release();
-    return true;
+    return (jpegSize > 0);
 }
 
 DWORD WINAPI WebcamThread(LPVOID lpParam) {
@@ -489,6 +561,26 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             continue;
         }
 
+        // Send StreamStatus keep-alive even if we don't have a frame yet
+        static DWORD lastStreamStatusTime = 0;
+        if (GetTickCount() - lastStreamStatusTime > 2000) {
+            lastStreamStatusTime = GetTickCount();
+            char udpPkt[sizeof(MediaHeader)] = {0};
+            MediaHeader* mhdr = (MediaHeader*)udpPkt;
+            mhdr->sessionId = g_sessionId;
+            mhdr->payloadType = 4; // StreamStatus
+            mhdr->timestamp = GetTickCount();
+            wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
+            sockaddr_in serverUdp = {0};
+            serverUdp.sin_family = AF_INET;
+            serverUdp.sin_port = htons(4001);
+            if (!g_isServerUdpAddrResolved) {
+                g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+            }
+            serverUdp.sin_addr = g_serverUdpAddr;
+            sendto(g_sock, udpPkt, sizeof(MediaHeader), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+        }
+
         if (!pReader) {
             IMFMediaSource* pSource = NULL;
             IMFAttributes* pAttributes = NULL;
@@ -498,7 +590,19 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             IMFActivate** ppDevices = NULL;
             UINT32 count = 0;
             MFEnumDeviceSources(pAttributes, &ppDevices, &count);
-            if (count > 0) ppDevices[0]->ActivateObject(IID_PPV_ARGS(&pSource));
+            if (count > 0) {
+                ppDevices[0]->ActivateObject(IID_PPV_ARGS(&pSource));
+                WCHAR* szFriendlyName = NULL;
+                UINT32 cchName = 0;
+                if (SUCCEEDED(ppDevices[0]->GetAllocatedString(MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, &szFriendlyName, &cchName))) {
+                    char nameBuf[256];
+                    sprintf_s(nameBuf, "Webcam Selected: %ws", szFriendlyName);
+                    LogToFile(nameBuf);
+                    CoTaskMemFree(szFriendlyName);
+                }
+            } else {
+                LogToFile("WebcamThread: No video capture devices found.");
+            }
             for (UINT32 i = 0; i < count; i++) ppDevices[i]->Release();
             CoTaskMemFree(ppDevices);
             pAttributes->Release();
@@ -513,11 +617,14 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 MFCreateMediaType(&pType);
                 pType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
                 pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+                MFSetAttributeSize(pType, MF_MT_FRAME_SIZE, 320, 240);
                 pReader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, pType);
                 pType->Release();
+                
                 pSource->Release();
             } else {
                 g_isWebcamActive = false;
+                if (pReader) { pReader->Release(); pReader = NULL; }
                 continue;
             }
         }
@@ -526,26 +633,31 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
         DWORD streamIndex, flags;
         LONGLONG timestamp;
         HRESULT hr = pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &streamIndex, &flags, &timestamp, &pSample);
-        if (SUCCEEDED(hr) && pSample) {
-            static DWORD lastStreamStatusTime = 0;
-            if (GetTickCount() - lastStreamStatusTime > 2000) {
-                lastStreamStatusTime = GetTickCount();
-                char udpPkt[sizeof(MediaHeader)] = {0};
-                MediaHeader* mhdr = (MediaHeader*)udpPkt;
-                mhdr->sessionId = g_sessionId;
-                mhdr->payloadType = 4; // StreamStatus
-                mhdr->timestamp = GetTickCount();
-                wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
-                sockaddr_in serverUdp = {0};
-                serverUdp.sin_family = AF_INET;
-                serverUdp.sin_port = htons(4001);
-                if (!g_isServerUdpAddrResolved) {
-                    g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
-                }
-                serverUdp.sin_addr = g_serverUdpAddr;
-                sendto(g_sock, udpPkt, sizeof(MediaHeader), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+        
+        if (FAILED(hr)) {
+            static DWORD lastErrorTime = 0;
+            if (GetTickCount() - lastErrorTime > 1000) {
+                lastErrorTime = GetTickCount();
+                char buf[256];
+                sprintf_s(buf, "ReadSample FAILED: hr=0x%X", hr);
+                LogToFile(buf);
             }
-
+        } else if (!pSample) {
+            static DWORD lastNullTime = 0;
+            if (GetTickCount() - lastNullTime > 1000) {
+                lastNullTime = GetTickCount();
+                char buf[256];
+                sprintf_s(buf, "ReadSample returned NULL pSample. flags=0x%X", flags);
+                LogToFile(buf);
+            }
+            if (flags & MF_SOURCE_READERF_ERROR) {
+                LogToFile("Source reader error flag set. Resetting reader.");
+                pReader->Release();
+                pReader = NULL;
+            }
+        }
+        
+        if (SUCCEEDED(hr) && pSample) {
             IMFMediaBuffer* pBuffer = NULL;
             pSample->ConvertToContiguousBuffer(&pBuffer);
             BYTE* pData = NULL;
@@ -558,8 +670,21 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             MFGetAttributeSize(pCurrentType, MF_MT_FRAME_SIZE, &width, &height);
             pCurrentType->Release();
 
+            static DWORD lastPixLog = 0;
+            if (GetTickCount() - lastPixLog > 1000 && cbData >= 4) {
+                lastPixLog = GetTickCount();
+                char pbuf[256];
+                sprintf_s(pbuf, "Pixel[center]: R=%d G=%d B=%d (cbData=%u)", pData[(height/2)*width*4 + (width/2)*4 + 2], pData[(height/2)*width*4 + (width/2)*4 + 1], pData[(height/2)*width*4 + (width/2)*4 + 0], cbData);
+                LogToFile(pbuf);
+            }
+
             std::vector<uint8_t> jpegData;
             if (EncodeJPEG(width, height, pData, cbData, jpegData)) {
+                static DWORD lastEncLog = 0;
+                if (GetTickCount() - lastEncLog > 1000) {
+                    lastEncLog = GetTickCount();
+                    LogToFile("WebcamThread: EncodeJPEG success, size=" + std::to_string(jpegData.size()));
+                }
                 const int MAX_PAYLOAD = 1000;
                 int totalFragments = (jpegData.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD;
                 g_videoSeq++;
@@ -589,6 +714,12 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
                 }
                 DecodeJPEG(jpegData, g_userId);
+            } else {
+                static DWORD lastEncFailLog = 0;
+                if (GetTickCount() - lastEncFailLog > 1000) {
+                    lastEncFailLog = GetTickCount();
+                    LogToFile("WebcamThread: EncodeJPEG returned false");
+                }
             }
             pBuffer->Unlock();
             pBuffer->Release();
@@ -3732,13 +3863,14 @@ DWORD WINAPI RecvThread(LPVOID param) {
 
             if (g_sock != INVALID_SOCKET && FD_ISSET(g_sock, &readfds)) {
                 while (true) {
-                    u_long bytes_available = 0;
-                    if (ioctlsocket(g_sock, FIONREAD, &bytes_available) != 0 || bytes_available == 0) {
-                        break;
-                    }
                     sockaddr_in from;
                     int fromlen = sizeof(from);
                     int res = recvfrom(g_sock, udpBuf, sizeof(udpBuf), 0, (sockaddr*)&from, &fromlen);
+                    if (res == SOCKET_ERROR) {
+                        int err = WSAGetLastError();
+                        if (err == WSAEWOULDBLOCK) break;
+                        continue;
+                    }
                     if (res > 0 && res >= sizeof(MediaHeader)) {
                         MediaHeader* mhdr = (MediaHeader*)udpBuf;
                         
@@ -4149,9 +4281,9 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                 auto sz = g_videoSizeMap[*pUser];
                 if (!pixels.empty()) {
                     ID2D1Bitmap* pBitmap = NULL;
-                    pRT->CreateBitmap(D2D1::SizeU(sz.first, sz.second), pixels.data(), sz.first * 4, 
+                    HRESULT hrBmp = pRT->CreateBitmap(D2D1::SizeU(sz.first, sz.second), pixels.data(), sz.first * 4, 
                         D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)), &pBitmap);
-                    if (pBitmap) {
+                    if (SUCCEEDED(hrBmp) && pBitmap) {
                         float vW = (float)sz.first;
                         float vH = (float)sz.second;
                         float wW = (float)rc.right * 96.0f / g_dpi;
@@ -4163,10 +4295,21 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                         float offsetY = (wH - drawH) / 2.0f;
                         pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
                         pBitmap->Release();
+                    } else {
+                        char buf[256]; sprintf_s(buf, "VideoViewProc FAILED: CreateBitmap hr=0x%X, sz=%dx%d", hrBmp, sz.first, sz.second); LogToFile(buf);
+                    }
+                } else {
+                    static DWORD lastEmptyLog = 0;
+                    if (GetTickCount() - lastEmptyLog > 1000) {
+                        lastEmptyLog = GetTickCount();
+                        std::string unameA(pUser->begin(), pUser->end());
+                        LogToFile("VideoViewProc FAILED: pixels.empty() is true for " + unameA);
                     }
                 }
             }
             pRT->EndDraw();
+        } else {
+            LogToFile("VideoViewProc FAILED: pRT or pUser is NULL");
         }
         EndPaint(hwnd, &ps);
         return 0;
@@ -4457,7 +4600,6 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                                 DestroyWindow(g_videoWindows[g_userId]);
                             }
                         } else {
-                            g_isWebcamActive = true;
                             if (!g_videoWindows[g_userId] || !IsWindow(g_videoWindows[g_userId])) {
                                 std::wstring titleName = g_username.substr(0, g_username.find(L'#'));
                                 int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
@@ -4469,6 +4611,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             } else {
                                 SetForegroundWindow(g_videoWindows[g_userId]);
                             }
+                            g_isWebcamActive = true;
                         }
                         InvalidateRect(hwnd, NULL, FALSE);
                     } else if (cmd == 3) {
@@ -4797,6 +4940,16 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         bind(g_sock, (sockaddr*)&localAddr, sizeof(localAddr));
         int rcvBufSize = 2097152;
         setsockopt(g_sock, SOL_SOCKET, SO_RCVBUF, (char*)&rcvBufSize, sizeof(rcvBufSize));
+        
+        #ifndef SIO_UDP_CONNRESET
+        #define SIO_UDP_CONNRESET _WSAIOW(IOC_VENDOR, 12)
+        #endif
+        BOOL bNewBehavior = FALSE;
+        DWORD dwBytesReturned = 0;
+        WSAIoctl(g_sock, SIO_UDP_CONNRESET, &bNewBehavior, sizeof(bNewBehavior), NULL, 0, &dwBytesReturned, NULL, NULL);
+
+        u_long mode = 1;
+        ioctlsocket(g_sock, FIONBIO, &mode);
 
         g_tcpSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
         sockaddr_in serverAddr = { 0 };
