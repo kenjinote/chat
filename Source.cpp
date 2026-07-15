@@ -424,6 +424,20 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
     IWICBitmap* pWicBitmap = NULL;
     if (FAILED(g_pWICFactory->CreateBitmapFromMemory(width, height, GUID_WICPixelFormat32bppBGRA, width * 4, cbData, pData, &pWicBitmap))) return false;
     
+    UINT targetWidth = 320;
+    UINT targetHeight = 240;
+    IWICBitmapScaler* pScaler = NULL;
+    IWICBitmapSource* pSourceToConvert = pWicBitmap;
+    if (width > targetWidth || height > targetHeight) {
+        if (SUCCEEDED(g_pWICFactory->CreateBitmapScaler(&pScaler))) {
+            if (SUCCEEDED(pScaler->Initialize(pWicBitmap, targetWidth, targetHeight, WICBitmapInterpolationModeFant))) {
+                pSourceToConvert = pScaler;
+                width = targetWidth;
+                height = targetHeight;
+            }
+        }
+    }
+
     IStream* pStream = NULL;
     CreateStreamOnHGlobal(NULL, TRUE, &pStream);
     IWICBitmapEncoder* pEncoder = NULL;
@@ -438,7 +452,7 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
     pFrame->SetPixelFormat(&format);
     IWICFormatConverter* pConverter = NULL;
     if (SUCCEEDED(g_pWICFactory->CreateFormatConverter(&pConverter))) {
-        pConverter->Initialize(pWicBitmap, GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, NULL, 0.0f, WICBitmapPaletteTypeCustom);
+        pConverter->Initialize(pSourceToConvert, GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, NULL, 0.0f, WICBitmapPaletteTypeCustom);
         pFrame->WriteSource(pConverter, NULL);
         pConverter->Release();
     }
@@ -456,6 +470,7 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
     pStream->Read(outJpeg.data(), jpegSize, &bytesRead);
     
     pFrame->Release(); pEncoder->Release(); pStream->Release(); pWicBitmap->Release();
+    if (pScaler) pScaler->Release();
     return true;
 }
 
@@ -498,7 +513,6 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 MFCreateMediaType(&pType);
                 pType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
                 pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
-                MFSetAttributeSize(pType, MF_MT_FRAME_SIZE, 320, 240);
                 pReader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, pType);
                 pType->Release();
                 pSource->Release();
