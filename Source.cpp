@@ -35,6 +35,9 @@
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "imm32.lib")
 
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
+
 #include "resource.h"
 
 std::wstring GetString(UINT id) {
@@ -2703,7 +2706,7 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         
         hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
             okX, y, btnWidth, btnHeight, hWnd, (HMENU)1, GetModuleHandle(0), 0);
-        hBtnCancel = CreateWindow(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        hBtnCancel = CreateWindow(L"BUTTON", L"キャンセル", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             cancelX, y, btnWidth, btnHeight, hWnd, (HMENU)2, GetModuleHandle(0), 0);
             
         static HWND hBtnColorLocal;
@@ -3115,7 +3118,7 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
             okX, y, btnWidth, btnHeight, hWnd, (HMENU)1, GetModuleHandle(0), 0);
             
-        hBtnCancel = CreateWindow(L"BUTTON", L"Cancel", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+        hBtnCancel = CreateWindow(L"BUTTON", L"キャンセル", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
             cancelX, y, btnWidth, btnHeight, hWnd, (HMENU)2, GetModuleHandle(0), 0);
             
         SetWindowSubclass(hBtnOK, ClassicButtonProc, 0, 0);
@@ -4009,6 +4012,7 @@ void SendChatMessage(const std::wstring& msg) {
     GlobalFree(msgA_ptr);
 }
 
+void SnapWindow(HWND hMovingWnd, LPRECT prc);
 
 std::map<HWND, ID2D1HwndRenderTarget*> g_videoRts;
 
@@ -4018,6 +4022,16 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 
     std::wstring* pUser = (std::wstring*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
     switch (message) {
+    case WM_ENTERSIZEMOVE: {
+        extern bool g_isNewDrag;
+        g_isNewDrag = true;
+        break;
+    }
+    case WM_MOVING: {
+        LPRECT prc = (LPRECT)lParam;
+        SnapWindow(hwnd, prc);
+        return TRUE;
+    }
     case WM_NCCREATE: {
         CREATESTRUCT* pcs = (CREATESTRUCT*)lParam;
         std::wstring* u = new std::wstring((LPCWSTR)pcs->lpCreateParams);
@@ -4142,6 +4156,11 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         EndPaint(hwnd, &ps);
         return 0;
     }
+    case WM_NCHITTEST: {
+        LRESULT hit = DefWindowProc(hwnd, message, wParam, lParam);
+        if (hit == HTCLIENT) return HTCAPTION;
+        return hit;
+    }
     case WM_SIZE: {
         UINT width = LOWORD(lParam);
         UINT height = HIWORD(lParam);
@@ -4154,6 +4173,247 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
     return DefWindowProc(hwnd, message, wParam, lParam);
 }
 
+RECT GetWindowMargin(HWND hwnd) {
+    if (!IsWindow(hwnd)) return {0, 0, 0, 0};
+    
+    RECT rcFrame = { 0, 0, 0, 0 };
+    AdjustWindowRectEx(&rcFrame, GetWindowLong(hwnd, GWL_STYLE), FALSE, GetWindowLong(hwnd, GWL_EXSTYLE));
+    
+    HDC hdc = GetDC(hwnd);
+    int dpiY = 96;
+    if (hdc) {
+        dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+        ReleaseDC(hwnd, hdc);
+    }
+    int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+    int bw3 = bw1 * 3;
+
+    int cxCrop = -rcFrame.left - bw3;
+    int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - bw3;
+    int cyCropBottom = rcFrame.bottom - bw3;
+    if (cxCrop < 0) cxCrop = 0;
+    if (cyCropTop < 0) cyCropTop = 0;
+    if (cyCropBottom < 0) cyCropBottom = 0;
+
+    return { cxCrop, cyCropTop, cxCrop, cyCropBottom };
+}
+
+void GetVisibleRect(HWND hwnd, RECT* prc) {
+    GetWindowRect(hwnd, prc);
+    RECT margin = GetWindowMargin(hwnd);
+    prc->left += margin.left;
+    prc->top += margin.top;
+    prc->right -= margin.right;
+    prc->bottom -= margin.bottom;
+}
+
+bool g_isNewDrag = false;
+
+void SnapWindow(HWND hMovingWnd, LPRECT prc) {
+    static HWND s_hDragWnd = NULL;
+    static RECT s_rcUnsnapped = {0,0,0,0};
+
+    if ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0) {
+        s_hDragWnd = NULL;
+    }
+
+    if (s_hDragWnd != hMovingWnd || g_isNewDrag) {
+        s_hDragWnd = hMovingWnd;
+        s_rcUnsnapped = *prc;
+        g_isNewDrag = false;
+    } else {
+        RECT rcCurrent;
+        GetWindowRect(hMovingWnd, &rcCurrent);
+        int dx = prc->left - rcCurrent.left;
+        int dy = prc->top - rcCurrent.top;
+        s_rcUnsnapped.left += dx;
+        s_rcUnsnapped.top += dy;
+        s_rcUnsnapped.right = s_rcUnsnapped.left + (prc->right - prc->left);
+        s_rcUnsnapped.bottom = s_rcUnsnapped.top + (prc->bottom - prc->top);
+    }
+
+    RECT margin = GetWindowMargin(hMovingWnd);
+    RECT rcVis = { s_rcUnsnapped.left + margin.left, s_rcUnsnapped.top + margin.top, s_rcUnsnapped.right - margin.right, s_rcUnsnapped.bottom - margin.bottom };
+
+    std::vector<RECT> targets;
+    
+    HWND hMainWnd = NULL;
+    extern HWND g_hUserList;
+    if (g_hUserList) {
+        hMainWnd = GetParent(g_hUserList);
+    }
+    
+    if (hMainWnd && hMainWnd != hMovingWnd && IsWindowVisible(hMainWnd)) {
+        RECT r; GetVisibleRect(hMainWnd, &r); targets.push_back(r);
+    }
+    for (auto& pair : g_videoWindows) {
+        HWND hVid = pair.second;
+        if (hVid && hVid != hMovingWnd && IsWindowVisible(hVid)) {
+            RECT r; GetVisibleRect(hVid, &r); targets.push_back(r);
+        }
+    }
+    
+    int dpiY = 96;
+    HDC hdc = GetDC(hMovingWnd);
+    if (hdc) {
+        dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+        ReleaseDC(hMovingWnd, hdc);
+    }
+    const int SNAP_EDGE = MulDiv(16, dpiY, 96);
+    const int SNAP_CORNER = MulDiv(32, dpiY, 96);
+
+    int dx = 0, dy = 0;
+    int minDx = 9999, minDy = 9999;
+    
+    bool cornerSnapped = false;
+    
+    HMONITOR hMonitor = MonitorFromWindow(hMovingWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(hMonitor, &mi);
+    
+    int scr_x_cands[] = { mi.rcWork.left - rcVis.left, mi.rcWork.right - rcVis.right };
+    int scr_y_cands[] = { mi.rcWork.top - rcVis.top, mi.rcWork.bottom - rcVis.bottom };
+
+    for (auto& t : targets) {
+        int x_cands[] = { t.left - rcVis.right, t.right - rcVis.left, t.left - rcVis.left, t.right - rcVis.right };
+        int y_cands[] = { t.top - rcVis.bottom, t.bottom - rcVis.top, t.top - rcVis.top, t.bottom - rcVis.bottom };
+        
+        for (int cx : x_cands) {
+            for (int cy : y_cands) {
+                if (abs(cx) < SNAP_CORNER && abs(cy) < SNAP_CORNER) {
+                    if (abs(cx) + abs(cy) < abs(minDx) + abs(minDy)) {
+                        minDx = cx; minDy = cy; cornerSnapped = true;
+                    }
+                }
+            }
+        }
+    }
+    
+    for (int cx : scr_x_cands) {
+        for (int cy : scr_y_cands) {
+            if (abs(cx) < SNAP_CORNER && abs(cy) < SNAP_CORNER) {
+                if (abs(cx) + abs(cy) < abs(minDx) + abs(minDy)) {
+                    minDx = cx; minDy = cy; cornerSnapped = true;
+                }
+            }
+        }
+    }
+    
+    if (cornerSnapped) {
+        dx = minDx;
+        dy = minDy;
+    } else {
+        for (auto& t : targets) {
+            if (rcVis.bottom > t.top && rcVis.top < t.bottom) {
+                int x_cands[] = { t.left - rcVis.right, t.right - rcVis.left, t.left - rcVis.left, t.right - rcVis.right };
+                for (int cx : x_cands) {
+                    if (abs(cx) < SNAP_EDGE && abs(cx) < abs(minDx)) {
+                        minDx = cx;
+                    }
+                }
+            }
+            if (rcVis.right > t.left && rcVis.left < t.right) {
+                int y_cands[] = { t.top - rcVis.bottom, t.bottom - rcVis.top, t.top - rcVis.top, t.bottom - rcVis.bottom };
+                for (int cy : y_cands) {
+                    if (abs(cy) < SNAP_EDGE && abs(cy) < abs(minDy)) {
+                        minDy = cy;
+                    }
+                }
+            }
+        }
+        for (int cx : scr_x_cands) {
+            if (abs(cx) < SNAP_EDGE && abs(cx) < abs(minDx)) {
+                minDx = cx;
+            }
+        }
+        for (int cy : scr_y_cands) {
+            if (abs(cy) < SNAP_EDGE && abs(cy) < abs(minDy)) {
+                minDy = cy;
+            }
+        }
+        if (minDx != 9999) dx = minDx;
+        if (minDy != 9999) dy = minDy;
+    }
+
+    rcVis.left += dx;
+    rcVis.top += dy;
+    rcVis.right += dx;
+    rcVis.bottom += dy;
+    
+    prc->left = rcVis.left - margin.left;
+    prc->top = rcVis.top - margin.top;
+    prc->right = rcVis.right + margin.right;
+    prc->bottom = rcVis.bottom + margin.bottom;
+}
+
+void CalculateVideoWindowPosition(HWND hMainWnd, int width, int height, int& outX, int& outY) {
+    RECT margin = GetWindowMargin(hMainWnd);
+    RECT rcMain;
+    GetVisibleRect(hMainWnd, &rcMain);
+
+    HMONITOR hMonitor = MonitorFromWindow(hMainWnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(hMonitor, &mi);
+
+    int visWidth = width - margin.left - margin.right;
+    int visHeight = height - margin.top - margin.bottom;
+
+    int maxBottom = -1;
+    int lastX = -1;
+    for (auto& pair : g_videoWindows) {
+        HWND hVid = pair.second;
+        if (hVid && IsWindow(hVid) && IsWindowVisible(hVid)) {
+            RECT rcVid;
+            GetVisibleRect(hVid, &rcVid);
+            if (rcVid.bottom > maxBottom) {
+                maxBottom = rcVid.bottom;
+                lastX = rcVid.left;
+            }
+        }
+    }
+
+    int targetVisX, targetVisY;
+
+    if (maxBottom != -1) {
+        targetVisX = (lastX != -1) ? lastX : rcMain.right;
+        targetVisY = maxBottom;
+        if (targetVisX + visWidth > mi.rcWork.right) targetVisX = mi.rcWork.right - visWidth;
+        if (targetVisY + visHeight > mi.rcWork.bottom) targetVisY = mi.rcWork.bottom - visHeight;
+        if (targetVisX < mi.rcWork.left) targetVisX = mi.rcWork.left;
+        if (targetVisY < mi.rcWork.top) targetVisY = mi.rcWork.top;
+    } else {
+        auto fits = [&](int x, int y) {
+            return (x >= mi.rcWork.left && x + visWidth <= mi.rcWork.right &&
+                    y >= mi.rcWork.top && y + visHeight <= mi.rcWork.bottom);
+        };
+
+        // 1. Right
+        targetVisX = rcMain.right; targetVisY = rcMain.top;
+        if (!fits(targetVisX, targetVisY)) {
+            // 2. Bottom
+            targetVisX = rcMain.left; targetVisY = rcMain.bottom;
+            if (!fits(targetVisX, targetVisY)) {
+                // 3. Top
+                targetVisX = rcMain.left; targetVisY = rcMain.top - visHeight;
+                if (!fits(targetVisX, targetVisY)) {
+                    // 4. Left
+                    targetVisX = rcMain.left - visWidth; targetVisY = rcMain.top;
+                    if (!fits(targetVisX, targetVisY)) {
+                        // 5. Clamped Right
+                        targetVisX = rcMain.right; targetVisY = rcMain.top;
+                        if (targetVisX + visWidth > mi.rcWork.right) targetVisX = mi.rcWork.right - visWidth;
+                        if (targetVisY + visHeight > mi.rcWork.bottom) targetVisY = mi.rcWork.bottom - visHeight;
+                        if (targetVisX < mi.rcWork.left) targetVisX = mi.rcWork.left;
+                        if (targetVisY < mi.rcWork.top) targetVisY = mi.rcWork.top;
+                    }
+                }
+            }
+        }
+    }
+
+    outX = targetVisX - margin.left;
+    outY = targetVisY - margin.top;
+}
 
 WNDPROC g_oldListProc = NULL;
 LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -4185,8 +4445,10 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             g_isWebcamActive = true;
                             if (!g_videoWindows[g_userId] || !IsWindow(g_videoWindows[g_userId])) {
                                 std::wstring titleName = g_username.substr(0, g_username.find(L'#'));
+                                int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
+                                CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(240), vidX, vidY);
                                 HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(),
-                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_userId.c_str());
+                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_userId.c_str());
                                 ApplyClassicStyle(hVid);
                                 g_videoWindows[g_userId] = hVid;
                             } else {
@@ -4228,8 +4490,10 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             std::wstring titleName = clickedUser;
                             if (g_userNames.count(clickedUser)) titleName = g_userNames[clickedUser];
                             titleName = titleName.substr(0, titleName.find(L'#'));
+                            int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
+                            CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(240), vidX, vidY);
                             HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(),
-                                WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
+                                WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
                             ApplyClassicStyle(hVid);
                             g_videoWindows[clickedUser] = hVid;
                         } else {
@@ -4452,6 +4716,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult)) return classicResult;
 
     switch (msg) {
+    case WM_ENTERSIZEMOVE: {
+        extern bool g_isNewDrag;
+        g_isNewDrag = true;
+        break;
+    }
+    case WM_MOVING: {
+        LPRECT prc = (LPRECT)lParam;
+        SnapWindow(hWnd, prc);
+        return TRUE;
+    }
     case WM_GETMINMAXINFO: {
         MINMAXINFO* pmmi = (MINMAXINFO*)lParam;
         int minClientWidth = Scale(5) * 2 + Scale(444);
