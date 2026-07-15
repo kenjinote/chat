@@ -498,6 +498,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 MFCreateMediaType(&pType);
                 pType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
                 pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+                MFSetAttributeSize(pType, MF_MT_FRAME_SIZE, 320, 240);
                 pReader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, pType);
                 pType->Release();
                 pSource->Release();
@@ -548,9 +549,6 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 const int MAX_PAYLOAD = 1000;
                 int totalFragments = (jpegData.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD;
                 g_videoSeq++;
-                LARGE_INTEGER freq;
-                QueryPerformanceFrequency(&freq);
-                long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay
 
                 for (int i = 0; i < totalFragments; i++) {
                     int offset = i * MAX_PAYLOAD;
@@ -574,15 +572,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
                     }
                     serverUdp.sin_addr = g_serverUdpAddr;
-                    int sent = sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
-                    LogToFile("UDP Sending Video Fragment, len=" + std::to_string(len) + ", sent=" + std::to_string(sent));
-
-                    LARGE_INTEGER start, current;
-                    QueryPerformanceCounter(&start);
-                    do {
-                        Sleep(0);
-                        QueryPerformanceCounter(&current);
-                    } while (current.QuadPart - start.QuadPart < delay_counts);
+                    sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
                 }
                 DecodeJPEG(jpegData, g_userId);
             }
