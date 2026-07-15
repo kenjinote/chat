@@ -592,12 +592,13 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 }
                 std::vector<uint8_t> h264;
                 if (g_pH264Encoder->EncodeFrame(pData, cbData, h264)) {
+                    std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
                     const int MAX_PAYLOAD = 1000;
                     int totalFragments = (h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD;
                     g_videoSeq++;
                     LARGE_INTEGER freq;
                     QueryPerformanceFrequency(&freq);
-                    long long delay_counts = freq.QuadPart / 1000;
+                    long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay
                     
                     for (int i = 0; i < totalFragments; i++) {
                         int offset = i * MAX_PAYLOAD;
@@ -626,7 +627,6 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         LARGE_INTEGER start, current;
                         QueryPerformanceCounter(&start);
                         do {
-                            Sleep(0);
                             QueryPerformanceCounter(&current);
                         } while (current.QuadPart - start.QuadPart < delay_counts);
                     }
@@ -639,6 +639,15 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         std::lock_guard<std::mutex> lock(g_videoMutex);
                         g_videoPixelsMap[g_userId] = rgbOut;
                         g_videoSizeMap[g_userId] = {width, height};
+                        
+                        HWND hView = NULL;
+                        auto it = g_videoWindows.find(g_userId);
+                        if (it != g_videoWindows.end()) {
+                            hView = it->second;
+                        }
+                        if (hView && IsWindow(hView)) {
+                            InvalidateRect(hView, NULL, FALSE);
+                        }
                     }
                 }
             } else {
@@ -679,7 +688,6 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         LARGE_INTEGER start, current;
                         QueryPerformanceCounter(&start);
                         do {
-                            Sleep(0);
                             QueryPerformanceCounter(&current);
                         } while (current.QuadPart - start.QuadPart < delay_counts);
                     }
@@ -3908,6 +3916,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         }
                         else if (mhdr->payloadType == 2 || mhdr->payloadType == 5) {
                             std::wstring wname = mhdr->userId;
+                            if (wname == g_userId) continue;
                             uint16_t seq = mhdr->seqNum;
                             int fragIdx = mhdr->timestamp;
                             int len = res - sizeof(MediaHeader);

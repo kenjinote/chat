@@ -1,4 +1,11 @@
 #include "H264Helper.h"
+#include <fstream>
+#include <string>
+
+static void Log(const std::string& msg) {
+    static std::ofstream ofs("h264_debug.log", std::ios::app);
+    ofs << GetTickCount() << " " << msg << std::endl;
+}
 
 H264Encoder::H264Encoder() {}
 H264Encoder::~H264Encoder() {
@@ -7,6 +14,7 @@ H264Encoder::~H264Encoder() {
 }
 
 bool H264Encoder::Initialize(UINT32 width, UINT32 height) {
+    Log("H264Encoder::Initialize");
     if (pEncoder) pEncoder->Release();
     if (pConverter) pConverter->Release();
     pEncoder = NULL;
@@ -86,51 +94,60 @@ bool H264Encoder::EncodeFrame(const BYTE* pRgb32Data, DWORD cbData, std::vector<
     if (!pEncoder || !pConverter) return false;
     outH264.clear();
     
-    std::cout << "E1" << std::endl;
     IMFSample* pSample = NULL;
     MFCreateSample(&pSample);
     
-    std::cout << "E2" << std::endl;
     IMFMediaBuffer* pBuffer = NULL;
     MFCreateMemoryBuffer(cbData, &pBuffer);
     
-    std::cout << "E3" << std::endl;
     BYTE* pData = NULL;
     pBuffer->Lock(&pData, NULL, NULL);
     memcpy(pData, pRgb32Data, cbData);
     pBuffer->Unlock();
     pBuffer->SetCurrentLength(cbData);
     
-    std::cout << "E4" << std::endl;
     pSample->AddBuffer(pBuffer);
+    pBuffer->Release();
     pSample->SetSampleTime(m_rtStart);
     pSample->SetSampleDuration(333333);
     m_rtStart += 333333;
     
-    std::cout << "E5" << std::endl;
     HRESULT hr = pConverter->ProcessInput(0, pSample, 0);
-    pBuffer->Release();
     pSample->Release();
-    if (FAILED(hr)) { std::cout << "pConverter ProcessInput failed: " << std::hex << hr << std::endl; return false; }
+    if (FAILED(hr)) { return false; }
 
-    std::cout << "E6" << std::endl;
     while (true) {
         MFT_OUTPUT_DATA_BUFFER convOutput = {0};
         convOutput.dwStreamID = 0;
         
+        MFT_OUTPUT_STREAM_INFO convInfo = {0};
+        pConverter->GetOutputStreamInfo(0, &convInfo);
+        bool convProvides = (convInfo.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) != 0;
+
         IMFSample* pConvSample = NULL;
-        MFCreateSample(&pConvSample);
         IMFMediaBuffer* pConvBuffer = NULL;
-        MFCreateMemoryBuffer(m_width * m_height * 2, &pConvBuffer); // NV12
-        pConvSample->AddBuffer(pConvBuffer);
-        convOutput.pSample = pConvSample;
-        
+        if (!convProvides) {
+            MFCreateSample(&pConvSample);
+            MFCreateMemoryBuffer(m_width * m_height * 2, &pConvBuffer); // NV12
+            pConvSample->AddBuffer(pConvBuffer);
+            pConvBuffer->Release();
+            convOutput.pSample = pConvSample;
+        }
+
         DWORD status = 0;
         hr = pConverter->ProcessOutput(0, 1, &convOutput, &status);
         if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
-            pConvBuffer->Release();
-            pConvSample->Release();
+            if (pConvSample) pConvSample->Release();
             break;
+        }
+        if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
+            if (pConvSample) pConvSample->Release();
+            IMFMediaType* pNewType = NULL;
+            if (SUCCEEDED(pConverter->GetOutputAvailableType(0, 0, &pNewType))) {
+                pConverter->SetOutputType(0, pNewType, 0);
+                pNewType->Release();
+            }
+            continue;
         }
         
         if (SUCCEEDED(hr) && convOutput.pSample) {
@@ -140,19 +157,34 @@ bool H264Encoder::EncodeFrame(const BYTE* pRgb32Data, DWORD cbData, std::vector<
                     MFT_OUTPUT_DATA_BUFFER encOutput = {0};
                     encOutput.dwStreamID = 0;
                     
+                    MFT_OUTPUT_STREAM_INFO encInfo = {0};
+                    pEncoder->GetOutputStreamInfo(0, &encInfo);
+                    bool encProvides = (encInfo.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) != 0;
+
                     IMFSample* pEncSample = NULL;
-                    MFCreateSample(&pEncSample);
                     IMFMediaBuffer* pEncBuffer = NULL;
-                    MFCreateMemoryBuffer(m_width * m_height * 4, &pEncBuffer);
-                    pEncSample->AddBuffer(pEncBuffer);
-                    encOutput.pSample = pEncSample;
-                    
+                    if (!encProvides) {
+                        MFCreateSample(&pEncSample);
+                        MFCreateMemoryBuffer(m_width * m_height * 4, &pEncBuffer); // H264
+                        pEncSample->AddBuffer(pEncBuffer);
+                        pEncBuffer->Release();
+                        encOutput.pSample = pEncSample;
+                    }
+
                     DWORD encStatus = 0;
                     hr = pEncoder->ProcessOutput(0, 1, &encOutput, &encStatus);
                     if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
-                        pEncBuffer->Release();
-                        pEncSample->Release();
+                        if (pEncSample) pEncSample->Release();
                         break;
+                    }
+                    if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
+                        if (pEncSample) pEncSample->Release();
+                        IMFMediaType* pNewType = NULL;
+                        if (SUCCEEDED(pEncoder->GetOutputAvailableType(0, 0, &pNewType))) {
+                            pEncoder->SetOutputType(0, pNewType, 0);
+                            pNewType->Release();
+                        }
+                        continue;
                     }
                     
                     if (SUCCEEDED(hr) && encOutput.pSample) {
@@ -171,8 +203,7 @@ bool H264Encoder::EncodeFrame(const BYTE* pRgb32Data, DWORD cbData, std::vector<
                         encOutput.pSample->Release();
                     } else {
                         if (encOutput.pSample) encOutput.pSample->Release();
-                        pEncBuffer->Release();
-                        pEncSample->Release();
+                        if (pEncSample) pEncSample->Release();
                         break;
                     }
                     if (encOutput.pEvents) encOutput.pEvents->Release();
@@ -181,8 +212,7 @@ bool H264Encoder::EncodeFrame(const BYTE* pRgb32Data, DWORD cbData, std::vector<
             convOutput.pSample->Release();
         } else {
             if (convOutput.pSample) convOutput.pSample->Release();
-            pConvBuffer->Release();
-            pConvSample->Release();
+            if (pConvSample) pConvSample->Release();
             break;
         }
         if (convOutput.pEvents) convOutput.pEvents->Release();
@@ -198,6 +228,7 @@ H264Decoder::~H264Decoder() {
 }
 
 bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
+    Log("H264Decoder::Initialize");
     if (pDecoder) pDecoder->Release();
     if (pConverter) pConverter->Release();
     pDecoder = NULL;
@@ -207,7 +238,7 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
     m_rtStart = 0;
 
     HRESULT hr = CoCreateInstance(CLSID_CMSH264DecoderMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pDecoder));
-    if (FAILED(hr)) { std::cout << "Dec Create Failed\n"; return false; }
+    if (FAILED(hr)) return false;
 
     IMFMediaType* pDecInputType = NULL;
     MFCreateMediaType(&pDecInputType);
@@ -216,7 +247,7 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
     MFSetAttributeSize(pDecInputType, MF_MT_FRAME_SIZE, width, height);
     hr = pDecoder->SetInputType(0, pDecInputType, 0);
     pDecInputType->Release();
-    if (FAILED(hr)) { std::cout << "Dec SetInput Failed\n"; return false; }
+    if (FAILED(hr)) return false;
 
     IMFMediaType* pDecOutputType = NULL;
     MFCreateMediaType(&pDecOutputType);
@@ -225,10 +256,10 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
     MFSetAttributeSize(pDecOutputType, MF_MT_FRAME_SIZE, width, height);
     hr = pDecoder->SetOutputType(0, pDecOutputType, 0);
     pDecOutputType->Release();
-    if (FAILED(hr)) { std::cout << "Dec SetOutput Failed\n"; return false; }
+    if (FAILED(hr)) return false;
 
     hr = CoCreateInstance(CLSID_VideoProcessorMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pConverter));
-    if (FAILED(hr)) { std::cout << "Dec Conv Create Failed\n"; return false; }
+    if (FAILED(hr)) return false;
 
     IMFMediaType* pConvInputType = NULL;
     MFCreateMediaType(&pConvInputType);
@@ -237,7 +268,7 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
     MFSetAttributeSize(pConvInputType, MF_MT_FRAME_SIZE, width, height);
     hr = pConverter->SetInputType(0, pConvInputType, 0);
     pConvInputType->Release();
-    if (FAILED(hr)) { std::cout << "Dec Conv SetInput Failed\n"; return false; }
+    if (FAILED(hr)) return false;
 
     IMFMediaType* pConvOutputType = NULL;
     MFCreateMediaType(&pConvOutputType);
@@ -246,7 +277,7 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
     MFSetAttributeSize(pConvOutputType, MF_MT_FRAME_SIZE, width, height);
     hr = pConverter->SetOutputType(0, pConvOutputType, 0);
     pConvOutputType->Release();
-    if (FAILED(hr)) { std::cout << "Dec Conv SetOutput Failed\n"; return false; }
+    if (FAILED(hr)) return false;
 
     pDecoder->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, NULL);
     pDecoder->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, NULL);
@@ -261,6 +292,7 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
 
 bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<uint8_t>& outRgb32) {
     if (!pDecoder || !pConverter || inH264.empty()) return false;
+    Log("DecodeFrame START size=" + std::to_string(inH264.size()));
     
     IMFSample* pSample = NULL;
     MFCreateSample(&pSample);
@@ -275,12 +307,15 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
     pBuffer->SetCurrentLength(inH264.size());
     
     pSample->AddBuffer(pBuffer);
+    pBuffer->Release();
     pSample->SetSampleTime(m_rtStart);
+    pSample->SetSampleDuration(333333);
     m_rtStart += 333333;
     
     HRESULT hr = pDecoder->ProcessInput(0, pSample, 0);
-    pBuffer->Release();
     pSample->Release();
+    
+    if (FAILED(hr)) Log("Dec ProcessInput FAILED hr=" + std::to_string(hr));
     
     outRgb32.clear();
     
@@ -288,45 +323,80 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
         MFT_OUTPUT_DATA_BUFFER outputDataBuffer = {0};
         outputDataBuffer.dwStreamID = 0;
         
+        MFT_OUTPUT_STREAM_INFO decInfo = {0};
+        pDecoder->GetOutputStreamInfo(0, &decInfo);
+        bool decProvides = (decInfo.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) != 0;
+
         IMFSample* pOutSample = NULL;
-        MFCreateSample(&pOutSample);
         IMFMediaBuffer* pOutBuffer = NULL;
-        MFCreateMemoryBuffer(m_width * m_height * 2, &pOutBuffer); // NV12
-        pOutSample->AddBuffer(pOutBuffer);
-        outputDataBuffer.pSample = pOutSample;
+        if (!decProvides) {
+            MFCreateSample(&pOutSample);
+            MFCreateMemoryBuffer(m_width * m_height * 2, &pOutBuffer); // NV12
+            pOutSample->AddBuffer(pOutBuffer);
+            pOutBuffer->Release();
+            outputDataBuffer.pSample = pOutSample;
+        }
         
         DWORD status = 0;
         hr = pDecoder->ProcessOutput(0, 1, &outputDataBuffer, &status);
-        
         if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
-            pOutBuffer->Release();
-            pOutSample->Release();
+            if (pOutSample) pOutSample->Release();
             break;
         }
+        if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
+            Log("Dec ProcessOutput STREAM_CHANGE");
+            if (pOutSample) pOutSample->Release();
+            IMFMediaType* pNewType = NULL;
+            if (SUCCEEDED(pDecoder->GetOutputAvailableType(0, 0, &pNewType))) {
+                pDecoder->SetOutputType(0, pNewType, 0);
+                pConverter->SetInputType(0, pNewType, 0); // UPDATE CONVERTER TOO!
+                pNewType->Release();
+            }
+            continue;
+        }
+        
+        if (FAILED(hr)) Log("Dec ProcessOutput FAILED hr=" + std::to_string(hr));
         
         if (SUCCEEDED(hr) && outputDataBuffer.pSample) {
-            // Pass NV12 to converter
             hr = pConverter->ProcessInput(0, outputDataBuffer.pSample, 0);
+            if (FAILED(hr)) Log("Conv ProcessInput FAILED hr=" + std::to_string(hr));
             if (SUCCEEDED(hr)) {
                 while (true) {
                     MFT_OUTPUT_DATA_BUFFER convOutput = {0};
                     convOutput.dwStreamID = 0;
                     
+                    MFT_OUTPUT_STREAM_INFO convInfo = {0};
+                    pConverter->GetOutputStreamInfo(0, &convInfo);
+                    bool convProvides = (convInfo.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) != 0;
+
                     IMFSample* pConvSample = NULL;
-                    MFCreateSample(&pConvSample);
                     IMFMediaBuffer* pConvBuffer = NULL;
-                    MFCreateMemoryBuffer(m_width * m_height * 4, &pConvBuffer); // RGB32
-                    pConvSample->AddBuffer(pConvBuffer);
-                    convOutput.pSample = pConvSample;
+                    if (!convProvides) {
+                        MFCreateSample(&pConvSample);
+                        MFCreateMemoryBuffer(m_width * m_height * 4, &pConvBuffer); // RGB32
+                        pConvSample->AddBuffer(pConvBuffer);
+                        pConvBuffer->Release();
+                        convOutput.pSample = pConvSample;
+                    }
                     
                     DWORD convStatus = 0;
                     hr = pConverter->ProcessOutput(0, 1, &convOutput, &convStatus);
                     
                     if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
-                        pConvBuffer->Release();
-                        pConvSample->Release();
+                        if (pConvSample) pConvSample->Release();
                         break;
                     }
+                    if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
+                        if (pConvSample) pConvSample->Release();
+                        IMFMediaType* pNewType = NULL;
+                        if (SUCCEEDED(pConverter->GetOutputAvailableType(0, 0, &pNewType))) {
+                            pConverter->SetOutputType(0, pNewType, 0);
+                            pNewType->Release();
+                        }
+                        continue;
+                    }
+                    
+                    if (FAILED(hr)) Log("Conv ProcessOutput FAILED hr=" + std::to_string(hr));
                     
                     if (SUCCEEDED(hr) && convOutput.pSample) {
                         IMFMediaBuffer* pResBuffer = NULL;
@@ -344,8 +414,7 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
                         convOutput.pSample->Release();
                     } else {
                         if (convOutput.pSample) convOutput.pSample->Release();
-                        pConvBuffer->Release();
-                        pConvSample->Release();
+                        if (pConvSample) pConvSample->Release();
                         break;
                     }
                     if (convOutput.pEvents) convOutput.pEvents->Release();
@@ -354,13 +423,13 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
             outputDataBuffer.pSample->Release();
         } else {
             if (outputDataBuffer.pSample) outputDataBuffer.pSample->Release();
-            pOutBuffer->Release();
-            pOutSample->Release();
+            if (pOutSample) pOutSample->Release();
             break;
         }
         
         if (outputDataBuffer.pEvents) outputDataBuffer.pEvents->Release();
     }
     
+    if (outRgb32.empty()) Log("DecodeFrame END EMPTY");
     return !outRgb32.empty();
 }
