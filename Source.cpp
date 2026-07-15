@@ -20,6 +20,7 @@
 #include <set>
 #include <cmath>8
 #include <algorithm>
+#include "H264Helper.h"
 #include "json11.hpp"
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")
