@@ -164,9 +164,11 @@
   <ItemGroup>
     <ClCompile Include="json11.cpp" />
     <ClCompile Include="Source.cpp" />
+    <ClCompile Include="H264Helper.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="json11.hpp" />
+    <ClInclude Include="H264Helper.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>

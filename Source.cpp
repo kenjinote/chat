@@ -21,6 +21,9 @@
 #include <cmath>8
 #include <algorithm>
 #include "H264Helper.h"
+bool g_useH264 = true;
+H264Encoder* g_pH264Encoder = nullptr;
+H264Decoder* g_pH264Decoder = nullptr;
 #include "json11.hpp"
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")
@@ -582,48 +585,106 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             MFGetAttributeSize(pCurrentType, MF_MT_FRAME_SIZE, &width, &height);
             pCurrentType->Release();
 
-            std::vector<uint8_t> jpegData;
-            if (EncodeJPEG(width, height, pData, cbData, jpegData)) {
-                const int MAX_PAYLOAD = 1000;
-                int totalFragments = (jpegData.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD;
-                g_videoSeq++;
-                LARGE_INTEGER freq;
-                QueryPerformanceFrequency(&freq);
-                long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay
-
-                for (int i = 0; i < totalFragments; i++) {
-                    int offset = i * MAX_PAYLOAD;
-                    int len = min(MAX_PAYLOAD, (int)jpegData.size() - offset);
-                    
-                    char udpPkt[2048];
-                    MediaHeader* mhdr = (MediaHeader*)udpPkt;
-                    mhdr->sessionId = g_sessionId;
-                    mhdr->seqNum = g_videoSeq;
-                    mhdr->payloadType = 2; 
-                    mhdr->flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
-                    mhdr->timestamp = i; 
-                    wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
-                    
-                    memcpy(udpPkt + sizeof(MediaHeader), jpegData.data() + offset, len);
-                    
-                    sockaddr_in serverUdp = {0};
-                    serverUdp.sin_family = AF_INET;
-                    serverUdp.sin_port = htons(4001);
-                    if (!g_isServerUdpAddrResolved) {
-                        g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
-                    }
-                    serverUdp.sin_addr = g_serverUdpAddr;
-                    int sent = sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
-                    LogToFile("UDP Sending Video Fragment, len=" + std::to_string(len) + ", sent=" + std::to_string(sent));
-
-                    LARGE_INTEGER start, current;
-                    QueryPerformanceCounter(&start);
-                    do {
-                        Sleep(0);
-                        QueryPerformanceCounter(&current);
-                    } while (current.QuadPart - start.QuadPart < delay_counts);
+            if (g_useH264) {
+                if (!g_pH264Encoder) {
+                    g_pH264Encoder = new H264Encoder();
+                    g_pH264Encoder->Initialize(width, height);
                 }
-                DecodeJPEG(jpegData, g_userId);
+                std::vector<uint8_t> h264;
+                if (g_pH264Encoder->EncodeFrame(pData, cbData, h264)) {
+                    const int MAX_PAYLOAD = 1000;
+                    int totalFragments = (h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD;
+                    g_videoSeq++;
+                    LARGE_INTEGER freq;
+                    QueryPerformanceFrequency(&freq);
+                    long long delay_counts = freq.QuadPart / 1000;
+                    
+                    for (int i = 0; i < totalFragments; i++) {
+                        int offset = i * MAX_PAYLOAD;
+                        int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
+                        
+                        char udpPkt[2048];
+                        MediaHeader* mhdr = (MediaHeader*)udpPkt;
+                        mhdr->sessionId = g_sessionId;
+                        mhdr->seqNum = g_videoSeq;
+                        mhdr->payloadType = 5; 
+                        mhdr->flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
+                        mhdr->timestamp = i; 
+                        wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
+                        
+                        memcpy(udpPkt + sizeof(MediaHeader), h264.data() + offset, len);
+                        
+                        sockaddr_in serverUdp = {0};
+                        serverUdp.sin_family = AF_INET;
+                        serverUdp.sin_port = htons(4001);
+                        if (!g_isServerUdpAddrResolved) {
+                            g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                        }
+                        serverUdp.sin_addr = g_serverUdpAddr;
+                        sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                        
+                        LARGE_INTEGER start, current;
+                        QueryPerformanceCounter(&start);
+                        do {
+                            Sleep(0);
+                            QueryPerformanceCounter(&current);
+                        } while (current.QuadPart - start.QuadPart < delay_counts);
+                    }
+                    if (!g_pH264Decoder) {
+                        g_pH264Decoder = new H264Decoder();
+                        g_pH264Decoder->Initialize(width, height);
+                    }
+                    std::vector<uint8_t> rgbOut;
+                    if (g_pH264Decoder->DecodeFrame(h264, rgbOut)) {
+                        std::lock_guard<std::mutex> lock(g_videoMutex);
+                        g_videoPixelsMap[g_userId] = rgbOut;
+                        g_videoSizeMap[g_userId] = {width, height};
+                    }
+                }
+            } else {
+                std::vector<uint8_t> jpegData;
+                if (EncodeJPEG(width, height, pData, cbData, jpegData)) {
+                    const int MAX_PAYLOAD = 1000;
+                    int totalFragments = (jpegData.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD;
+                    g_videoSeq++;
+                    LARGE_INTEGER freq;
+                    QueryPerformanceFrequency(&freq);
+                    long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay
+
+                    for (int i = 0; i < totalFragments; i++) {
+                        int offset = i * MAX_PAYLOAD;
+                        int len = min(MAX_PAYLOAD, (int)jpegData.size() - offset);
+                        
+                        char udpPkt[2048];
+                        MediaHeader* mhdr = (MediaHeader*)udpPkt;
+                        mhdr->sessionId = g_sessionId;
+                        mhdr->seqNum = g_videoSeq;
+                        mhdr->payloadType = 2; 
+                        mhdr->flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
+                        mhdr->timestamp = i; 
+                        wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
+                        
+                        memcpy(udpPkt + sizeof(MediaHeader), jpegData.data() + offset, len);
+                        
+                        sockaddr_in serverUdp = {0};
+                        serverUdp.sin_family = AF_INET;
+                        serverUdp.sin_port = htons(4001);
+                        if (!g_isServerUdpAddrResolved) {
+                            g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                        }
+                        serverUdp.sin_addr = g_serverUdpAddr;
+                        int sent = sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                        LogToFile("UDP Sending Video Fragment, len=" + std::to_string(len) + ", sent=" + std::to_string(sent));
+
+                        LARGE_INTEGER start, current;
+                        QueryPerformanceCounter(&start);
+                        do {
+                            Sleep(0);
+                            QueryPerformanceCounter(&current);
+                        } while (current.QuadPart - start.QuadPart < delay_counts);
+                    }
+                    DecodeJPEG(jpegData, g_userId);
+                }
             }
             pBuffer->Unlock();
             pBuffer->Release();
@@ -3491,14 +3552,32 @@ void AppendLog(const MsgData& data) {
 }
 
 struct DecodeTaskData {
-    std::vector<uint8_t> jpegData;
+    std::vector<uint8_t> mediaData;
     std::wstring username;
+    bool isH264;
 };
 
 DWORD WINAPI DecodeTaskProc(LPVOID lpParam) {
     HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     DecodeTaskData* data = (DecodeTaskData*)lpParam;
-    DecodeJPEG(data->jpegData, data->username);
+    if (data->isH264) {
+        if (!g_pH264Decoder) {
+            g_pH264Decoder = new H264Decoder();
+            g_pH264Decoder->Initialize(640, 480);
+        }
+        std::vector<uint8_t> rgbOut;
+        if (g_pH264Decoder->DecodeFrame(data->mediaData, rgbOut)) {
+            std::lock_guard<std::mutex> lock(g_videoMutex);
+            g_videoPixelsMap[data->username] = rgbOut;
+            g_videoSizeMap[data->username] = {640, 480};
+        HWND hView = NULL;
+        auto it = g_videoWindows.find(data->username);
+        if (it != g_videoWindows.end()) hView = it->second;
+        if (hView && IsWindow(hView)) InvalidateRect(hView, NULL, FALSE);
+        }
+    } else {
+        DecodeJPEG(data->mediaData, data->username);
+    }
     delete data;
     if (SUCCEEDED(hr)) {
         CoUninitialize();
@@ -3827,11 +3906,12 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 InvalidateRect(g_hUserList, NULL, FALSE);
                             }
                         }
-                        else if (mhdr->payloadType == 2) {
+                        else if (mhdr->payloadType == 2 || mhdr->payloadType == 5) {
                             std::wstring wname = mhdr->userId;
                             uint16_t seq = mhdr->seqNum;
                             int fragIdx = mhdr->timestamp;
                             int len = res - sizeof(MediaHeader);
+                            bool isH264 = (mhdr->payloadType == 5);
                             
                             bool stateChanged = false;
                             {
@@ -3856,8 +3936,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             if (vbuf.totalFragments > 0 && vbuf.fragments.size() == vbuf.totalFragments) {
                                 DecodeTaskData* taskData = new DecodeTaskData();
                                 taskData->username = wname;
+                                taskData->isH264 = isH264;
                                 for (int i = 0; i < vbuf.totalFragments; i++) {
-                                    taskData->jpegData.insert(taskData->jpegData.end(), vbuf.fragments[i].begin(), vbuf.fragments[i].end());
+                                    taskData->mediaData.insert(taskData->mediaData.end(), vbuf.fragments[i].begin(), vbuf.fragments[i].end());
                                 }
                                 QueueUserWorkItem(DecodeTaskProc, taskData, WT_EXECUTEDEFAULT);
                                 g_videoBuffers[wname].erase(seq);
@@ -4494,6 +4575,8 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     HMENU hMenu = CreatePopupMenu();
                     AppendMenuW(hMenu, MF_STRING | (g_isWebcamActive ? MF_CHECKED : MF_UNCHECKED), 1, GetString(IDS_VIDEO_STREAM).c_str());
                     AppendMenuW(hMenu, MF_STRING, 3, GetString(IDS_CHANGE_NAME_TITLE).c_str()); 
+                    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+                    AppendMenuW(hMenu, g_useH264 ? (MF_STRING | MF_CHECKED) : MF_STRING, 10, L"H.264 ハードウェアエンコード");
                     ClientToScreen(hwnd, &pt);
                     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
                     DestroyMenu(hMenu);
@@ -4527,6 +4610,12 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             SortUserList();
                             InvalidateRect(hwnd, NULL, TRUE);
                             SendRenameRequest();
+                        }
+                    } else if (cmd == 10) {
+                        g_useH264 = !g_useH264;
+                        if (!g_useH264 && g_pH264Encoder) {
+                            delete g_pH264Encoder;
+                            g_pH264Encoder = nullptr;
                         }
                     }
                 } else {
