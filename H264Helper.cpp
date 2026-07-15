@@ -1,6 +1,7 @@
 #include "H264Helper.h"
 #include <fstream>
 #include <string>
+#include <codecapi.h>
 
 static void Log(const std::string& msg) {
     static std::ofstream ofs("h264_debug.log", std::ios::app);
@@ -45,6 +46,26 @@ bool H264Encoder::Initialize(UINT32 width, UINT32 height) {
     hr = pEncoder->SetOutputType(0, pOutputType, 0);
     pOutputType->Release();
     if (FAILED(hr)) return false;
+
+    ICodecAPI* pCodecAPI = NULL;
+    if (SUCCEEDED(pEncoder->QueryInterface(IID_PPV_ARGS(&pCodecAPI)))) {
+        VARIANT var;
+        VariantInit(&var);
+        
+        var.vt = VT_BOOL;
+        var.boolVal = VARIANT_TRUE;
+        pCodecAPI->SetValue(&CODECAPI_AVLowLatencyMode, &var);
+        
+        var.vt = VT_UI4;
+        var.ulVal = 0;
+        pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);
+        
+        var.vt = VT_UI4;
+        var.ulVal = eAVEncCommonRateControlMode_CBR;
+        pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
+        
+        pCodecAPI->Release();
+    }
 
     IMFMediaType* pInputType = NULL;
     MFCreateMediaType(&pInputType);
@@ -248,6 +269,17 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
     hr = pDecoder->SetInputType(0, pDecInputType, 0);
     pDecInputType->Release();
     if (FAILED(hr)) return false;
+
+    ICodecAPI* pDecCodecAPI = NULL;
+    if (SUCCEEDED(pDecoder->QueryInterface(IID_PPV_ARGS(&pDecCodecAPI)))) {
+        VARIANT var;
+        VariantInit(&var);
+        var.vt = VT_BOOL;
+        var.boolVal = VARIANT_TRUE;
+        pDecCodecAPI->SetValue(&CODECAPI_AVLowLatencyMode, &var);
+        pDecCodecAPI->Release();
+    }
+
 
     IMFMediaType* pDecOutputType = NULL;
     MFCreateMediaType(&pDecOutputType);

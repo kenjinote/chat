@@ -630,25 +630,10 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             QueryPerformanceCounter(&current);
                         } while (current.QuadPart - start.QuadPart < delay_counts);
                     }
-                    if (!g_pH264Decoder) {
-                        g_pH264Decoder = new H264Decoder();
-                        g_pH264Decoder->Initialize(width, height);
-                    }
-                    std::vector<uint8_t> rgbOut;
-                    if (g_pH264Decoder->DecodeFrame(h264, rgbOut)) {
-                        std::lock_guard<std::mutex> lock(g_videoMutex);
-                        g_videoPixelsMap[g_userId] = rgbOut;
-                        g_videoSizeMap[g_userId] = {width, height};
-                        
-                        HWND hView = NULL;
-                        auto it = g_videoWindows.find(g_userId);
-                        if (it != g_videoWindows.end()) {
-                            hView = it->second;
+                        std::vector<uint8_t> dummyJpeg;
+                        if (EncodeJPEG(width, height, pData, cbData, dummyJpeg)) {
+                            DecodeJPEG(dummyJpeg, g_userId);
                         }
-                        if (hView && IsWindow(hView)) {
-                            InvalidateRect(hView, NULL, FALSE);
-                        }
-                    }
                 }
             } else {
                 std::vector<uint8_t> jpegData;
