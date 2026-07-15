@@ -18,7 +18,7 @@
 #include <vector>
 #include <string>
 #include <set>
-#include <cmath>8
+#include <cmath>
 #include <algorithm>
 #include "H264Helper.h"
 bool g_useH264 = true;
@@ -197,6 +197,7 @@ std::mutex g_streamerMutex;
 std::map<std::wstring, HWND> g_videoWindows;
 std::map<std::wstring, std::vector<uint8_t>> g_videoPixelsMap;
 std::map<std::wstring, std::pair<int, int>> g_videoSizeMap;
+std::map<std::wstring, bool> g_videoIsSWMap;
 std::map<std::wstring, std::map<std::wstring, DWORD>> g_videoViewers;
 std::mutex g_videoMutex;
 
@@ -338,7 +339,7 @@ void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& userna
             HRESULT hrConv = pConverter->Initialize(pFrame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, NULL, 0.0f, WICBitmapPaletteTypeCustom);
             if (SUCCEEDED(hrConv)) {
                 std::vector<uint8_t> pixels(width * height * 4);
-                HRESULT hrCopy = pConverter->CopyPixels(NULL, width * 4, pixels.size(), pixels.data());
+                HRESULT hrCopy = pConverter->CopyPixels(NULL, width * 4, (UINT)pixels.size(), pixels.data());
                 if (SUCCEEDED(hrCopy)) {
                     std::lock_guard<std::mutex> lock(g_videoMutex);
                     g_videoSizeMap[username] = {width, height};
@@ -347,7 +348,8 @@ void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& userna
                     if (GetTickCount() - lastDecLog > 1000) {
                         lastDecLog = GetTickCount();
                         char buf[256];
-                        std::string unameA(username.begin(), username.end());
+                        std::string unameA;
+                        for (wchar_t c : username) unameA.push_back(static_cast<char>(c));
                         sprintf_s(buf, "DecodeJPEG SUCCESS: %dx%d for %s", width, height, unameA.c_str());
                         LogToFile(buf);
                     }
@@ -376,7 +378,8 @@ void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& userna
     if (hView && IsWindow(hView)) {
         InvalidateRect(hView, NULL, FALSE);
     } else {
-        std::string unameA(username.begin(), username.end());
+        std::string unameA;
+        for (wchar_t c : username) unameA.push_back(static_cast<char>(c));
         LogToFile("DecodeJPEG: Target video window not found for " + unameA);
     }
 }
@@ -585,61 +588,72 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             MFGetAttributeSize(pCurrentType, MF_MT_FRAME_SIZE, &width, &height);
             pCurrentType->Release();
 
+            bool h264Success = false;
             if (g_useH264) {
                 if (!g_pH264Encoder) {
                     g_pH264Encoder = new H264Encoder();
-                    g_pH264Encoder->Initialize(width, height);
-                }
-                std::vector<uint8_t> h264;
-                if (g_pH264Encoder->EncodeFrame(pData, cbData, h264)) {
-                    std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
-                    const int MAX_PAYLOAD = 1000;
-                    int totalFragments = (h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD;
-                    g_videoSeq++;
-                    LARGE_INTEGER freq;
-                    QueryPerformanceFrequency(&freq);
-                    long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay
-                    
-                    for (int i = 0; i < totalFragments; i++) {
-                        int offset = i * MAX_PAYLOAD;
-                        int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
-                        
-                        char udpPkt[2048];
-                        MediaHeader* mhdr = (MediaHeader*)udpPkt;
-                        mhdr->sessionId = g_sessionId;
-                        mhdr->seqNum = g_videoSeq;
-                        mhdr->payloadType = 5; 
-                        mhdr->flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
-                        mhdr->timestamp = i; 
-                        wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
-                        
-                        memcpy(udpPkt + sizeof(MediaHeader), h264.data() + offset, len);
-                        
-                        sockaddr_in serverUdp = {0};
-                        serverUdp.sin_family = AF_INET;
-                        serverUdp.sin_port = htons(4001);
-                        if (!g_isServerUdpAddrResolved) {
-                            g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
-                        }
-                        serverUdp.sin_addr = g_serverUdpAddr;
-                        sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
-                        
-                        LARGE_INTEGER start, current;
-                        QueryPerformanceCounter(&start);
-                        do {
-                            QueryPerformanceCounter(&current);
-                        } while (current.QuadPart - start.QuadPart < delay_counts);
+                    if (!g_pH264Encoder->Initialize(width, height)) {
+                        delete g_pH264Encoder;
+                        g_pH264Encoder = nullptr;
+                        g_useH264 = false;
                     }
+                }
+                if (g_pH264Encoder) {
+                    std::vector<uint8_t> h264;
+                    if (g_pH264Encoder->EncodeFrame(pData, cbData, h264)) {
+                        h264Success = true;
+                        std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
+                        const int MAX_PAYLOAD = 1000;
+                        int totalFragments = (int)((h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
+                        g_videoSeq++;
+                        LARGE_INTEGER freq;
+                        QueryPerformanceFrequency(&freq);
+                        long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay
+                        
+                        for (int i = 0; i < totalFragments; i++) {
+                            int offset = i * MAX_PAYLOAD;
+                            int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
+                            
+                            char udpPkt[2048];
+                            MediaHeader* mhdr = (MediaHeader*)udpPkt;
+                            mhdr->sessionId = g_sessionId;
+                            mhdr->seqNum = g_videoSeq;
+                            mhdr->payloadType = 5; 
+                            mhdr->flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
+                            mhdr->timestamp = i; 
+                            wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
+                            
+                            memcpy(udpPkt + sizeof(MediaHeader), h264.data() + offset, len);
+                            
+                            sockaddr_in serverUdp = {0};
+                            serverUdp.sin_family = AF_INET;
+                            serverUdp.sin_port = htons(4001);
+                            if (!g_isServerUdpAddrResolved) {
+                                g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                            }
+                            serverUdp.sin_addr = g_serverUdpAddr;
+                            sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                            
+                            LARGE_INTEGER start, current;
+                            QueryPerformanceCounter(&start);
+                            do {
+                                QueryPerformanceCounter(&current);
+                            } while (current.QuadPart - start.QuadPart < delay_counts);
+                        }
                         std::vector<uint8_t> dummyJpeg;
                         if (EncodeJPEG(width, height, pData, cbData, dummyJpeg)) {
                             DecodeJPEG(dummyJpeg, g_userId);
+                            std::lock_guard<std::mutex> lock(g_videoMutex);
+                            g_videoIsSWMap[g_userId] = false;
                         }
+                    }
                 }
-            } else {
+            }
+            if (!h264Success) {
                 std::vector<uint8_t> jpegData;
                 if (EncodeJPEG(width, height, pData, cbData, jpegData)) {
                     const int MAX_PAYLOAD = 1000;
-                    int totalFragments = (jpegData.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD;
+                    int totalFragments = (int)((jpegData.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
                     g_videoSeq++;
                     LARGE_INTEGER freq;
                     QueryPerformanceFrequency(&freq);
@@ -677,6 +691,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         } while (current.QuadPart - start.QuadPart < delay_counts);
                     }
                     DecodeJPEG(jpegData, g_userId);
+                    std::lock_guard<std::mutex> lock(g_videoMutex);
+                    g_videoIsSWMap[g_userId] = true;
                 }
             }
             pBuffer->Unlock();
@@ -695,13 +711,13 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
         WAVEHDR* pHdr = (WAVEHDR*)dwParam1;
         if (pHdr->dwBytesRecorded > 0 && g_isVoiceActive && g_sock != INVALID_SOCKET) {
             short* samples = (short*)pHdr->lpData;
-            int numSamples = pHdr->dwBytesRecorded / sizeof(short);
+            int numSamples = (int)(pHdr->dwBytesRecorded / sizeof(short));
             long long sumSquares = 0;
             for(int i=0; i<numSamples; i++){
                 sumSquares += samples[i] * samples[i];
             }
             if (numSamples > 0) {
-                int rms = sqrt(sumSquares / numSamples);
+                int rms = (int)sqrt(sumSquares / numSamples);
                 g_currentMicVolume = (rms * 100) / 32768;
                 if (g_currentMicVolume > 100) g_currentMicVolume = 100;
                 if (g_currentMicVolume < 0) g_currentMicVolume = 0;
@@ -984,7 +1000,7 @@ void CopySelectedText(HWND hWnd) {
         }
         std::wstring copyText;
         for (int i = sEntry; i <= eEntry; ++i) {
-            if (i >= 0 && i < g_logEntries.size()) {
+            if (i >= 0 && (size_t)i < g_logEntries.size()) {
                 auto& entry = g_logEntries[i];
                 std::wstring displayUser = entry.data.user;
                 size_t hashPos = displayUser.find(L'#');
@@ -1261,7 +1277,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         DWRITE_TEXT_RANGE fullRange = { 0, (UINT32)fullText.length() };
                         entry.pLayout->SetDrawingEffect(nullptr, fullRange);
 
-                        if (msgStart < fullText.length()) {
+                        if (msgStart < (int)fullText.length()) {
                             DWRITE_TEXT_RANGE msgRange = { (UINT32)msgStart, (UINT32)entry.data.msg.length() };
                             ID2D1SolidColorBrush* pMsgBrush = nullptr;
                             if (SUCCEEDED(pRT->CreateSolidColorBrush(
@@ -1326,9 +1342,8 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         else if (action == SB_THUMBTRACK || action == SB_THUMBPOSITION) {
             SCROLLINFO si = { sizeof(si), SIF_TRACKPOS };
             GetScrollInfo(hWnd, SB_VERT, &si);
-            g_logScrollY = si.nTrackPos;
+            g_logScrollY = (float)si.nTrackPos;
         }
-        extern bool g_logIsDraggingScrollbar;
         if (action == SB_THUMBTRACK) g_logIsDraggingScrollbar = true;
         if (action == SB_ENDSCROLL) g_logIsDraggingScrollbar = false;
         
@@ -1394,7 +1409,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         float y = (float)GET_Y_LPARAM(lParam) * 96.0f / g_dpi;
         int entryIndex, charIndex;
         if (GetTextPositionFromPoint(x, y, entryIndex, charIndex)) {
-            if (entryIndex >= 0 && entryIndex < g_logEntries.size()) {
+            if (entryIndex >= 0 && (size_t)entryIndex < g_logEntries.size()) {
                 auto& entry = g_logEntries[entryIndex];
                 std::wstring displayUser = entry.data.user;
                 size_t hashPos = displayUser.find(L'#');
@@ -1411,14 +1426,14 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     }
                 }
                 if (fullText.empty()) fullText = L" ";
-                if (!fullText.empty() && charIndex >= 0 && charIndex < fullText.length()) {
+                if (!fullText.empty() && charIndex >= 0 && (size_t)charIndex < fullText.length()) {
                     int cType = GetCharType(fullText[charIndex]);
                     int startC = charIndex;
                     int endC = charIndex + 1;
                     while (startC > 0 && GetCharType(fullText[startC - 1]) == cType) {
                         startC--;
                     }
-                    while (endC < fullText.length() && GetCharType(fullText[endC]) == cType) {
+                    while (endC < (int)fullText.length() && GetCharType(fullText[endC]) == cType) {
                         endC++;
                     }
                     g_logSelection.startEntryIndex = entryIndex;
@@ -1490,7 +1505,7 @@ IDWriteTextLayout* CreateInputLayout(HWND hWnd) {
     
     HRESULT hrFormat = g_pDWriteFactory->CreateTextFormat(
         L"MS UI Gothic", NULL, weight, style, DWRITE_FONT_STRETCH_NORMAL,
-        tsize * 1.5f, L"ja-JP", &pFormat);
+        (float)tsize * 1.5f, L"ja-JP", &pFormat);
         
     IDWriteTextLayout* pLayout = nullptr;
     if (SUCCEEDED(hrFormat) && pFormat) {
@@ -1518,8 +1533,8 @@ void UpdateImeWindowPos(HWND hWnd) {
                 SendMessage(g_hComboSize, CB_GETLBTEXT, sizeIndex, (LPARAM)szText);
                 tsize = _wtoi(szText);
             }
-            hm.height = tsize * 1.5f;
-        } else if (g_caretPos >= g_inputText.length()) {
+            hm.height = (float)tsize * 1.5f;
+        } else if (g_caretPos >= (int)g_inputText.length()) {
             pLayout->HitTestTextPosition((UINT32)g_inputText.length() - 1, TRUE, &cx, &cy, &hm);
             cx += 5; cy += 5;
         } else {
@@ -1569,7 +1584,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (SUCCEEDED(pLayout->HitTestPoint((FLOAT)x, (FLOAT)y, &isTrailingHit, &isInside, &hm))) {
                 g_caretPos = hm.textPosition;
                 if (isTrailingHit) g_caretPos += hm.length;
-                if (g_caretPos > g_inputText.length()) g_caretPos = (int)g_inputText.length();
+                if (g_caretPos > (int)g_inputText.length()) g_caretPos = (int)g_inputText.length();
                 
                 bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
                 if (!shift) g_anchorPos = g_caretPos;
@@ -1593,7 +1608,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 if (SUCCEEDED(pLayout->HitTestPoint((FLOAT)x, (FLOAT)y, &isTrailingHit, &isInside, &hm))) {
                     g_caretPos = hm.textPosition;
                     if (isTrailingHit) g_caretPos += hm.length;
-                    if (g_caretPos > g_inputText.length()) g_caretPos = (int)g_inputText.length();
+                    if (g_caretPos > (int)g_inputText.length()) g_caretPos = (int)g_inputText.length();
                 }
                 pLayout->Release();
             }
@@ -1625,7 +1640,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     return c == L' ' || c == L'　' || c == L'、' || c == L'。' || c == L',' || c == L'.' || c == L'!' || c == L'?' || c == L'！' || c == L'？' || c == L'(' || c == L')' || c == L'（' || c == L'）';
                 };
                 
-                if (clickedPos < g_inputText.length()) {
+                if (clickedPos < (int)g_inputText.length()) {
                     if (IsWordBoundary(g_inputText[clickedPos])) {
                         g_anchorPos = clickedPos;
                         g_caretPos = clickedPos + 1;
@@ -1635,7 +1650,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                             start--;
                         }
                         int end = clickedPos;
-                        while (end < g_inputText.length() && !IsWordBoundary(g_inputText[end])) {
+                        while (end < (int)g_inputText.length() && !IsWordBoundary(g_inputText[end])) {
                             end++;
                         }
                         g_anchorPos = start;
@@ -1790,8 +1805,8 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                                 SendMessage(g_hComboSize, CB_GETLBTEXT, sizeIndex, (LPARAM)szText);
                                 tsize = _wtoi(szText);
                             }
-                            cx = 5; cy = 5; hm.height = tsize * 1.5f;
-                        } else if (g_caretPos >= g_inputText.length()) {
+                            cx = 5; cy = 5; hm.height = (float)tsize * 1.5f;
+                        } else if (g_caretPos >= (int)g_inputText.length()) {
                             pLayout->HitTestTextPosition((UINT32)g_inputText.length() - 1, TRUE, &cx, &cy, &hm);
                             cx += 5; cy += 5;
                         } else {
@@ -1864,8 +1879,8 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             } else if (g_caretPos > 0) {
                 if (pLayout && g_inputText.length() > 0) {
                     DWRITE_HIT_TEST_METRICS hm = {0}; float cx, cy;
-                    pLayout->HitTestTextPosition(g_caretPos - 1, FALSE, &cx, &cy, &hm);
-                    g_caretPos = hm.textPosition;
+                    pLayout->HitTestTextPosition((UINT32)g_caretPos - 1, FALSE, &cx, &cy, &hm);
+                    g_caretPos = (int)hm.textPosition;
                 } else {
                     g_caretPos--;
                 }
@@ -1875,11 +1890,11 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (!shift && hasSelection) {
                 g_caretPos = max(g_caretPos, g_anchorPos);
                 g_anchorPos = g_caretPos;
-            } else if (g_caretPos < g_inputText.length()) {
+            } else if (g_caretPos < (int)g_inputText.length()) {
                 if (pLayout && g_inputText.length() > 0) {
                     DWRITE_HIT_TEST_METRICS hm = {0}; float cx, cy;
-                    pLayout->HitTestTextPosition(g_caretPos, FALSE, &cx, &cy, &hm);
-                    if (hm.length > 0) g_caretPos = hm.textPosition + hm.length;
+                    pLayout->HitTestTextPosition((UINT32)g_caretPos, FALSE, &cx, &cy, &hm);
+                    if (hm.length > 0) g_caretPos = (int)(hm.textPosition + hm.length);
                     else g_caretPos++;
                 } else {
                     g_caretPos++;
@@ -1902,8 +1917,8 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             } else if (g_caretPos > 0) {
                 if (pLayout && g_inputText.length() > 0) {
                     DWRITE_HIT_TEST_METRICS hm = {0}; float cx, cy;
-                    pLayout->HitTestTextPosition(g_caretPos - 1, FALSE, &cx, &cy, &hm);
-                    g_caretPos = hm.textPosition;
+                    pLayout->HitTestTextPosition((UINT32)g_caretPos - 1, FALSE, &cx, &cy, &hm);
+                    g_caretPos = (int)hm.textPosition;
                     g_anchorPos = g_caretPos;
                     g_inputText.erase(hm.textPosition, hm.length);
                 } else {
@@ -1919,10 +1934,10 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 g_inputText.erase(start, end - start);
                 g_caretPos = start;
                 g_anchorPos = start;
-            } else if (g_caretPos < g_inputText.length()) {
+            } else if (g_caretPos < (int)g_inputText.length()) {
                 if (pLayout && g_inputText.length() > 0) {
                     DWRITE_HIT_TEST_METRICS hm = {0}; float cx, cy;
-                    pLayout->HitTestTextPosition(g_caretPos, FALSE, &cx, &cy, &hm);
+                    pLayout->HitTestTextPosition((UINT32)g_caretPos, FALSE, &cx, &cy, &hm);
                     g_inputText.erase(hm.textPosition, hm.length);
                 } else {
                     g_inputText.erase(g_caretPos, 1);
@@ -1932,24 +1947,24 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (IsWindowEnabled(g_hSendBtn)) {
                 SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(1001, BN_CLICKED), 0);
             }
-        } else if (wParam == 'V' && GetKeyState(VK_CONTROL) < 0) {
+        } else if (wParam == 'V' && (GetKeyState(VK_CONTROL) & 0x8000)) {
             SendMessage(hWnd, WM_PASTE, 0, 0);
-        } else if (wParam == 'C' && GetKeyState(VK_CONTROL) < 0) {
+        } else if (wParam == 'C' && (GetKeyState(VK_CONTROL) & 0x8000)) {
             SendMessage(hWnd, WM_COPY, 0, 0);
-        } else if (wParam == 'X' && GetKeyState(VK_CONTROL) < 0) {
+        } else if (wParam == 'X' && (GetKeyState(VK_CONTROL) & 0x8000)) {
             SendMessage(hWnd, WM_CUT, 0, 0);
-        } else if (wParam == 'A' && GetKeyState(VK_CONTROL) < 0) {
+        } else if (wParam == 'A' && (GetKeyState(VK_CONTROL) & 0x8000)) {
             g_anchorPos = 0;
             g_caretPos = (int)g_inputText.length();
-        } else if (wParam == 'B' && GetKeyState(VK_CONTROL) < 0) {
+        } else if (wParam == 'B' && (GetKeyState(VK_CONTROL) & 0x8000)) {
             bool checked = SendMessage(g_hBtnB, BM_GETCHECK, 0, 0) == BST_CHECKED;
             SendMessage(g_hBtnB, BM_SETCHECK, checked ? BST_UNCHECKED : BST_CHECKED, 0);
             SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(1003, BN_CLICKED), (LPARAM)g_hBtnB);
-        } else if (wParam == 'I' && GetKeyState(VK_CONTROL) < 0) {
+        } else if (wParam == 'I' && (GetKeyState(VK_CONTROL) & 0x8000)) {
             bool checked = SendMessage(g_hBtnI, BM_GETCHECK, 0, 0) == BST_CHECKED;
             SendMessage(g_hBtnI, BM_SETCHECK, checked ? BST_UNCHECKED : BST_CHECKED, 0);
             SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(1004, BN_CLICKED), (LPARAM)g_hBtnI);
-        } else if (wParam == 'U' && GetKeyState(VK_CONTROL) < 0) {
+        } else if (wParam == 'U' && (GetKeyState(VK_CONTROL) & 0x8000)) {
             bool checked = SendMessage(g_hBtnU, BM_GETCHECK, 0, 0) == BST_CHECKED;
             SendMessage(g_hBtnU, BM_SETCHECK, checked ? BST_UNCHECKED : BST_CHECKED, 0);
             SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(1005, BN_CLICKED), (LPARAM)g_hBtnU);
@@ -2059,9 +2074,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     return DefWindowProc(hWnd, msg, wParam, lParam);
 }
-#ifndef WM_GETTITLEBARINFOEX
 #define WM_GETTITLEBARINFOEX 0x033F
-#endif
 
 HWND g_capturedWnd = NULL;
 int g_pressedBtn = 0;
@@ -2540,11 +2553,6 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 tbiex.cbSize = sizeof(TITLEBARINFOEX);
                 SendMessage(hWnd, WM_GETTITLEBARINFOEX, 0, (LPARAM)&tbiex);
 
-                RECT rcWin;
-                GetWindowRect(hWnd, &rcWin);
-
-                // We no longer exclude the clip rect because we will draw the buttons manually
-
                 bool bActive;
                 if (msg == WM_NCACTIVATE) {
                     bActive = (wParam != FALSE);
@@ -2947,7 +2955,6 @@ LRESULT CALLBACK ScrollbarColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
         int height = rcWin.bottom - rcWin.top;
         
         int cxVScroll = GetSystemMetrics(SM_CXVSCROLL);
-        int border = GetSystemMetrics(SM_CXEDGE);
         if (width <= cxVScroll) {
             ReleaseDC(hWnd, hdc);
             return res;
@@ -3299,10 +3306,10 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     case WM_DRAWITEM: {
         DRAWITEMSTRUCT* pdis = (DRAWITEMSTRUCT*)lParam;
-        if (pdis->CtlID == 102 && pdis->itemID != -1) {
+        if (pdis->CtlID == 102 && pdis->itemID != (UINT)-1) {
             HDC hdc = pdis->hDC;
             RECT rc = pdis->rcItem;
-            bool isSelected = (pdis->itemState & ODS_SELECTED);
+            bool isSelected = (pdis->itemState & ODS_SELECTED) != 0;
             
             if (isSelected) {
                 HBRUSH hSel = CreateSolidBrush(RGB(0, 0, 128));
@@ -3417,7 +3424,7 @@ bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult, bool& outPrivate)
                 }
                 continue;
             } else if (msg.wParam == VK_UP && msg.hwnd == GetDlgItem(hWnd, 102)) {
-                int sel = SendMessage(msg.hwnd, LB_GETCURSEL, 0, 0);
+                int sel = (int)SendMessage(msg.hwnd, LB_GETCURSEL, 0, 0);
                 if (sel <= 0) {
                     SetFocus(GetDlgItem(hWnd, 101));
                     continue;
@@ -3847,7 +3854,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         if (err == WSAEWOULDBLOCK) break;
                         continue;
                     }
-                    if (res > 0 && res >= sizeof(MediaHeader)) {
+                    if (res > 0 && res >= (int)sizeof(MediaHeader)) {
                         MediaHeader* mhdr = (MediaHeader*)udpBuf;
                         
                         bool isIgnored = false;
@@ -3859,10 +3866,10 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         if (isIgnored) continue;
 
                         if (mhdr->payloadType == 1) { // Audio
-                            PlayAudioFrame(udpBuf + sizeof(MediaHeader), res - sizeof(MediaHeader));
+                            PlayAudioFrame(udpBuf + sizeof(MediaHeader), res - (int)sizeof(MediaHeader));
                             std::wstring wname = mhdr->userId;
                             
-                            int audioLen = res - sizeof(MediaHeader);
+                            int audioLen = res - (int)sizeof(MediaHeader);
                             short* samples = (short*)(udpBuf + sizeof(MediaHeader));
                             int sampleCount = audioLen / 2;
                             int maxAmp = 0;
@@ -3904,8 +3911,12 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             if (wname == g_userId) continue;
                             uint16_t seq = mhdr->seqNum;
                             int fragIdx = mhdr->timestamp;
-                            int len = res - sizeof(MediaHeader);
+                            int len = res - (int)sizeof(MediaHeader);
                             bool isH264 = (mhdr->payloadType == 5);
+                            {
+                                std::lock_guard<std::mutex> lock(g_videoMutex);
+                                g_videoIsSWMap[wname] = !isH264;
+                            }
                             
                             bool stateChanged = false;
                             {
@@ -3927,7 +3938,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 vbuf.totalFragments = fragIdx + 1;
                             }
                             
-                            if (vbuf.totalFragments > 0 && vbuf.fragments.size() == vbuf.totalFragments) {
+                            if (vbuf.totalFragments > 0 && vbuf.fragments.size() == (size_t)vbuf.totalFragments) {
                                 DecodeTaskData* taskData = new DecodeTaskData();
                                 taskData->username = wname;
                                 taskData->isH264 = isH264;
@@ -3957,7 +3968,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         else if (mhdr->payloadType == 3) {
                             // Watching packet
                             std::wstring viewer = mhdr->userId;
-                            int len = res - sizeof(MediaHeader);
+                            int len = res - (int)sizeof(MediaHeader);
                             if (len > 0) {
                                 std::string targetA((char*)(udpBuf + sizeof(MediaHeader)), len);
                                 int wsize = MultiByteToWideChar(CP_UTF8, 0, targetA.c_str(), -1, NULL, 0);
@@ -4183,10 +4194,10 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
     case WM_TIMER: {
         if (wParam == 1 && pUser && g_sock != INVALID_SOCKET) {
             std::string targetA;
-            int size_needed = WideCharToMultiByte(CP_UTF8, 0, pUser->c_str(), pUser->length(), NULL, 0, NULL, NULL);
+            int size_needed = WideCharToMultiByte(CP_UTF8, 0, pUser->c_str(), (int)pUser->length(), NULL, 0, NULL, NULL);
             if (size_needed > 0) {
                 targetA.resize(size_needed);
-                WideCharToMultiByte(CP_UTF8, 0, pUser->c_str(), pUser->length(), &targetA[0], size_needed, NULL, NULL);
+                WideCharToMultiByte(CP_UTF8, 0, pUser->c_str(), (int)pUser->length(), &targetA[0], size_needed, NULL, NULL);
             }
             
             MediaHeader hdr = {0};
@@ -4232,7 +4243,7 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             std::wstring dispName = *pUser;
             if (g_userNames.count(*pUser)) dispName = g_userNames[*pUser];
             dispName = dispName.substr(0, dispName.find(L'#'));
-            std::wstring title = dispName + L" " + viewBuf;
+            std::wstring title = dispName + viewBuf;
             SetWindowTextW(hwnd, title.c_str());
         }
         return 0;
@@ -4254,10 +4265,12 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         if (pRT && pUser) {
             pRT->BeginDraw();
             pRT->Clear(D2D1::ColorF(D2D1::ColorF::Black));
+            bool isSW = false;
             {
                 std::lock_guard<std::mutex> lock(g_videoMutex);
                 auto& pixels = g_videoPixelsMap[*pUser];
                 auto sz = g_videoSizeMap[*pUser];
+                isSW = g_videoIsSWMap[*pUser];
                 if (!pixels.empty()) {
                     ID2D1Bitmap* pBitmap = NULL;
                     HRESULT hrBmp = pRT->CreateBitmap(D2D1::SizeU(sz.first, sz.second), pixels.data(), sz.first * 4, 
@@ -4274,6 +4287,31 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                         float offsetY = (wH - drawH) / 2.0f;
                         pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
                         pBitmap->Release();
+                        
+                        if (isSW) {
+                            IDWriteTextFormat* pFormatSW = nullptr;
+                            HRESULT hrFmt = g_pDWriteFactory->CreateTextFormat(
+                                L"Arial", NULL, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, 
+                                DWRITE_FONT_STRETCH_NORMAL, 10.0f, L"en-US", &pFormatSW);
+                            if (SUCCEEDED(hrFmt) && pFormatSW) {
+                                pFormatSW->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+                                pFormatSW->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_FAR);
+                                ID2D1SolidColorBrush* pBrush = nullptr;
+                                ID2D1SolidColorBrush* pShadowBrush = nullptr;
+                                pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.5f, 0.0f, 1.0f), &pBrush);
+                                pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 1.0f), &pShadowBrush);
+                                if (pBrush && pShadowBrush) {
+                                    D2D1_TEXT_ANTIALIAS_MODE oldMode = pRT->GetTextAntialiasMode();
+                                    pRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_ALIASED);
+                                    pRT->DrawTextW(L"SW", 2, pFormatSW, D2D1::RectF(0, 0, (float)rc.right - 1.0f, (float)rc.bottom - 1.0f), pShadowBrush);
+                                    pRT->DrawTextW(L"SW", 2, pFormatSW, D2D1::RectF(0, 0, (float)rc.right - 2.0f, (float)rc.bottom - 2.0f), pBrush);
+                                    pRT->SetTextAntialiasMode(oldMode);
+                                }
+                                if (pBrush) pBrush->Release();
+                                if (pShadowBrush) pShadowBrush->Release();
+                                pFormatSW->Release();
+                            }
+                        }
                     } else {
                         char buf[256]; sprintf_s(buf, "VideoViewProc FAILED: CreateBitmap hr=0x%X, sz=%dx%d", hrBmp, sz.first, sz.second); LogToFile(buf);
                     }
@@ -4281,7 +4319,8 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                     static DWORD lastEmptyLog = 0;
                     if (GetTickCount() - lastEmptyLog > 1000) {
                         lastEmptyLog = GetTickCount();
-                        std::string unameA(pUser->begin(), pUser->end());
+                        std::string unameA;
+                        for (wchar_t c : *pUser) unameA.push_back(static_cast<char>(c));
                         LogToFile("VideoViewProc FAILED: pixels.empty() is true for " + unameA);
                     }
                 }
@@ -4569,8 +4608,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     HMENU hMenu = CreatePopupMenu();
                     AppendMenuW(hMenu, MF_STRING | (g_isWebcamActive ? MF_CHECKED : MF_UNCHECKED), 1, GetString(IDS_VIDEO_STREAM).c_str());
                     AppendMenuW(hMenu, MF_STRING, 3, GetString(IDS_CHANGE_NAME_TITLE).c_str()); 
-                    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-                    AppendMenuW(hMenu, g_useH264 ? (MF_STRING | MF_CHECKED) : MF_STRING, 10, L"H.264 ハードウェアエンコード");
+
                     ClientToScreen(hwnd, &pt);
                     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
                     DestroyMenu(hMenu);
@@ -4604,12 +4642,6 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             SortUserList();
                             InvalidateRect(hwnd, NULL, TRUE);
                             SendRenameRequest();
-                        }
-                    } else if (cmd == 10) {
-                        g_useH264 = !g_useH264;
-                        if (!g_useH264 && g_pH264Encoder) {
-                            delete g_pH264Encoder;
-                            g_pH264Encoder = nullptr;
                         }
                     }
                 } else {
@@ -4677,7 +4709,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                         GlobalFree(utf8Target);
                         std::string msg = reportMsg.dump() + "\n";
                         if (g_tcpSocket != INVALID_SOCKET) {
-                            send(g_tcpSocket, msg.c_str(), msg.length(), 0);
+                            send(g_tcpSocket, msg.c_str(), (int)msg.length(), 0);
                         }
                         MessageBoxW(hwnd, GetString(IDS_REPORTED).c_str(), L"Report", MB_OK);
                         InvalidateRect(hwnd, NULL, FALSE);
@@ -5526,7 +5558,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             if (isIgnored) isVoicing = false;
             
             if (isVoicing) {
-                float margin = Scale(2);
+                float margin = (float)Scale(2);
                 float visTop = rc.top + margin + Scale(1);
                 float visBotForU = rc.bottom - margin - Scale(5);
                 float visH = visBotForU - visTop;
@@ -5744,7 +5776,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
         GetWindowRect(g_hComboSize, &rcCurrentCombo);
         int currentComboHeight = rcCurrentCombo.bottom - rcCurrentCombo.top;
-        int currentItemHeight = SendMessage(g_hComboSize, CB_GETITEMHEIGHT, (WPARAM)-1, 0);
+        int currentItemHeight = (int)SendMessage(g_hComboSize, CB_GETITEMHEIGHT, (WPARAM)-1, 0);
         int nonItemHeight = currentComboHeight - currentItemHeight;
 
         static int lastGoodNonItemHeight = Scale(6);
@@ -5784,7 +5816,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
     case WM_HSCROLL: {
         if ((HWND)lParam == g_hVolumeSlider) {
             if (g_pSimpleAudioVolume) {
-                int pos = SendMessage(g_hVolumeSlider, TBM_GETPOS, 0, 0);
+                int pos = (int)SendMessage(g_hVolumeSlider, TBM_GETPOS, 0, 0);
                 float volume = pos / 100.0f;
                 BOOL isMuted = FALSE;
                 g_pSimpleAudioVolume->GetMute(&isMuted);
@@ -6098,7 +6130,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         0,
         WndProc, 0, 0, hInstance,
         LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON)), LoadCursor(0, IDC_ARROW), // hIcon is NULL
-        (HBRUSH)CreateSolidBrush(RGB(192, 192, 192)), 0, L"Retro Chat"
+        (HBRUSH)CreateSolidBrush(RGB(192, 192, 192)), 0, L"retcha"
     };
     RegisterClass(&wc);
     
@@ -6112,7 +6144,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     AdjustWindowRectEx(&rcMin, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, FALSE, 0);
 
     HWND hWnd = CreateWindow(
-        L"Retro Chat", GetString(IDS_WINDOW_TITLE).c_str(),
+        L"retcha", GetString(IDS_WINDOW_TITLE).c_str(),
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         CW_USEDEFAULT, 0, rcMin.right - rcMin.left, rcMin.bottom - rcMin.top,
         0, 0, hInstance, 0);
