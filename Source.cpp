@@ -3717,124 +3717,135 @@ DWORD WINAPI RecvThread(LPVOID param) {
 
 
             if (g_sock != INVALID_SOCKET && FD_ISSET(g_sock, &readfds)) {
-                sockaddr_in from;
-                int fromlen = sizeof(from);
-                int res = recvfrom(g_sock, udpBuf, sizeof(udpBuf), 0, (sockaddr*)&from, &fromlen);
-                if (res > 0 && res >= sizeof(MediaHeader)) {
-                    // UDP packet received
-                    LogToFile("UDP Received bytes: " + std::to_string(res));
-                    MediaHeader* mhdr = (MediaHeader*)udpBuf;
-                    
-                    bool isIgnored = false;
-                    {
-                        std::wstring fromUser = mhdr->userId;
-                        std::lock_guard<std::mutex> lock(g_ignoredMutex);
-                        isIgnored = (g_ignoredUsers.count(fromUser) > 0);
+                while (true) {
+                    u_long bytes_available = 0;
+                    if (ioctlsocket(g_sock, FIONREAD, &bytes_available) != 0 || bytes_available == 0) {
+                        break;
                     }
-                    if (isIgnored) continue;
+                    sockaddr_in from;
+                    int fromlen = sizeof(from);
+                    int res = recvfrom(g_sock, udpBuf, sizeof(udpBuf), 0, (sockaddr*)&from, &fromlen);
+                    if (res > 0 && res >= sizeof(MediaHeader)) {
+                        MediaHeader* mhdr = (MediaHeader*)udpBuf;
+                        
+                        bool isIgnored = false;
+                        {
+                            std::wstring fromUser = mhdr->userId;
+                            std::lock_guard<std::mutex> lock(g_ignoredMutex);
+                            isIgnored = (g_ignoredUsers.count(fromUser) > 0);
+                        }
+                        if (isIgnored) continue;
 
-                    if (mhdr->payloadType == 1) { // Audio
-                        PlayAudioFrame(udpBuf + sizeof(MediaHeader), res - sizeof(MediaHeader));
-                        std::wstring wname = mhdr->userId;
-                        
-                        int audioLen = res - sizeof(MediaHeader);
-                        short* samples = (short*)(udpBuf + sizeof(MediaHeader));
-                        int sampleCount = audioLen / 2;
-                        int maxAmp = 0;
-                        for (int i = 0; i < sampleCount; i++) {
-                            int amp = abs(samples[i]);
-                            if (amp > maxAmp) maxAmp = amp;
-                        }
-                        int volume = (maxAmp * 100) / 32767;
-                        volume = volume * 3;
-                        if (volume > 100) volume = 100;
-                        
-                        bool newlySpeaking = false;
-                        {
-                            std::lock_guard<std::mutex> lock(g_voiceMutex);
-                            if (g_voiceUsers.find(wname) == g_voiceUsers.end() || (GetTickCount() - g_voiceUsers[wname] > 1000)) {
-                                newlySpeaking = true;
+                        if (mhdr->payloadType == 1) { // Audio
+                            PlayAudioFrame(udpBuf + sizeof(MediaHeader), res - sizeof(MediaHeader));
+                            std::wstring wname = mhdr->userId;
+                            
+                            int audioLen = res - sizeof(MediaHeader);
+                            short* samples = (short*)(udpBuf + sizeof(MediaHeader));
+                            int sampleCount = audioLen / 2;
+                            int maxAmp = 0;
+                            for (int i = 0; i < sampleCount; i++) {
+                                int amp = abs(samples[i]);
+                                if (amp > maxAmp) maxAmp = amp;
                             }
-                            g_voiceUsers[wname] = GetTickCount();
-                            g_voiceVolumes[wname] = volume;
-                        }
-                        if (newlySpeaking && g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
-                    }
-                    else if (mhdr->payloadType == 4) {
-                        std::wstring wname = mhdr->userId;
-                        bool stateChanged = false;
-                        {
-                            std::lock_guard<std::mutex> lock(g_streamerMutex);
-                            if (g_videoStreamers.find(wname) == g_videoStreamers.end() || (GetTickCount() - g_videoStreamers[wname] > 5000)) {
-                                stateChanged = true;
+                            int volume = (maxAmp * 100) / 32767;
+                            volume = volume * 3;
+                            if (volume > 100) volume = 100;
+                            
+                            bool newlySpeaking = false;
+                            {
+                                std::lock_guard<std::mutex> lock(g_voiceMutex);
+                                if (g_voiceUsers.find(wname) == g_voiceUsers.end() || (GetTickCount() - g_voiceUsers[wname] > 1000)) {
+                                    newlySpeaking = true;
+                                }
+                                g_voiceUsers[wname] = GetTickCount();
+                                g_voiceVolumes[wname] = volume;
                             }
-                            g_videoStreamers[wname] = GetTickCount();
+                            if (newlySpeaking && g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
                         }
-                        if (stateChanged) {
-                            InvalidateRect(g_hUserList, NULL, FALSE);
-                        }
-                    }
-                    else if (mhdr->payloadType == 2) {
-                        std::wstring wname = mhdr->userId;
-                        uint16_t seq = mhdr->seqNum;
-                        int fragIdx = mhdr->timestamp;
-                        int len = res - sizeof(MediaHeader);
-                        
-                        bool stateChanged = false;
-                        {
-                            std::lock_guard<std::mutex> lock(g_streamerMutex);
-                            if (g_videoStreamers.find(wname) == g_videoStreamers.end() || (GetTickCount() - g_videoStreamers[wname] > 5000)) {
-                                stateChanged = true;
+                        else if (mhdr->payloadType == 4) {
+                            std::wstring wname = mhdr->userId;
+                            bool stateChanged = false;
+                            {
+                                std::lock_guard<std::mutex> lock(g_streamerMutex);
+                                if (g_videoStreamers.find(wname) == g_videoStreamers.end() || (GetTickCount() - g_videoStreamers[wname] > 5000)) {
+                                    stateChanged = true;
+                                }
+                                g_videoStreamers[wname] = GetTickCount();
                             }
-                            g_videoStreamers[wname] = GetTickCount();
+                            if (stateChanged) {
+                                InvalidateRect(g_hUserList, NULL, FALSE);
+                            }
                         }
-                        if (stateChanged) {
-                            InvalidateRect(g_hUserList, NULL, FALSE);
-                        }
+                        else if (mhdr->payloadType == 2) {
+                            std::wstring wname = mhdr->userId;
+                            uint16_t seq = mhdr->seqNum;
+                            int fragIdx = mhdr->timestamp;
+                            int len = res - sizeof(MediaHeader);
+                            
+                            bool stateChanged = false;
+                            {
+                                std::lock_guard<std::mutex> lock(g_streamerMutex);
+                                if (g_videoStreamers.find(wname) == g_videoStreamers.end() || (GetTickCount() - g_videoStreamers[wname] > 5000)) {
+                                    stateChanged = true;
+                                }
+                                g_videoStreamers[wname] = GetTickCount();
+                            }
+                            if (stateChanged) {
+                                InvalidateRect(g_hUserList, NULL, FALSE);
+                            }
 
-                        auto& vbuf = g_videoBuffers[wname][seq];
-                        vbuf.lastUpdate = GetTickCount();
-                        vbuf.fragments[fragIdx].assign(udpBuf + sizeof(MediaHeader), udpBuf + sizeof(MediaHeader) + len);
-                        
-                        if (mhdr->flags & 2) { 
-                            vbuf.totalFragments = fragIdx + 1;
-                        }
-                        
-                        if (vbuf.totalFragments > 0 && vbuf.fragments.size() == vbuf.totalFragments) {
-                            DecodeTaskData* taskData = new DecodeTaskData();
-                            taskData->username = wname;
-                            for (int i = 0; i < vbuf.totalFragments; i++) {
-                                taskData->jpegData.insert(taskData->jpegData.end(), vbuf.fragments[i].begin(), vbuf.fragments[i].end());
+                            auto& vbuf = g_videoBuffers[wname][seq];
+                            vbuf.lastUpdate = GetTickCount();
+                            vbuf.fragments[fragIdx].assign(udpBuf + sizeof(MediaHeader), udpBuf + sizeof(MediaHeader) + len);
+                            
+                            if (mhdr->flags & 2) { 
+                                vbuf.totalFragments = fragIdx + 1;
                             }
-                            QueueUserWorkItem(DecodeTaskProc, taskData, WT_EXECUTEDEFAULT);
-                            g_videoBuffers[wname].erase(seq);
-                        }
-                        
-                        // Cleanup old incomplete frames
-                        DWORD now = GetTickCount();
-                        for (auto it = g_videoBuffers[wname].begin(); it != g_videoBuffers[wname].end(); ) {
-                            if (now - it->second.lastUpdate > 2000) {
-                                it = g_videoBuffers[wname].erase(it);
-                            } else {
-                                ++it;
+                            
+                            if (vbuf.totalFragments > 0 && vbuf.fragments.size() == vbuf.totalFragments) {
+                                DecodeTaskData* taskData = new DecodeTaskData();
+                                taskData->username = wname;
+                                for (int i = 0; i < vbuf.totalFragments; i++) {
+                                    taskData->jpegData.insert(taskData->jpegData.end(), vbuf.fragments[i].begin(), vbuf.fragments[i].end());
+                                }
+                                QueueUserWorkItem(DecodeTaskProc, taskData, WT_EXECUTEDEFAULT);
+                                g_videoBuffers[wname].erase(seq);
                             }
-                        }
-                    }
-                    else if (mhdr->payloadType == 3) {
-                        // Watching packet
-                        LogToFile("UDP Received Watching Packet, bytes: " + std::to_string(res));
-                        std::wstring viewer = mhdr->userId;
-                        int len = res - sizeof(MediaHeader);
-                        if (len > 0) {
-                            std::string targetA((char*)(udpBuf + sizeof(MediaHeader)), len);
-                            int wsize = MultiByteToWideChar(CP_UTF8, 0, targetA.c_str(), -1, NULL, 0);
-                            if (wsize > 0) {
-                                std::wstring target;
-                                target.resize(wsize - 1);
-                                MultiByteToWideChar(CP_UTF8, 0, targetA.c_str(), -1, &target[0], wsize - 1);
-                                g_videoViewers[target][viewer] = GetTickCount();
+                            
+                            // Cleanup old incomplete frames (throttled to 1s)
+                            static DWORD lastCleanup = 0;
+                            DWORD now = GetTickCount();
+                            if (now - lastCleanup > 1000) {
+                                lastCleanup = now;
+                                for (auto& pair : g_videoBuffers) {
+                                    for (auto it = pair.second.begin(); it != pair.second.end(); ) {
+                                        if (now - it->second.lastUpdate > 2000) {
+                                            it = pair.second.erase(it);
+                                        } else {
+                                            ++it;
+                                        }
+                                    }
+                                }
                             }
                         }
+                        else if (mhdr->payloadType == 3) {
+                            // Watching packet
+                            std::wstring viewer = mhdr->userId;
+                            int len = res - sizeof(MediaHeader);
+                            if (len > 0) {
+                                std::string targetA((char*)(udpBuf + sizeof(MediaHeader)), len);
+                                int wsize = MultiByteToWideChar(CP_UTF8, 0, targetA.c_str(), -1, NULL, 0);
+                                if (wsize > 0) {
+                                    std::wstring target;
+                                    target.resize(wsize - 1);
+                                    MultiByteToWideChar(CP_UTF8, 0, targetA.c_str(), -1, &target[0], wsize - 1);
+                                    g_videoViewers[target][viewer] = GetTickCount();
+                                }
+                            }
+                        }
+                    } else if (res <= 0) {
+                        break;
                     }
                 }
             }
