@@ -187,6 +187,9 @@ IDWriteFactory* g_pDWriteFactory = nullptr;
 // --- Video Globals ---
 IWICImagingFactory* g_pWICFactory = NULL;
 bool g_isWebcamActive = false;
+bool g_isAppRunning = true;
+HANDLE g_hWebcamThread = NULL;
+HANDLE g_hRecvThread = NULL;
 uint16_t g_videoSeq = 0;
 
 std::map<std::wstring, DWORD> g_videoStreamers;
@@ -509,7 +512,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
     MFStartup(MF_VERSION);
     IMFSourceReader* pReader = NULL;
 
-    while (true) {
+    while (g_isAppRunning) {
         if (!g_isWebcamActive || g_sock == INVALID_SOCKET) {
             if (pReader) {
                 pReader->Release();
@@ -702,6 +705,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             Sleep(10);
         }
     }
+    if (pReader) pReader->Release();
+    CoUninitialize();
     return 0;
 }
 
@@ -3499,6 +3504,7 @@ std::string HashRoomName(const std::wstring& roomName) {
 
 
 void ClearLogAndUsers() {
+    g_isRoomJoined = false;
     for (auto& entry : g_logEntries) {
         if (entry.pLayout) { entry.pLayout->Release(); entry.pLayout = nullptr; }
     }
@@ -3593,7 +3599,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
     char udpBuf[65536];
     std::string tcpAccum;
 
-    while (true) {
+    while (g_isAppRunning) {
         fd_set readfds;
         FD_ZERO(&readfds);
         if (g_sock != INVALID_SOCKET) FD_SET(g_sock, &readfds);
@@ -3685,15 +3691,40 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             else if (type == "users") {
                                 SendMessage(g_hUserList, LB_RESETCONTENT, 0, 0);
                                 auto arr = json["users"].array_items();
+                                std::map<std::wstring, std::wstring> nameToUid;
                                 for (auto& item : arr) {
                                     std::wstring wuid = a2w(item["userId"].string_value().c_str());
                                     std::wstring wname = a2w(item["userName"].string_value().c_str());
                                     g_userNames[wuid] = wname;
                                     g_userColors[wuid] = item["nclr"].int_value();
-                                    int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wuid.c_str());
-                                    if (idx == LB_ERR) {
-                                        SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)wuid.c_str());
+                                    
+                                    if (nameToUid.find(wname) == nameToUid.end()) {
+                                        nameToUid[wname] = wuid;
+                                    } else {
+                                        if (wuid == g_userId) nameToUid[wname] = wuid;
+                                        else if (nameToUid[wname] != g_userId) nameToUid[wname] = wuid;
                                     }
+                                }
+                                
+                                std::vector<std::wstring> uidsToClose;
+                                for (auto& pair : g_videoWindows) {
+                                    bool found = false;
+                                    for (auto& nPair : nameToUid) {
+                                        if (nPair.second == pair.first) { found = true; break; }
+                                    }
+                                    if (!found && pair.first != g_userId) {
+                                        uidsToClose.push_back(pair.first);
+                                    }
+                                }
+                                for (auto& uid : uidsToClose) {
+                                    if (IsWindow(g_videoWindows[uid])) {
+                                        SendMessage(g_videoWindows[uid], WM_CLOSE, 0, 0);
+                                    }
+                                    g_videoWindows.erase(uid);
+                                }
+                                
+                                for (auto& pair : nameToUid) {
+                                    SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)pair.second.c_str());
                                 }
                                 // Ensure local user is always in the list
                                 g_userNames[g_userId] = g_username;
@@ -3704,12 +3735,13 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 }
                                 SortUserList();
                                 
+                                bool wasJoined = g_isRoomJoined;
                                 g_isRoomJoined = true;
                                 UpdateSendBtnState();
                                 
                                 if (g_isNameChanging) {
                                     g_isNameChanging = false;
-                                } else {
+                                } else if (!wasJoined) {
                                     MsgData* pData = new MsgData();
                                     pData->user = g_username;
                                     pData->msg = GetString(IDS_ENTERED);
@@ -3745,7 +3777,22 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 if (joinNameColor != 0xFFFFFFFF) {
                                     g_userColors[wuid] = joinNameColor;
                                 }
-                                if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
+                                if (g_hUserList) {
+                                    int count = (int)SendMessage(g_hUserList, LB_GETCOUNT, 0, 0);
+                                    for (int i = count - 1; i >= 0; i--) {
+                                        wchar_t buf[256] = {0};
+                                        SendMessage(g_hUserList, LB_GETTEXT, i, (LPARAM)buf);
+                                        std::wstring existingUid = buf;
+                                        if (existingUid != wuid && g_userNames[existingUid] == wname) {
+                                            SendMessage(g_hUserList, LB_DELETESTRING, i, 0);
+                                            if (g_videoWindows[existingUid] && IsWindow(g_videoWindows[existingUid])) {
+                                                SendMessage(g_videoWindows[existingUid], WM_CLOSE, 0, 0);
+                                                g_videoWindows.erase(existingUid);
+                                            }
+                                        }
+                                    }
+                                    InvalidateRect(g_hUserList, NULL, FALSE);
+                                }
                                 
                                 int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wuid.c_str());
                                 if (idx == LB_ERR) {
@@ -4031,6 +4078,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
             }
         }
     }
+    CoUninitialize();
     return 0;
 }
 
@@ -4918,7 +4966,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
     CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_pWICFactory));
-    CreateThread(NULL, 0, WebcamThread, NULL, 0, NULL);
+    g_hWebcamThread = CreateThread(NULL, 0, WebcamThread, NULL, 0, NULL);
 
 D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&g_pDWriteFactory));
@@ -5153,7 +5201,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         // Send initial join after all UI controls are fully created
         EnableWindow(g_hSendBtn, FALSE);
         SendJoinRequest(g_currentRoom, g_isPrivateRoom);
-        CreateThread(0, 0, RecvThread, hWnd, 0, 0);
+        g_hRecvThread = CreateThread(0, 0, RecvThread, hWnd, 0, 0);
         SetTimer(hWnd, 1, 3000, NULL);
         SetTimer(hWnd, 2, 100, NULL);
         InitVolumeSync(hWnd);
@@ -5669,6 +5717,11 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 FillRect(hdc, &rcBg, hBg);
                 DeleteObject(hBg);
                 
+                int savedDC = SaveDC(hdc);
+                RECT rcThumb;
+                SendMessage(g_hVolumeSlider, TBM_GETTHUMBRECT, 0, (LPARAM)&rcThumb);
+                ExcludeClipRect(hdc, rcThumb.left, rcThumb.top, rcThumb.right, rcThumb.bottom);
+                
                 int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
                 int s = MulDiv(1, dpiY, 96); if (s < 1) s = 1;
                 HPEN hPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
@@ -5696,6 +5749,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 }
                 SelectObject(hdc, hOldPen);
                 DeleteObject(hPen);
+                RestoreDC(hdc, savedDC);
+                
                 return CDRF_NOTIFYITEMDRAW;
             } else if (pcd->dwDrawStage == CDDS_ITEMPREPAINT) {
                 if (pcd->dwItemSpec == TBCD_THUMB) {
@@ -6085,8 +6140,21 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
     }
 
     case WM_DESTROY:
+        g_isAppRunning = false;
+        g_isWebcamActive = false;
         SendLeaveRequest(g_currentRoom);
+        
+        if (g_hWebcamThread) {
+            WaitForSingleObject(g_hWebcamThread, 1000);
+            CloseHandle(g_hWebcamThread);
+        }
+        if (g_hRecvThread) {
+            WaitForSingleObject(g_hRecvThread, 1000);
+            CloseHandle(g_hRecvThread);
+        }
+        
         closesocket(g_sock);
+        if (g_tcpSocket != INVALID_SOCKET) closesocket(g_tcpSocket);
         WSACleanup();
         DeleteObject(g_hFont);
         DeleteObject(g_hFontBold);
