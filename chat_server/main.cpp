@@ -201,8 +201,6 @@ public:
         }
     }
 
-    std::string getUserId() const { return m_userId; }
-
     void start() {
         ServerManager::get().registerSession(m_sessionId, shared_from_this());
         
@@ -523,17 +521,26 @@ private:
             if (!target.empty() && ServerManager::get().getRedis()) {
                 auto redis = ServerManager::get().getRedis();
                 try {
+                    std::string reporterIp = getIp();
                     std::string reportKey = "report:" + target;
+                    std::string reportIpKey = "report_ip:" + target;
                     
                     auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
                     redis->zadd(reportKey, m_userId, (double)now);
+                    redis->zadd(reportIpKey, reporterIp, (double)now);
                     
                     // Remove reports older than 24 hours
                     redis->command("ZREMRANGEBYSCORE", reportKey, "-inf", std::to_string(now - 86400));
                     redis->expire(reportKey, 86400);
                     
-                    long long count = redis->zcard(reportKey);
-                    if (count >= 7) {
+                    redis->command("ZREMRANGEBYSCORE", reportIpKey, "-inf", std::to_string(now - 86400));
+                    redis->expire(reportIpKey, 86400);
+                    
+                    long long countUser = redis->zcard(reportKey);
+                    long long countIp = redis->zcard(reportIpKey);
+                    long long actualCount = std::min(countUser, countIp);
+                    
+                    if (actualCount >= 7) {
                         redis->setex("banned_user:" + target, 86400, "1");
                         ServerManager::get().disconnectUserId(target);
                     }
