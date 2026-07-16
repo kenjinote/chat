@@ -181,7 +181,11 @@ public:
             if (m_room->getUsers().empty() && m_roomName != "Public") {
                 ServerManager::get().removeRoom(m_roomName);
                 if (ServerManager::get().getRedis()) {
-                    ServerManager::get().getRedis()->hdel("room_owner", m_roomName);
+                    try {
+                        ServerManager::get().getRedis()->hdel("room_owner", m_roomName);
+                    } catch (const std::exception& e) {
+                        std::cerr << "Redis error: " << e.what() << std::endl;
+                    }
                 }
             }
         }
@@ -265,7 +269,11 @@ private:
                         if (m_room->getUsers().empty() && m_roomName != "Public") {
                             ServerManager::get().removeRoom(m_roomName);
                             if (ServerManager::get().getRedis()) {
-                                ServerManager::get().getRedis()->hdel("room_owner", m_roomName);
+                                try {
+                                    ServerManager::get().getRedis()->hdel("room_owner", m_roomName);
+                                } catch (const std::exception& e) {
+                                    std::cerr << "Redis error: " << e.what() << std::endl;
+                                }
                             }
                         }
                         m_room.reset();
@@ -409,7 +417,7 @@ private:
                         // Announce removed for bandwidth optimization
                     }
 
-                    if (m_room) {
+                    if (m_room && m_room != targetRoom) {
                         m_room->leave(shared_from_this());
                         json11::Json leaveMsg = json11::Json::object {
                             {"type", "leave"},
@@ -419,7 +427,11 @@ private:
                         if (m_room->getUsers().empty() && m_roomName != "Public") {
                             ServerManager::get().removeRoom(m_roomName);
                             if (ServerManager::get().getRedis()) {
-                                ServerManager::get().getRedis()->hdel("room_owner", m_roomName);
+                                try {
+                                    ServerManager::get().getRedis()->hdel("room_owner", m_roomName);
+                                } catch (const std::exception& e) {
+                                    std::cerr << "Redis error: " << e.what() << std::endl;
+                                }
                             }
                         }
                     }
@@ -511,6 +523,13 @@ private:
                 
                 if (m_room->getUsers().empty() && m_roomName != "Public") {
                     ServerManager::get().removeRoom(m_roomName);
+                    if (ServerManager::get().getRedis()) {
+                        try {
+                            ServerManager::get().getRedis()->hdel("room_owner", m_roomName);
+                        } catch (const std::exception& e) {
+                            std::cerr << "Redis error: " << e.what() << std::endl;
+                        }
+                    }
                 }
                 m_room.reset();
                 m_roomName = "";
@@ -522,10 +541,36 @@ private:
                 auto redis = ServerManager::get().getRedis();
                 try {
                     std::string reporterIp = getIp();
+                    auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+
+                    // --- Spam Reporting Prevention ---
+                    std::string historyKey = "reporter_history:" + m_userId;
+                    std::string historyIpKey = "reporter_history_ip:" + reporterIp;
+                    
+                    redis->zadd(historyKey, target, (double)now);
+                    redis->command("ZREMRANGEBYSCORE", historyKey, "-inf", std::to_string(now - 3600));
+                    redis->expire(historyKey, 3600);
+                    long long historyCount = redis->zcard(historyKey);
+
+                    redis->zadd(historyIpKey, target, (double)now);
+                    redis->command("ZREMRANGEBYSCORE", historyIpKey, "-inf", std::to_string(now - 3600));
+                    redis->expire(historyIpKey, 3600);
+                    long long historyIpCount = redis->zcard(historyIpKey);
+
+                    long long maxHistory = std::max(historyCount, historyIpCount);
+
+                    if (maxHistory >= 60) {
+                        redis->setex("banned_user:" + m_userId, 86400, "1");
+                        ServerManager::get().disconnectUserId(m_userId);
+                        return;
+                    } else if (maxHistory >= 30) {
+                        return;
+                    }
+                    // ----------------------------------
+
                     std::string reportKey = "report:" + target;
                     std::string reportIpKey = "report_ip:" + target;
                     
-                    auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
                     redis->zadd(reportKey, m_userId, (double)now);
                     redis->zadd(reportIpKey, reporterIp, (double)now);
                     
@@ -552,7 +597,7 @@ private:
     }
 
     tcp::socket m_socket;
-    asio::streambuf m_buffer;
+    asio::streambuf m_buffer{65536};
     std::deque<std::string> m_writeQueue;
     std::shared_ptr<Room> m_room;
     std::string m_roomName;
