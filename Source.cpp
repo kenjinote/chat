@@ -41,6 +41,12 @@ H264Encoder* g_pH264Encoder = nullptr;
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
 
+#include <winrt/Windows.Foundation.h>
+#include <winrt/Windows.System.Profile.h>
+#include <winrt/Windows.Security.Cryptography.h>
+#include <winrt/Windows.Storage.Streams.h>
+#pragma comment(lib, "windowsapp")
+
 #include "resource.h"
 
 std::wstring GetString(UINT id) {
@@ -438,6 +444,17 @@ void LoadSettings() {
         RegCloseKey(hKey);
     }
     
+    try {
+        auto sysId = winrt::Windows::System::Profile::SystemIdentification::GetSystemIdForPublisher();
+        auto buffer = sysId.Id();
+        if (buffer.Length() > 0) {
+            auto str = winrt::Windows::Security::Cryptography::CryptographicBuffer::EncodeToHexString(buffer);
+            g_secretId = str.c_str();
+        }
+    } catch (...) {
+        // Fallback to registry or random UUID if WinRT API is unavailable
+    }
+
     if (g_secretId.empty()) {
         UUID uuid;
         UuidCreate(&uuid);
@@ -6279,6 +6296,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 #include "resource.h"
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
+    winrt::init_apartment(winrt::apartment_type::single_threaded);
     SetThreadUILanguage(0);
     g_currentRoom = GetString(IDS_LOBBY);
     LoadIgnoredUsers();
