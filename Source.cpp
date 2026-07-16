@@ -4297,6 +4297,29 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         SetTimer(hwnd, 1, 2000, NULL);
         return TRUE;
     }
+    case WM_CREATE: {
+        HMENU hSysMenu = GetSystemMenu(hwnd, FALSE);
+        if (hSysMenu) {
+            AppendMenuW(hSysMenu, MF_SEPARATOR, 0, NULL);
+            AppendMenuW(hSysMenu, MF_STRING, 0x0100, GetString(IDS_ALWAYS_ON_TOP).c_str());
+        }
+        break;
+    }
+    case WM_SYSCOMMAND: {
+        if ((wParam & 0xFFF0) == 0x0100) {
+            HMENU hSysMenu = GetSystemMenu(hwnd, FALSE);
+            UINT state = GetMenuState(hSysMenu, 0x0100, MF_BYCOMMAND);
+            if (state & MF_CHECKED) {
+                CheckMenuItem(hSysMenu, 0x0100, MF_BYCOMMAND | MF_UNCHECKED);
+                SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            } else {
+                CheckMenuItem(hSysMenu, 0x0100, MF_BYCOMMAND | MF_CHECKED);
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            }
+            return 0;
+        }
+        break;
+    }
     case WM_NCDESTROY: {
         KillTimer(hwnd, 1);
         if (g_videoRts[hwnd]) {
@@ -5069,6 +5092,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
     case WM_CREATE: {
+        HMENU hSysMenu = GetSystemMenu(hWnd, FALSE);
+        if (hSysMenu) {
+            AppendMenuW(hSysMenu, MF_SEPARATOR, 0, NULL);
+            AppendMenuW(hSysMenu, MF_STRING, 0x0100, GetString(IDS_ALWAYS_ON_TOP).c_str());
+        }
         
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
     CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_pWICFactory));
@@ -5313,6 +5341,21 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         InitVolumeSync(hWnd);
 
         return 0;
+    }
+    case WM_SYSCOMMAND: {
+        if ((wParam & 0xFFF0) == 0x0100) {
+            HMENU hSysMenu = GetSystemMenu(hWnd, FALSE);
+            UINT state = GetMenuState(hSysMenu, 0x0100, MF_BYCOMMAND);
+            if (state & MF_CHECKED) {
+                CheckMenuItem(hSysMenu, 0x0100, MF_BYCOMMAND | MF_UNCHECKED);
+                SetWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            } else {
+                CheckMenuItem(hSysMenu, 0x0100, MF_BYCOMMAND | MF_CHECKED);
+                SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            }
+            return 0;
+        }
+        break;
     }
 
     case WM_MEASUREITEM: {

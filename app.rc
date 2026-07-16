@@ -33,6 +33,7 @@ BEGIN
     IDS_REPORT "Report"
     IDS_REPORTED "Reported."
     IDS_NG_WORDS "fuck,shit,bitch,cunt,nigger,asshole,bastard,whore,slut,faggot"
+    IDS_ALWAYS_ON_TOP       "Always on Top"
 END
 
 LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
@@ -62,6 +63,7 @@ BEGIN
     IDS_REPORT "通報する"
     IDS_REPORTED "通報しました。"
     IDS_NG_WORDS "死ね,殺す,ガイジ,キチガイ,池沼,土人,チョン,チャンコロ,まんこ,ちんこ,ぶっ殺す,死んじまえ,自殺しろ,カス,アホ,バカ"
+    IDS_ALWAYS_ON_TOP       "常に手前に表示"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
@@ -91,6 +93,7 @@ BEGIN
     IDS_REPORT "举报"
     IDS_REPORTED "已举报。"
     IDS_NG_WORDS "傻逼,操,滚,他妈的,肏,贱人,妓女,草泥马,尼玛,脑残"
+    IDS_ALWAYS_ON_TOP       "总在最前"
 END
 
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
@@ -120,6 +123,7 @@ BEGIN
     IDS_REPORT "신고하기"
     IDS_REPORTED "신고했습니다."
     IDS_NG_WORDS "병신,씨발,개새끼,존나,지랄,썅년,창녀,애미,애비,미친년,좆"
+    IDS_ALWAYS_ON_TOP       "항상 위"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL
@@ -149,6 +153,7 @@ BEGIN
     IDS_REPORT "舉報"
     IDS_REPORTED "已舉報。"
     IDS_NG_WORDS "幹,白痴,去死,他媽的,肏,賤人,妓女,草泥馬,尼瑪,腦殘"
+    IDS_ALWAYS_ON_TOP       "總在最前"
 END
 
 LANGUAGE LANG_FRENCH, SUBLANG_FRENCH
@@ -178,6 +183,7 @@ BEGIN
     IDS_REPORT "Signaler"
     IDS_REPORTED "Signalé."
     IDS_NG_WORDS "merde,putain,connard,salope,pd,enculé,pute,chier,bâtard,conne"
+    IDS_ALWAYS_ON_TOP       "Toujours au premier plan"
 END
 
 LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
@@ -207,6 +213,7 @@ BEGIN
     IDS_REPORT "Melden"
     IDS_REPORTED "Gemeldet."
     IDS_NG_WORDS "scheiße,fick,fotze,schlampe,hurensohn,arschloch,wichser,missgeburt,bastard"
+    IDS_ALWAYS_ON_TOP       "Immer im Vordergrund"
 END
 
 LANGUAGE LANG_SPANISH, SUBLANG_SPANISH_MODERN
@@ -236,6 +243,7 @@ BEGIN
     IDS_REPORT "Reportar"
     IDS_REPORTED "Reportado."
     IDS_NG_WORDS "mierda,puta,joder,cabrón,pendejo,gilipollas,coño,maricón,zorra,perra"
+    IDS_ALWAYS_ON_TOP       "Siempre visible"
 END
 
 LANGUAGE LANG_HINDI, SUBLANG_DEFAULT
@@ -265,6 +273,7 @@ BEGIN
     IDS_REPORT "रिपोर्ट करें"
     IDS_REPORTED "रिपोर्ट किया गया।"
     IDS_NG_WORDS "चूतिया,मादरचोद,बहनचोद,भोसड़ीके,रांड,गंडू,छिनाल,हरामजादे"
+    IDS_ALWAYS_ON_TOP       "हमेशा ऊपर"
 END
 
 LANGUAGE LANG_PORTUGUESE, SUBLANG_DEFAULT
@@ -294,6 +303,7 @@ BEGIN
     IDS_REPORT "Denunciar"
     IDS_REPORTED "Denunciado."
     IDS_NG_WORDS "merda,porra,caralho,filho da puta,boceta,viado,puta,cabrão,corno,buceta"
+    IDS_ALWAYS_ON_TOP       "Sempre no topo"
 END
 
 LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
@@ -323,6 +333,7 @@ BEGIN
     IDS_REPORT "Пожаловаться"
     IDS_REPORTED "Жалоба отправлена."
     IDS_NG_WORDS "блять,сука,хуй,пиздец,ебать,пидор,шлюха,гондон,мудак,блядь"
+    IDS_ALWAYS_ON_TOP       "Поверх всех окон"
 END
 
 LANGUAGE LANG_ARABIC, SUBLANG_DEFAULT
@@ -352,6 +363,7 @@ BEGIN
     IDS_REPORT "إبلاغ"
     IDS_REPORTED "تم الإبلاغ."
     IDS_NG_WORDS "شرموطة,قحبة,عرص,خول,كس,زب,نيك,متناك,ابن المتناكة"
+    IDS_ALWAYS_ON_TOP       "دائما في المقدمة"
 END
 
 LANGUAGE LANG_BENGALI, SUBLANG_DEFAULT
@@ -381,6 +393,7 @@ BEGIN
     IDS_REPORT "রিপোর্ট করুন"
     IDS_REPORTED "রিপোর্ট করা হয়েছে।"
     IDS_NG_WORDS "খানকি,মাগি,বানচোদ,শুয়োরের বাচ্চা,বেশ্যা,চুদি,গুঁদ"
+    IDS_ALWAYS_ON_TOP       "সর্বদা শীর্ষে"
 END
 
 LANGUAGE LANG_INDONESIAN, SUBLANG_DEFAULT
@@ -410,6 +423,7 @@ BEGIN
     IDS_REPORT "Laporkan"
     IDS_REPORTED "Dilaporkan."
     IDS_NG_WORDS "anjing,bangsat,ngentot,perek,lonte,kontol,memek,bajingan,keparat"
+    IDS_ALWAYS_ON_TOP       "Selalu di Atas"
 END
 
 LANGUAGE LANG_ITALIAN, SUBLANG_DEFAULT
@@ -439,6 +453,7 @@ BEGIN
     IDS_REPORT "Segnala"
     IDS_REPORTED "Segnalato."
     IDS_NG_WORDS "merda,cazzo,puttana,stronzo,troia,frocio,bastardo,vaffanculo,zoccola"
+    IDS_ALWAYS_ON_TOP       "Sempre in primo piano"
 END
 
 LANGUAGE LANG_TURKISH, SUBLANG_DEFAULT
@@ -468,6 +483,7 @@ BEGIN
     IDS_REPORT "Bildir"
     IDS_REPORTED "Bildirildi."
     IDS_NG_WORDS "amk,siktir,piç,orospu,yavşak,göt,yarrak,amcık,pezevenk"
+    IDS_ALWAYS_ON_TOP       "Her Zaman Üstte"
 END
 
 LANGUAGE LANG_VIETNAMESE, SUBLANG_DEFAULT
@@ -497,4 +513,5 @@ BEGIN
     IDS_REPORT "Báo cáo"
     IDS_REPORTED "Đã báo cáo."
     IDS_NG_WORDS "đụ,lồn,cặc,đĩ,chó đẻ,địt,phò,cứt"
+    IDS_ALWAYS_ON_TOP       "Luôn trên cùng"
 END
