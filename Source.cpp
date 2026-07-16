@@ -23,7 +23,6 @@
 #include "H264Helper.h"
 bool g_useH264 = true;
 H264Encoder* g_pH264Encoder = nullptr;
-H264Decoder* g_pH264Decoder = nullptr;
 #include "json11.hpp"
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")
@@ -166,6 +165,12 @@ HWND g_hMoveRoomDlg = NULL;
 ID2D1Factory* g_pD2DFactory = nullptr;
 IDWriteFactory* g_pDWriteFactory = nullptr;
 
+IDWriteTextFormat* g_pLogTextFormat = nullptr;
+IDWriteTextFormat* g_pInputTextFormat = nullptr;
+IDWriteTextFormat* g_pVideoSWTextFormat = nullptr;
+int g_lastInputFontSize = -1;
+bool g_lastInputFontB = false;
+bool g_lastInputFontI = false;
 #include <wincodec.h>
 #include <mfapi.h>
 #include <mfidl.h>
@@ -186,7 +191,17 @@ IDWriteFactory* g_pDWriteFactory = nullptr;
 
 // --- Video Globals ---
 IWICImagingFactory* g_pWICFactory = NULL;
+bool g_isMuted = false;
 bool g_isWebcamActive = false;
+
+struct UserDecoder {
+    H264Decoder* pDecoder;
+    std::mutex mtx;
+    UserDecoder() : pDecoder(nullptr) {}
+    ~UserDecoder() { if (pDecoder) delete pDecoder; }
+};
+std::map<std::wstring, std::shared_ptr<UserDecoder>> g_h264Decoders;
+std::mutex g_decoderMutex;
 bool g_isAppRunning = true;
 HANDLE g_hWebcamThread = NULL;
 HANDLE g_hRecvThread = NULL;
@@ -580,53 +595,108 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             }
 
             IMFMediaBuffer* pBuffer = NULL;
-            pSample->ConvertToContiguousBuffer(&pBuffer);
-            BYTE* pData = NULL;
-            DWORD cbData = 0;
-            pBuffer->Lock(&pData, NULL, &cbData);
+            if (SUCCEEDED(pSample->ConvertToContiguousBuffer(&pBuffer)) && pBuffer) {
+                BYTE* pData = NULL;
+                DWORD cbData = 0;
+                pBuffer->Lock(&pData, NULL, &cbData);
 
-            IMFMediaType* pCurrentType = NULL;
-            pReader->GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, &pCurrentType);
-            UINT32 width = 0, height = 0;
-            MFGetAttributeSize(pCurrentType, MF_MT_FRAME_SIZE, &width, &height);
-            pCurrentType->Release();
+                IMFMediaType* pCurrentType = NULL;
+                pReader->GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, &pCurrentType);
+                UINT32 width = 0, height = 0;
+                MFGetAttributeSize(pCurrentType, MF_MT_FRAME_SIZE, &width, &height);
+                pCurrentType->Release();
 
-            bool h264Success = false;
-            if (g_useH264) {
-                if (!g_pH264Encoder) {
-                    g_pH264Encoder = new H264Encoder();
-                    if (!g_pH264Encoder->Initialize(width, height)) {
-                        delete g_pH264Encoder;
-                        g_pH264Encoder = nullptr;
-                        g_useH264 = false;
+                bool h264Success = false;
+                if (g_useH264) {
+                    if (!g_pH264Encoder) {
+                        g_pH264Encoder = new H264Encoder();
+                        if (!g_pH264Encoder->Initialize(width, height)) {
+                            delete g_pH264Encoder;
+                            g_pH264Encoder = nullptr;
+                            g_useH264 = false;
+                        }
+                    }
+                    if (g_pH264Encoder) {
+                        std::vector<uint8_t> h264;
+                        if (g_pH264Encoder->EncodeFrame(pData, cbData, h264)) {
+                            h264Success = true;
+                            std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
+                            const int MAX_PAYLOAD = 1000;
+                            int totalFragments = (int)((h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
+                            g_videoSeq++;
+                            LARGE_INTEGER freq;
+                            QueryPerformanceFrequency(&freq);
+                            long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay
+                            
+                            for (int i = 0; i < totalFragments; i++) {
+                                int offset = i * MAX_PAYLOAD;
+                                int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
+                                
+                                char udpPkt[2048];
+                                MediaHeader* mhdr = (MediaHeader*)udpPkt;
+                                mhdr->sessionId = g_sessionId;
+                                mhdr->seqNum = g_videoSeq;
+                                mhdr->payloadType = 5; 
+                                mhdr->flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
+                                mhdr->timestamp = i; 
+                                wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
+                                
+                                memcpy(udpPkt + sizeof(MediaHeader), h264.data() + offset, len);
+                                
+                                sockaddr_in serverUdp = {0};
+                                serverUdp.sin_family = AF_INET;
+                                serverUdp.sin_port = htons(4001);
+                                if (!g_isServerUdpAddrResolved) {
+                                    g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                                }
+                                serverUdp.sin_addr = g_serverUdpAddr;
+                                sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                                
+                                LARGE_INTEGER start, current;
+                                QueryPerformanceCounter(&start);
+                                do {
+                                    QueryPerformanceCounter(&current);
+                                } while (current.QuadPart - start.QuadPart < delay_counts);
+                            }
+                            
+                            std::vector<uint8_t> localPixels(pData, pData + cbData);
+                            {
+                                std::lock_guard<std::mutex> lock(g_videoMutex);
+                                g_videoPixelsMap[g_userId] = std::move(localPixels);
+                                g_videoSizeMap[g_userId] = { width, height };
+                                g_videoIsSWMap[g_userId] = false;
+                            }
+                            HWND hView = NULL;
+                            auto it = g_videoWindows.find(g_userId);
+                            if (it != g_videoWindows.end()) hView = it->second;
+                            if (hView && IsWindow(hView)) InvalidateRect(hView, NULL, FALSE);
+                        }
                     }
                 }
-                if (g_pH264Encoder) {
-                    std::vector<uint8_t> h264;
-                    if (g_pH264Encoder->EncodeFrame(pData, cbData, h264)) {
-                        h264Success = true;
-                        std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
+                if (!h264Success) {
+                    std::vector<uint8_t> jpegData;
+                    if (EncodeJPEG(width, height, pData, cbData, jpegData)) {
                         const int MAX_PAYLOAD = 1000;
-                        int totalFragments = (int)((h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
+                        int totalFragments = (int)((jpegData.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
                         g_videoSeq++;
                         LARGE_INTEGER freq;
                         QueryPerformanceFrequency(&freq);
-                        long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay
-                        
+                        long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay
+
                         for (int i = 0; i < totalFragments; i++) {
                             int offset = i * MAX_PAYLOAD;
-                            int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
+                            int len = min(MAX_PAYLOAD, (int)jpegData.size() - offset);
                             
                             char udpPkt[2048];
                             MediaHeader* mhdr = (MediaHeader*)udpPkt;
                             mhdr->sessionId = g_sessionId;
                             mhdr->seqNum = g_videoSeq;
-                            mhdr->payloadType = 5; 
+                            mhdr->payloadType = 2; 
                             mhdr->flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
                             mhdr->timestamp = i; 
                             wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
                             
-                            memcpy(udpPkt + sizeof(MediaHeader), h264.data() + offset, len);
+                            memcpy(udpPkt + sizeof(MediaHeader), jpegData.data() + offset, len);
                             
                             sockaddr_in serverUdp = {0};
                             serverUdp.sin_family = AF_INET;
@@ -635,71 +705,32 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                                 g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
                             }
                             serverUdp.sin_addr = g_serverUdpAddr;
-                            sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
-                            
+                            int sent = sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                            LogToFile("UDP Sending Video Fragment, len=" + std::to_string(len) + ", sent=" + std::to_string(sent));
+
                             LARGE_INTEGER start, current;
                             QueryPerformanceCounter(&start);
                             do {
                                 QueryPerformanceCounter(&current);
                             } while (current.QuadPart - start.QuadPart < delay_counts);
                         }
-                        std::vector<uint8_t> dummyJpeg;
-                        if (EncodeJPEG(width, height, pData, cbData, dummyJpeg)) {
-                            DecodeJPEG(dummyJpeg, g_userId);
+                        
+                        std::vector<uint8_t> localPixels(pData, pData + cbData);
+                        {
                             std::lock_guard<std::mutex> lock(g_videoMutex);
-                            g_videoIsSWMap[g_userId] = false;
+                            g_videoPixelsMap[g_userId] = std::move(localPixels);
+                            g_videoSizeMap[g_userId] = { width, height };
+                            g_videoIsSWMap[g_userId] = true;
                         }
+                        HWND hView = NULL;
+                        auto it = g_videoWindows.find(g_userId);
+                        if (it != g_videoWindows.end()) hView = it->second;
+                        if (hView && IsWindow(hView)) InvalidateRect(hView, NULL, FALSE);
                     }
                 }
+                pBuffer->Unlock();
+                pBuffer->Release();
             }
-            if (!h264Success) {
-                std::vector<uint8_t> jpegData;
-                if (EncodeJPEG(width, height, pData, cbData, jpegData)) {
-                    const int MAX_PAYLOAD = 1000;
-                    int totalFragments = (int)((jpegData.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
-                    g_videoSeq++;
-                    LARGE_INTEGER freq;
-                    QueryPerformanceFrequency(&freq);
-                    long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay
-
-                    for (int i = 0; i < totalFragments; i++) {
-                        int offset = i * MAX_PAYLOAD;
-                        int len = min(MAX_PAYLOAD, (int)jpegData.size() - offset);
-                        
-                        char udpPkt[2048];
-                        MediaHeader* mhdr = (MediaHeader*)udpPkt;
-                        mhdr->sessionId = g_sessionId;
-                        mhdr->seqNum = g_videoSeq;
-                        mhdr->payloadType = 2; 
-                        mhdr->flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
-                        mhdr->timestamp = i; 
-                        wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
-                        
-                        memcpy(udpPkt + sizeof(MediaHeader), jpegData.data() + offset, len);
-                        
-                        sockaddr_in serverUdp = {0};
-                        serverUdp.sin_family = AF_INET;
-                        serverUdp.sin_port = htons(4001);
-                        if (!g_isServerUdpAddrResolved) {
-                            g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
-                        }
-                        serverUdp.sin_addr = g_serverUdpAddr;
-                        int sent = sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
-                        LogToFile("UDP Sending Video Fragment, len=" + std::to_string(len) + ", sent=" + std::to_string(sent));
-
-                        LARGE_INTEGER start, current;
-                        QueryPerformanceCounter(&start);
-                        do {
-                            QueryPerformanceCounter(&current);
-                        } while (current.QuadPart - start.QuadPart < delay_counts);
-                    }
-                    DecodeJPEG(jpegData, g_userId);
-                    std::lock_guard<std::mutex> lock(g_videoMutex);
-                    g_videoIsSWMap[g_userId] = true;
-                }
-            }
-            pBuffer->Unlock();
-            pBuffer->Release();
             pSample->Release();
         } else {
             Sleep(10);
@@ -1077,12 +1108,13 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             g_logTotalHeight = 0;
             for (auto& entry : g_logEntries) {
                 if (!entry.pLayout) {
-                    IDWriteTextFormat* pFormat = nullptr;
-                    HRESULT hr = g_pDWriteFactory->CreateTextFormat(
-                        L"MS UI Gothic", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                        9.0f * 1.5f, L"ja-JP", &pFormat); // MS UI Gothic
+                    if (!g_pLogTextFormat) {
+                        g_pDWriteFactory->CreateTextFormat(
+                            L"MS UI Gothic", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                            9.0f * 1.5f, L"ja-JP", &g_pLogTextFormat);
+                    }
                         
-                    if (SUCCEEDED(hr) && pFormat) {
+                    if (g_pLogTextFormat) {
                         std::wstring fullText;
                         int msgStart = 0;
                         std::wstring displayUser = entry.data.user;
@@ -1103,8 +1135,8 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         
                         if (fullText.empty()) fullText = L" ";
                         
-                        hr = g_pDWriteFactory->CreateTextLayout(
-                            fullText.c_str(), (UINT32)fullText.length(), pFormat, width, 10000.0f, &entry.pLayout);
+                        HRESULT hr = g_pDWriteFactory->CreateTextLayout(
+                            fullText.c_str(), (UINT32)fullText.length(), g_pLogTextFormat, width, 10000.0f, &entry.pLayout);
                             
                         if (SUCCEEDED(hr) && entry.pLayout) {
                             DWRITE_TEXT_RANGE range = {(UINT32)msgStart, (UINT32)entry.data.msg.length()};
@@ -1148,7 +1180,6 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                             entry.pLayout->GetMetrics(&metrics);
                             entry.height = metrics.height;
                         }
-                        pFormat->Release();
                     }
                 }
                 g_logTotalHeight += entry.height;
@@ -1504,20 +1535,25 @@ IDWriteTextLayout* CreateInputLayout(HWND hWnd) {
         tsize = _wtoi(szText);
     }
     
-    IDWriteTextFormat* pFormat = nullptr;
-    DWRITE_FONT_WEIGHT weight = b ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL;
-    DWRITE_FONT_STYLE style = i ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL;
-    
-    HRESULT hrFormat = g_pDWriteFactory->CreateTextFormat(
-        L"MS UI Gothic", NULL, weight, style, DWRITE_FONT_STRETCH_NORMAL,
-        (float)tsize * 1.5f, L"ja-JP", &pFormat);
+    if (!g_pInputTextFormat || g_lastInputFontSize != tsize || g_lastInputFontB != b || g_lastInputFontI != i) {
+        if (g_pInputTextFormat) { g_pInputTextFormat->Release(); g_pInputTextFormat = nullptr; }
         
+        DWRITE_FONT_WEIGHT weight = b ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL;
+        DWRITE_FONT_STYLE style = i ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL;
+        g_pDWriteFactory->CreateTextFormat(
+            L"MS UI Gothic", NULL, weight, style, DWRITE_FONT_STRETCH_NORMAL,
+            (float)tsize * 1.5f, L"ja-JP", &g_pInputTextFormat);
+            
+        g_lastInputFontSize = tsize;
+        g_lastInputFontB = b;
+        g_lastInputFontI = i;
+    }
+    
     IDWriteTextLayout* pLayout = nullptr;
-    if (SUCCEEDED(hrFormat) && pFormat) {
+    if (g_pInputTextFormat) {
         std::wstring safeText = g_inputText.empty() ? L" " : g_inputText;
         g_pDWriteFactory->CreateTextLayout(
-            safeText.c_str(), (UINT32)safeText.length(), pFormat, width, height, &pLayout);
-        pFormat->Release();
+            safeText.c_str(), (UINT32)safeText.length(), g_pInputTextFormat, width, height, &pLayout);
     }
     return pLayout;
 }
@@ -3567,19 +3603,34 @@ DWORD WINAPI DecodeTaskProc(LPVOID lpParam) {
     HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     DecodeTaskData* data = (DecodeTaskData*)lpParam;
     if (data->isH264) {
-        if (!g_pH264Decoder) {
-            g_pH264Decoder = new H264Decoder();
-            g_pH264Decoder->Initialize(640, 480);
+        std::shared_ptr<UserDecoder> pUserDec;
+        {
+            std::lock_guard<std::mutex> lock(g_decoderMutex);
+            if (g_h264Decoders.find(data->username) == g_h264Decoders.end()) {
+                pUserDec = std::make_shared<UserDecoder>();
+                pUserDec->pDecoder = new H264Decoder();
+                pUserDec->pDecoder->Initialize(640, 480);
+                g_h264Decoders[data->username] = pUserDec;
+            } else {
+                pUserDec = g_h264Decoders[data->username];
+            }
         }
+        
         std::vector<uint8_t> rgbOut;
-        if (g_pH264Decoder->DecodeFrame(data->mediaData, rgbOut)) {
+        bool decodeSuccess = false;
+        {
+            std::lock_guard<std::mutex> decLock(pUserDec->mtx);
+            decodeSuccess = pUserDec->pDecoder->DecodeFrame(data->mediaData, rgbOut);
+        }
+        
+        if (decodeSuccess) {
             std::lock_guard<std::mutex> lock(g_videoMutex);
             g_videoPixelsMap[data->username] = rgbOut;
             g_videoSizeMap[data->username] = {640, 480};
-        HWND hView = NULL;
-        auto it = g_videoWindows.find(data->username);
-        if (it != g_videoWindows.end()) hView = it->second;
-        if (hView && IsWindow(hView)) InvalidateRect(hView, NULL, FALSE);
+            HWND hView = NULL;
+            auto it = g_videoWindows.find(data->username);
+            if (it != g_videoWindows.end()) hView = it->second;
+            if (hView && IsWindow(hView)) InvalidateRect(hView, NULL, FALSE);
         }
     } else {
         DecodeJPEG(data->mediaData, data->username);
@@ -3721,6 +3772,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         SendMessage(g_videoWindows[uid], WM_CLOSE, 0, 0);
                                     }
                                     g_videoWindows.erase(uid);
+                                    
+                                    std::lock_guard<std::mutex> decLock(g_decoderMutex);
+                                    g_h264Decoders.erase(uid);
                                 }
                                 
                                 for (auto& pair : nameToUid) {
@@ -4200,6 +4254,8 @@ void SendChatMessage(const std::wstring& msg) {
 void SnapWindow(HWND hMovingWnd, LPRECT prc);
 
 std::map<HWND, ID2D1HwndRenderTarget*> g_videoRts;
+std::map<HWND, ID2D1Bitmap*> g_videoBitmaps;
+std::map<HWND, std::pair<int, int>> g_videoBitmapSizes;
 
 LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     LRESULT classicResult = 0;
@@ -4230,6 +4286,11 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             g_videoRts[hwnd]->Release();
             g_videoRts.erase(hwnd);
         }
+        if (g_videoBitmaps[hwnd]) {
+            g_videoBitmaps[hwnd]->Release();
+            g_videoBitmaps.erase(hwnd);
+        }
+        g_videoBitmapSizes.erase(hwnd);
         if (pUser) {
             if (*pUser == g_userId) {
                 g_isWebcamActive = false;
@@ -4320,9 +4381,27 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                 auto sz = g_videoSizeMap[*pUser];
                 isSW = g_videoIsSWMap[*pUser];
                 if (!pixels.empty()) {
-                    ID2D1Bitmap* pBitmap = NULL;
-                    HRESULT hrBmp = pRT->CreateBitmap(D2D1::SizeU(sz.first, sz.second), pixels.data(), sz.first * 4, 
-                        D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)), &pBitmap);
+                    ID2D1Bitmap* pBitmap = g_videoBitmaps[hwnd];
+                    if (pBitmap) {
+                        auto oldSz = g_videoBitmapSizes[hwnd];
+                        if (oldSz != sz) {
+                            pBitmap->Release();
+                            pBitmap = nullptr;
+                            g_videoBitmaps[hwnd] = nullptr;
+                        }
+                    }
+                    HRESULT hrBmp = S_OK;
+                    if (!pBitmap) {
+                        hrBmp = pRT->CreateBitmap(D2D1::SizeU(sz.first, sz.second), pixels.data(), sz.first * 4, 
+                            D2D1::BitmapProperties(D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE)), &pBitmap);
+                        if (SUCCEEDED(hrBmp) && pBitmap) {
+                            g_videoBitmaps[hwnd] = pBitmap;
+                            g_videoBitmapSizes[hwnd] = sz;
+                        }
+                    } else {
+                        hrBmp = pBitmap->CopyFromMemory(NULL, pixels.data(), sz.first * 4);
+                    }
+                    
                     if (SUCCEEDED(hrBmp) && pBitmap) {
                         float vW = (float)sz.first;
                         float vH = (float)sz.second;
@@ -4334,16 +4413,18 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                         float offsetX = (wW - drawW) / 2.0f;
                         float offsetY = (wH - drawH) / 2.0f;
                         pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
-                        pBitmap->Release();
                         
                         if (isSW) {
-                            IDWriteTextFormat* pFormatSW = nullptr;
-                            HRESULT hrFmt = g_pDWriteFactory->CreateTextFormat(
-                                L"Arial", NULL, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, 
-                                DWRITE_FONT_STRETCH_NORMAL, 10.0f, L"en-US", &pFormatSW);
-                            if (SUCCEEDED(hrFmt) && pFormatSW) {
-                                pFormatSW->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-                                pFormatSW->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_FAR);
+                            if (!g_pVideoSWTextFormat) {
+                                g_pDWriteFactory->CreateTextFormat(
+                                    L"Arial", NULL, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, 
+                                    DWRITE_FONT_STRETCH_NORMAL, 10.0f, L"en-US", &g_pVideoSWTextFormat);
+                                if (g_pVideoSWTextFormat) {
+                                    g_pVideoSWTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+                                    g_pVideoSWTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_FAR);
+                                }
+                            }
+                            if (g_pVideoSWTextFormat) {
                                 ID2D1SolidColorBrush* pBrush = nullptr;
                                 ID2D1SolidColorBrush* pShadowBrush = nullptr;
                                 pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.5f, 0.0f, 1.0f), &pBrush);
@@ -4351,13 +4432,12 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                                 if (pBrush && pShadowBrush) {
                                     D2D1_TEXT_ANTIALIAS_MODE oldMode = pRT->GetTextAntialiasMode();
                                     pRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_ALIASED);
-                                    pRT->DrawTextW(L"SW", 2, pFormatSW, D2D1::RectF(0, 0, (float)rc.right - 1.0f, (float)rc.bottom - 1.0f), pShadowBrush);
-                                    pRT->DrawTextW(L"SW", 2, pFormatSW, D2D1::RectF(0, 0, (float)rc.right - 2.0f, (float)rc.bottom - 2.0f), pBrush);
+                                    pRT->DrawTextW(L"SW", 2, g_pVideoSWTextFormat, D2D1::RectF(0, 0, (float)rc.right - 1.0f, (float)rc.bottom - 1.0f), pShadowBrush);
+                                    pRT->DrawTextW(L"SW", 2, g_pVideoSWTextFormat, D2D1::RectF(0, 0, (float)rc.right - 2.0f, (float)rc.bottom - 2.0f), pBrush);
                                     pRT->SetTextAntialiasMode(oldMode);
                                 }
                                 if (pBrush) pBrush->Release();
                                 if (pShadowBrush) pShadowBrush->Release();
-                                pFormatSW->Release();
                             }
                         }
                     } else {
@@ -4373,7 +4453,16 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                     }
                 }
             }
-            pRT->EndDraw();
+            HRESULT hrDraw = pRT->EndDraw();
+            if (hrDraw == D2DERR_RECREATE_TARGET) {
+                if (g_videoBitmaps[hwnd]) {
+                    g_videoBitmaps[hwnd]->Release();
+                    g_videoBitmaps.erase(hwnd);
+                }
+                g_videoBitmapSizes.erase(hwnd);
+                pRT->Release();
+                g_videoRts.erase(hwnd);
+            }
         } else {
             LogToFile("VideoViewProc FAILED: pRT or pUser is NULL");
         }
@@ -5435,6 +5524,8 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 Gdiplus::Point(cx - Scale(5), cy + Scale(3))
             };
             blackPen.SetLineJoin(Gdiplus::LineJoinRound);
+            Gdiplus::SolidBrush whiteBrush(Gdiplus::Color(255, 255, 255, 255));
+            graphics.FillPolygon(&whiteBrush, pts, 6);
             graphics.DrawPolygon(&blackPen, pts, 6);
 
             if (showMute) {
@@ -5879,9 +5970,6 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                     g_pSimpleAudioVolume->SetMute(FALSE, NULL);
                 }
                 g_pSimpleAudioVolume->SetMasterVolume(volume, NULL);
-                if (g_hSpeakerIcon) {
-                    InvalidateRect(g_hSpeakerIcon, NULL, FALSE);
-                }
             }
         }
         return 0;
@@ -5891,9 +5979,15 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         if (g_hVolumeSlider) {
             BOOL isMuted = (BOOL)lParam;
             int displayPos = isMuted ? 0 : (int)wParam;
-            SendMessage(g_hVolumeSlider, TBM_SETPOS, TRUE, displayPos);
-            if (g_hSpeakerIcon) {
+            int currentPos = (int)SendMessage(g_hVolumeSlider, TBM_GETPOS, 0, 0);
+            if (currentPos != displayPos) {
+                SendMessage(g_hVolumeSlider, TBM_SETPOS, TRUE, displayPos);
+            }
+            static int s_lastMuteState = -1;
+            int newMuteState = (isMuted || displayPos == 0) ? 1 : 0;
+            if (g_hSpeakerIcon && s_lastMuteState != newMuteState) {
                 InvalidateRect(g_hSpeakerIcon, NULL, FALSE);
+                s_lastMuteState = newMuteState;
             }
         }
         return 0;
@@ -5936,7 +6030,6 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 BOOL isMuted = FALSE;
                 g_pSimpleAudioVolume->GetMute(&isMuted);
                 g_pSimpleAudioVolume->SetMute(!isMuted, NULL);
-                InvalidateRect(g_hSpeakerIcon, NULL, FALSE);
             }
         }
         else if ((id >= 1003 && id <= 1005 && code == BN_CLICKED) || (id == 1006 && (code == CBN_SELCHANGE || code == CBN_CLOSEUP))) {
@@ -6129,6 +6222,10 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         g_isPrivateRoom = false;
         SendJoinRequest(g_currentRoom, g_isPrivateRoom);
         ClearLogAndUsers();
+        {
+            std::lock_guard<std::mutex> decLock(g_decoderMutex);
+            g_h264Decoders.clear();
+        }
         SetWindowTitle(hWnd);
         MsgData sysMsg;
         sysMsg.user = L"";
