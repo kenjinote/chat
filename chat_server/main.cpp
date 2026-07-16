@@ -176,19 +176,6 @@ public:
     }
 
     ~ChatSession() {
-        if (m_room) {
-            m_room->leave(shared_from_this());
-            if (m_room->getUsers().empty() && m_roomName != "Public") {
-                ServerManager::get().removeRoom(m_roomName);
-                if (ServerManager::get().getRedis()) {
-                    try {
-                        ServerManager::get().getRedis()->hdel("room_owner", m_roomName);
-                    } catch (const std::exception& e) {
-                        std::cerr << "Redis error: " << e.what() << std::endl;
-                    }
-                }
-            }
-        }
         ServerManager::get().unregisterSession(m_sessionId);
     }
 
@@ -232,10 +219,16 @@ public:
         }
     }
 
-    std::string getUserId() const { return m_userId; }
+    std::string getUserId() const { 
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        return m_userId; 
+    }
     std::string getUserName() const { return m_userName; }
     int getNclr() const { return m_nclr; }
-    std::shared_ptr<Room> getRoom() const { return m_room; }
+    std::shared_ptr<Room> getRoom() const { 
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        return m_room; 
+    }
 
     uint32_t m_sessionId;
     udp::endpoint m_udpEndpoint;
@@ -276,7 +269,10 @@ private:
                                 }
                             }
                         }
-                        m_room.reset();
+                        {
+                            std::lock_guard<std::mutex> lock(m_stateMutex);
+                            m_room.reset();
+                        }
                     }
                     ServerManager::get().unregisterSession(m_sessionId);
                 }
@@ -311,7 +307,10 @@ private:
                                 }
                             }
                         }
-                        m_room.reset();
+                        {
+                            std::lock_guard<std::mutex> lock(m_stateMutex);
+                            m_room.reset();
+                        }
                     }
                     ServerManager::get().unregisterSession(m_sessionId);
                 }
@@ -326,10 +325,14 @@ private:
         std::string type = json["type"].string_value();
 
         if (type == "join") {
-            std::string oldUserId = m_userId;
+            std::string oldUserId;
             std::string secretId = json["secretId"].string_value();
             if (secretId.empty()) secretId = "unknown";
-            m_userId = compute_sha256_uuid(secretId);
+            {
+                std::lock_guard<std::mutex> lock(m_stateMutex);
+                oldUserId = m_userId;
+                m_userId = compute_sha256_uuid(secretId);
+            }
 
             if (ServerManager::get().getRedis()) {
                 try {
@@ -435,7 +438,10 @@ private:
                             }
                         }
                     }
-                    m_room = targetRoom;
+                    {
+                        std::lock_guard<std::mutex> lock(m_stateMutex);
+                        m_room = targetRoom;
+                    }
                     m_roomName = roomName;
 
                     ServerManager::get().notifyRoomListChanged();
@@ -531,7 +537,10 @@ private:
                         }
                     }
                 }
-                m_room.reset();
+                {
+                    std::lock_guard<std::mutex> lock(m_stateMutex);
+                    m_room.reset();
+                }
                 m_roomName = "";
                 ServerManager::get().notifyRoomListChanged();
             }
@@ -604,6 +613,7 @@ private:
     std::string m_userId;
     std::string m_userName;
     int m_nclr;
+    mutable std::mutex m_stateMutex;
 };
 
 void ServerManager::notifyRoomListChanged() {
@@ -768,6 +778,9 @@ private:
 
                         uint8_t payloadType = header->payloadType;
                         if (payloadType == 3 && bytes_recvd > 92) {
+                            if (session->m_watching.size() >= 100) {
+                                session->m_watching.clear();
+                            }
                             std::string targetA(reinterpret_cast<const char*>(m_recvBuffer.data()) + 92, bytes_recvd - 92);
                             session->m_watching[targetA] = std::chrono::steady_clock::now();
                         }
@@ -813,23 +826,20 @@ int main(int argc, char* argv[]) {
         std::cout << "TCP Signaling: Port " << tcp_port << std::endl;
         std::cout << "UDP Media: Port " << udp_port << std::endl;
         
-        asio::io_context io_context;
-        ChatServer tcp_server(io_context, tcp_port);
-        UdpMediaServer udp_server(io_context, udp_port);
+        asio::io_context tcp_io;
+        asio::io_context udp_io;
+        ChatServer tcp_server(tcp_io, tcp_port);
+        UdpMediaServer udp_server(udp_io, udp_port);
 
-        // Run on a single thread to prevent ASIO data races without using strands
-        std::vector<std::thread> threads;
-        unsigned int thread_count = 1;
-        
-        for (unsigned int i = 0; i < thread_count; ++i) {
-            threads.emplace_back([&io_context]() {
-                io_context.run();
-            });
-        }
+        std::thread tcp_thread([&tcp_io]() {
+            tcp_io.run();
+        });
+        std::thread udp_thread([&udp_io]() {
+            udp_io.run();
+        });
 
-        for (auto& t : threads) {
-            t.join();
-        }
+        tcp_thread.join();
+        udp_thread.join();
 
     } catch (std::exception& e) {
         std::cerr << "Exception: " << e.what() << "\n";
