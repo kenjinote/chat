@@ -148,6 +148,7 @@ public:
     void broadcastGlobal(const std::string& msg);
 
     void disconnectIp(const std::string& ip);
+    void disconnectUserId(const std::string& userId);
 
     std::shared_ptr<sw::redis::Redis> getRedis() { return m_redis; }
     void initRedis(const std::string& uri, const std::string& myEndpoint) {
@@ -200,17 +201,9 @@ public:
         }
     }
 
+    std::string getUserId() const { return m_userId; }
+
     void start() {
-        if (ServerManager::get().getRedis()) {
-            try {
-                auto banned = ServerManager::get().getRedis()->get("banned:" + getIp());
-                if (banned) {
-                    disconnect();
-                    return;
-                }
-            } catch (...) {}
-        }
-        
         ServerManager::get().registerSession(m_sessionId, shared_from_this());
         
         // Welcome message with Session ID
@@ -331,6 +324,17 @@ private:
             std::string secretId = json["secretId"].string_value();
             if (secretId.empty()) secretId = "unknown";
             m_userId = compute_sha256_uuid(secretId);
+
+            if (ServerManager::get().getRedis()) {
+                try {
+                    auto banned = ServerManager::get().getRedis()->get("banned_user:" + m_userId);
+                    if (banned) {
+                        disconnect();
+                        return;
+                    }
+                } catch (...) {}
+            }
+
             m_userName = json["userName"].string_value();
             if (m_userName.empty()) m_userName = m_userId; // fallback
             m_nclr = json["nclr"].int_value();
@@ -519,18 +523,19 @@ private:
             if (!target.empty() && ServerManager::get().getRedis()) {
                 auto redis = ServerManager::get().getRedis();
                 try {
-                    std::string reporterIp = getIp();
                     std::string reportKey = "report:" + target;
-                    redis->sadd(reportKey, reporterIp);
+                    
+                    auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                    redis->zadd(reportKey, m_userId, (double)now);
+                    
+                    // Remove reports older than 24 hours
+                    redis->command("ZREMRANGEBYSCORE", reportKey, "-inf", std::to_string(now - 86400));
                     redis->expire(reportKey, 86400);
                     
-                    long long count = redis->scard(reportKey);
-                    if (count >= 3) {
-                        auto targetIpOpt = redis->get("ip_of:" + target);
-                        if (targetIpOpt) {
-                            redis->setex("banned:" + *targetIpOpt, 86400, "1");
-                            ServerManager::get().disconnectIp(*targetIpOpt);
-                        }
+                    long long count = redis->zcard(reportKey);
+                    if (count >= 7) {
+                        redis->setex("banned_user:" + target, 86400, "1");
+                        ServerManager::get().disconnectUserId(target);
                     }
                 } catch (const std::exception& e) {
                     std::cerr << "Redis error during report: " << e.what() << std::endl;
@@ -639,6 +644,15 @@ void ServerManager::disconnectIp(const std::string& ip) {
     std::lock_guard<std::mutex> lock(m_mutex);
     for (auto it = m_sessions.begin(); it != m_sessions.end(); ++it) {
         if (it->second->getIp() == ip) {
+            it->second->disconnect();
+        }
+    }
+}
+
+void ServerManager::disconnectUserId(const std::string& userId) {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (auto it = m_sessions.begin(); it != m_sessions.end(); ++it) {
+        if (it->second->getUserId() == userId) {
             it->second->disconnect();
         }
     }
