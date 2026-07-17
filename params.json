@@ -1,0 +1,57 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "containerGroups_chat_redis_server_name": {
+      "value": "chat-redis-server"
+    },
+    "containerGroups_chat_server_a_name": {
+      "value": "chat-server-a"
+    },
+    "containerGroups_chat_server_b_name": {
+      "value": "chat-server-b"
+    },
+    "loadBalancers_chat_lb_name": {
+      "value": "chat-lb"
+    },
+    "networkInterfaces_chat_vm_aVMNic_name": {
+      "value": "chat-vm-aVMNic"
+    },
+    "networkInterfaces_chat_vm_bVMNic_name": {
+      "value": "chat-vm-bVMNic"
+    },
+    "networkSecurityGroups_chat_vm_aNSG_name": {
+      "value": "chat-vm-aNSG"
+    },
+    "networkSecurityGroups_chat_vm_bNSG_name": {
+      "value": "chat-vm-bNSG"
+    },
+    "publicIPAddresses_chat_lb_ip_name": {
+      "value": "chat-lb-ip"
+    },
+    "publicIPAddresses_chat_vm_aPublicIP_name": {
+      "value": "chat-vm-aPublicIP"
+    },
+    "publicIPAddresses_chat_vm_bPublicIP_name": {
+      "value": "chat-vm-bPublicIP"
+    },
+    "registries_your-registry_name": {
+      "value": "your-registry"
+    },
+    "registries_chatsfuacr26ea_name": {
+      "value": "chatsfuacr26ea"
+    },
+    "registries_chatsfuacreb33_name": {
+      "value": "chatsfuacreb33"
+    },
+    "virtualMachines_chat_vm_a_name": {
+      "value": "chat-vm-a"
+    },
+    "virtualMachines_chat_vm_b_name": {
+      "value": "chat-vm-b"
+    },
+    "virtualNetworks_chat_vm_aVNET_name": {
+      "value": "chat-vm-aVNET"
+    }
+  }
+}

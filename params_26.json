@@ -1,0 +1,339 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "containerGroups_chat_redis_server_name": {
+      "value": "chat-redis-server"
+    },
+    "loadBalancers_chat_lb_name": {
+      "value": "chat-lb"
+    },
+    "networkInterfaces_chat_vm_aVMNic_name": {
+      "value": "chat-vm-aVMNic"
+    },
+    "networkSecurityGroups_chat_vm_aNSG_name": {
+      "value": "chat-vm-aNSG"
+    },
+    "publicIPAddresses_chat_lb_ip_name": {
+      "value": "chat-lb-ip"
+    },
+    "publicIPAddresses_chat_vm_aPublicIP_name": {
+      "value": "chat-vm-aPublicIP"
+    },
+    "registries_your-registry_name": {
+      "value": "your-registry"
+    },
+    "registries_chatsfuacr26ea_name": {
+      "value": "chatsfuacr26ea"
+    },
+    "registries_chatsfuacreb33_name": {
+      "value": "chatsfuacreb33"
+    },
+    "virtualMachines_chat_vm_a_name": {
+      "value": "chat-vm-a"
+    },
+    "virtualNetworks_chat_vm_aVNET_name": {
+      "value": "chat-vm-aVNET"
+    },
+    "virtualMachines_chat_vm_b_name": {
+      "value": "chat-vm-b"
+    },
+    "networkInterfaces_chat_vm_bVMNic_name": {
+      "value": "chat-vm-bVMNic"
+    },
+    "publicIPAddresses_chat_vm_bPublicIP_name": {
+      "value": "chat-vm-bPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_bNSG_name": {
+      "value": "chat-vm-bNSG"
+    },
+    "virtualMachines_chat_vm_c_name": {
+      "value": "chat-vm-c"
+    },
+    "networkInterfaces_chat_vm_cVMNic_name": {
+      "value": "chat-vm-cVMNic"
+    },
+    "publicIPAddresses_chat_vm_cPublicIP_name": {
+      "value": "chat-vm-cPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_cNSG_name": {
+      "value": "chat-vm-cNSG"
+    },
+    "virtualMachines_chat_vm_d_name": {
+      "value": "chat-vm-d"
+    },
+    "networkInterfaces_chat_vm_dVMNic_name": {
+      "value": "chat-vm-dVMNic"
+    },
+    "publicIPAddresses_chat_vm_dPublicIP_name": {
+      "value": "chat-vm-dPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_dNSG_name": {
+      "value": "chat-vm-dNSG"
+    },
+    "virtualMachines_chat_vm_e_name": {
+      "value": "chat-vm-e"
+    },
+    "networkInterfaces_chat_vm_eVMNic_name": {
+      "value": "chat-vm-eVMNic"
+    },
+    "publicIPAddresses_chat_vm_ePublicIP_name": {
+      "value": "chat-vm-ePublicIP"
+    },
+    "networkSecurityGroups_chat_vm_eNSG_name": {
+      "value": "chat-vm-eNSG"
+    },
+    "virtualMachines_chat_vm_f_name": {
+      "value": "chat-vm-f"
+    },
+    "networkInterfaces_chat_vm_fVMNic_name": {
+      "value": "chat-vm-fVMNic"
+    },
+    "publicIPAddresses_chat_vm_fPublicIP_name": {
+      "value": "chat-vm-fPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_fNSG_name": {
+      "value": "chat-vm-fNSG"
+    },
+    "virtualMachines_chat_vm_g_name": {
+      "value": "chat-vm-g"
+    },
+    "networkInterfaces_chat_vm_gVMNic_name": {
+      "value": "chat-vm-gVMNic"
+    },
+    "publicIPAddresses_chat_vm_gPublicIP_name": {
+      "value": "chat-vm-gPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_gNSG_name": {
+      "value": "chat-vm-gNSG"
+    },
+    "virtualMachines_chat_vm_h_name": {
+      "value": "chat-vm-h"
+    },
+    "networkInterfaces_chat_vm_hVMNic_name": {
+      "value": "chat-vm-hVMNic"
+    },
+    "publicIPAddresses_chat_vm_hPublicIP_name": {
+      "value": "chat-vm-hPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_hNSG_name": {
+      "value": "chat-vm-hNSG"
+    },
+    "virtualMachines_chat_vm_i_name": {
+      "value": "chat-vm-i"
+    },
+    "networkInterfaces_chat_vm_iVMNic_name": {
+      "value": "chat-vm-iVMNic"
+    },
+    "publicIPAddresses_chat_vm_iPublicIP_name": {
+      "value": "chat-vm-iPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_iNSG_name": {
+      "value": "chat-vm-iNSG"
+    },
+    "virtualMachines_chat_vm_j_name": {
+      "value": "chat-vm-j"
+    },
+    "networkInterfaces_chat_vm_jVMNic_name": {
+      "value": "chat-vm-jVMNic"
+    },
+    "publicIPAddresses_chat_vm_jPublicIP_name": {
+      "value": "chat-vm-jPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_jNSG_name": {
+      "value": "chat-vm-jNSG"
+    },
+    "virtualMachines_chat_vm_k_name": {
+      "value": "chat-vm-k"
+    },
+    "networkInterfaces_chat_vm_kVMNic_name": {
+      "value": "chat-vm-kVMNic"
+    },
+    "publicIPAddresses_chat_vm_kPublicIP_name": {
+      "value": "chat-vm-kPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_kNSG_name": {
+      "value": "chat-vm-kNSG"
+    },
+    "virtualMachines_chat_vm_l_name": {
+      "value": "chat-vm-l"
+    },
+    "networkInterfaces_chat_vm_lVMNic_name": {
+      "value": "chat-vm-lVMNic"
+    },
+    "publicIPAddresses_chat_vm_lPublicIP_name": {
+      "value": "chat-vm-lPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_lNSG_name": {
+      "value": "chat-vm-lNSG"
+    },
+    "virtualMachines_chat_vm_m_name": {
+      "value": "chat-vm-m"
+    },
+    "networkInterfaces_chat_vm_mVMNic_name": {
+      "value": "chat-vm-mVMNic"
+    },
+    "publicIPAddresses_chat_vm_mPublicIP_name": {
+      "value": "chat-vm-mPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_mNSG_name": {
+      "value": "chat-vm-mNSG"
+    },
+    "virtualMachines_chat_vm_n_name": {
+      "value": "chat-vm-n"
+    },
+    "networkInterfaces_chat_vm_nVMNic_name": {
+      "value": "chat-vm-nVMNic"
+    },
+    "publicIPAddresses_chat_vm_nPublicIP_name": {
+      "value": "chat-vm-nPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_nNSG_name": {
+      "value": "chat-vm-nNSG"
+    },
+    "virtualMachines_chat_vm_o_name": {
+      "value": "chat-vm-o"
+    },
+    "networkInterfaces_chat_vm_oVMNic_name": {
+      "value": "chat-vm-oVMNic"
+    },
+    "publicIPAddresses_chat_vm_oPublicIP_name": {
+      "value": "chat-vm-oPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_oNSG_name": {
+      "value": "chat-vm-oNSG"
+    },
+    "virtualMachines_chat_vm_p_name": {
+      "value": "chat-vm-p"
+    },
+    "networkInterfaces_chat_vm_pVMNic_name": {
+      "value": "chat-vm-pVMNic"
+    },
+    "publicIPAddresses_chat_vm_pPublicIP_name": {
+      "value": "chat-vm-pPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_pNSG_name": {
+      "value": "chat-vm-pNSG"
+    },
+    "virtualMachines_chat_vm_q_name": {
+      "value": "chat-vm-q"
+    },
+    "networkInterfaces_chat_vm_qVMNic_name": {
+      "value": "chat-vm-qVMNic"
+    },
+    "publicIPAddresses_chat_vm_qPublicIP_name": {
+      "value": "chat-vm-qPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_qNSG_name": {
+      "value": "chat-vm-qNSG"
+    },
+    "virtualMachines_chat_vm_r_name": {
+      "value": "chat-vm-r"
+    },
+    "networkInterfaces_chat_vm_rVMNic_name": {
+      "value": "chat-vm-rVMNic"
+    },
+    "publicIPAddresses_chat_vm_rPublicIP_name": {
+      "value": "chat-vm-rPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_rNSG_name": {
+      "value": "chat-vm-rNSG"
+    },
+    "virtualMachines_chat_vm_s_name": {
+      "value": "chat-vm-s"
+    },
+    "networkInterfaces_chat_vm_sVMNic_name": {
+      "value": "chat-vm-sVMNic"
+    },
+    "publicIPAddresses_chat_vm_sPublicIP_name": {
+      "value": "chat-vm-sPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_sNSG_name": {
+      "value": "chat-vm-sNSG"
+    },
+    "virtualMachines_chat_vm_t_name": {
+      "value": "chat-vm-t"
+    },
+    "networkInterfaces_chat_vm_tVMNic_name": {
+      "value": "chat-vm-tVMNic"
+    },
+    "publicIPAddresses_chat_vm_tPublicIP_name": {
+      "value": "chat-vm-tPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_tNSG_name": {
+      "value": "chat-vm-tNSG"
+    },
+    "virtualMachines_chat_vm_u_name": {
+      "value": "chat-vm-u"
+    },
+    "networkInterfaces_chat_vm_uVMNic_name": {
+      "value": "chat-vm-uVMNic"
+    },
+    "publicIPAddresses_chat_vm_uPublicIP_name": {
+      "value": "chat-vm-uPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_uNSG_name": {
+      "value": "chat-vm-uNSG"
+    },
+    "virtualMachines_chat_vm_v_name": {
+      "value": "chat-vm-v"
+    },
+    "networkInterfaces_chat_vm_vVMNic_name": {
+      "value": "chat-vm-vVMNic"
+    },
+    "publicIPAddresses_chat_vm_vPublicIP_name": {
+      "value": "chat-vm-vPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_vNSG_name": {
+      "value": "chat-vm-vNSG"
+    },
+    "virtualMachines_chat_vm_w_name": {
+      "value": "chat-vm-w"
+    },
+    "networkInterfaces_chat_vm_wVMNic_name": {
+      "value": "chat-vm-wVMNic"
+    },
+    "publicIPAddresses_chat_vm_wPublicIP_name": {
+      "value": "chat-vm-wPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_wNSG_name": {
+      "value": "chat-vm-wNSG"
+    },
+    "virtualMachines_chat_vm_x_name": {
+      "value": "chat-vm-x"
+    },
+    "networkInterfaces_chat_vm_xVMNic_name": {
+      "value": "chat-vm-xVMNic"
+    },
+    "publicIPAddresses_chat_vm_xPublicIP_name": {
+      "value": "chat-vm-xPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_xNSG_name": {
+      "value": "chat-vm-xNSG"
+    },
+    "virtualMachines_chat_vm_y_name": {
+      "value": "chat-vm-y"
+    },
+    "networkInterfaces_chat_vm_yVMNic_name": {
+      "value": "chat-vm-yVMNic"
+    },
+    "publicIPAddresses_chat_vm_yPublicIP_name": {
+      "value": "chat-vm-yPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_yNSG_name": {
+      "value": "chat-vm-yNSG"
+    },
+    "virtualMachines_chat_vm_z_name": {
+      "value": "chat-vm-z"
+    },
+    "networkInterfaces_chat_vm_zVMNic_name": {
+      "value": "chat-vm-zVMNic"
+    },
+    "publicIPAddresses_chat_vm_zPublicIP_name": {
+      "value": "chat-vm-zPublicIP"
+    },
+    "networkSecurityGroups_chat_vm_zNSG_name": {
+      "value": "chat-vm-zNSG"
+    }
+  }
+}

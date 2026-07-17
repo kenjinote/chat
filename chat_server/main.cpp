@@ -458,7 +458,8 @@ private:
 
             json11::Json welcomeMsg = json11::Json::object {
                 {"type", "welcome"},
-                {"userId", m_userId}
+                {"userId", m_userId},
+                {"pub", !m_room->isPrivate()}
             };
             deliver(welcomeMsg.dump() + "\n");
 
