@@ -99,7 +99,7 @@ public:
         return false;
     }
 
-private:
+public:
     static bool IsWindowCapturable(HWND hwnd) {
         if (!hwnd) return false;
         if (!IsWindow(hwnd)) return false;

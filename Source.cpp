@@ -725,6 +725,16 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 }
             }
             
+            if (g_captureSourceType == 3 && g_captureHwnd && !WgcCaptureSession::IsWindowCapturable(g_captureHwnd)) {
+                g_isWebcamActive = false;
+                g_captureSourceType = 0;
+                if (wgcSession.IsActive()) wgcSession.Stop();
+                if (g_videoWindows[g_userId] && IsWindow(g_videoWindows[g_userId])) {
+                    PostMessage(g_videoWindows[g_userId], WM_CLOSE, 0, 0);
+                }
+                continue;
+            }
+            
             if (wgcSession.GetLatestFrame(rgb32Data, width, height)) {
                 // Downscale if too large to save bandwidth (max 1280x720 ish)
                 float scale = 1.0f;
@@ -5364,7 +5374,7 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMoni
 }
 
 BOOL CALLBACK WindowEnumProc(HWND hwnd, LPARAM lParam) {
-    if (IsWindowVisible(hwnd)) {
+    if (WgcCaptureSession::IsWindowCapturable(hwnd)) {
         DWORD styles = GetWindowLong(hwnd, GWL_STYLE);
         DWORD exStyles = GetWindowLong(hwnd, GWL_EXSTYLE);
         if ((exStyles & WS_EX_TOOLWINDOW) == 0 && (styles & WS_CHILD) == 0) {
@@ -5491,6 +5501,9 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                                     g_captureSourceType = 0;
                                     if (g_videoWindows[g_userId] && IsWindow(g_videoWindows[g_userId])) DestroyWindow(g_videoWindows[g_userId]);
                                 } else {
+                                    if (!WgcCaptureSession::IsWindowCapturable(w.hWnd)) {
+                                        break; // Cannot capture, do nothing
+                                    }
                                     g_captureHwnd = w.hWnd;
                                     g_captureSourceType = 3;
                                     if (!g_videoWindows[g_userId] || !IsWindow(g_videoWindows[g_userId])) {
