@@ -46,6 +46,10 @@ void CleanupHardwareAcceleration() {
     if (g_pD3D11Device) { g_pD3D11Device->Release(); g_pD3D11Device = NULL; }
 }
 
+bool IsHardwareAccelerationEnabled() {
+    return g_pDXGIManager != NULL;
+}
+
 H264Encoder::H264Encoder() {}
 H264Encoder::~H264Encoder() {
     if (pEncoder) pEncoder->Release();

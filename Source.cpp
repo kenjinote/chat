@@ -738,7 +738,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             std::lock_guard<std::mutex> lock(g_videoMutex);
                             g_videoPixelsMap[g_userId] = std::move(localPixels);
                             g_videoSizeMap[g_userId] = { width, height };
-                            g_videoIsSWMap[g_userId] = true;
+                            g_videoIsSWMap[g_userId] = !IsHardwareAccelerationEnabled();
                         }
                         HWND hView = NULL;
                         auto it = g_videoWindows.find(g_userId);
@@ -4197,7 +4197,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             bool isH264 = (mhdr->payloadType == 5);
                             {
                                 std::lock_guard<std::mutex> lock(g_videoMutex);
-                                g_videoIsSWMap[wname] = !isH264;
+                                g_videoIsSWMap[wname] = !isH264 || !IsHardwareAccelerationEnabled();
                             }
                             
                             bool stateChanged = false;

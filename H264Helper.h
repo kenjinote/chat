@@ -19,6 +19,7 @@
 
 bool InitHardwareAcceleration();
 void CleanupHardwareAcceleration();
+bool IsHardwareAccelerationEnabled();
 
 class H264Encoder {
     IMFTransform* pEncoder = NULL;
