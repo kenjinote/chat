@@ -675,9 +675,13 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     }
                 } else {
                     // Fallback (e.g. RGB32)
-                    memcpy(rgb32Data.data(), pData, min(cbData, (DWORD)rgb32Data.size()));
+                    // MFVideoFormat_RGB32 is bottom-up by default. We must flip it to top-down 
+                    // so that Local Preview is correct, and the resulting H.264 stream is standard.
+                    for (UINT y = 0; y < height; y++) {
+                        memcpy(rgb32Data.data() + y * width * 4, pData + (height - 1 - y) * width * 4, width * 4);
+                    }
                     
-                    // Convert RGB32 to NV12 for H.264 Encoder (since encoder expects NV12 now)
+                    // Convert TOP-DOWN RGB32 to TOP-DOWN NV12 for H.264 Encoder
                     nv12DataForEncoder.resize(width * height * 1.5);
                     uint8_t* yPlane = nv12DataForEncoder.data();
                     uint8_t* uvPlane = nv12DataForEncoder.data() + width * height;
@@ -4694,7 +4698,27 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                         float offsetX = (wW - drawW) / 2.0f;
                         float offsetY = (wH - drawH) / 2.0f;
                         
-                        pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
+                        bool isH264 = true;
+                        {
+                            auto itFormat = g_videoIsH264Map.find(*pUser);
+                            if (itFormat != g_videoIsH264Map.end()) isH264 = itFormat->second;
+                        }
+                        bool isLocal = (*pUser == g_userId);
+                        bool needsFlip = isH264 && !isLocal;
+                        
+                        if (needsFlip) {
+                            D2D1_MATRIX_3X2_F oldTransform;
+                            pRT->GetTransform(&oldTransform);
+                            D2D1_MATRIX_3X2_F flipTransform = D2D1::Matrix3x2F::Scale(
+                                1.0f, -1.0f,
+                                D2D1::Point2F(offsetX + drawW / 2.0f, offsetY + drawH / 2.0f)
+                            );
+                            pRT->SetTransform(flipTransform * oldTransform);
+                            pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
+                            pRT->SetTransform(oldTransform);
+                        } else {
+                            pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
+                        }
                         
                         std::wstring formatText = L"H.264";
                         {
