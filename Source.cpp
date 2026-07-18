@@ -4065,7 +4065,7 @@ DWORD WINAPI DecodeTaskProc(LPVOID lpParam) {
         if (decodeSuccess) {
             int w = (int)pUserDec->pDecoder->GetWidth();
             int h = (int)pUserDec->pDecoder->GetHeight();
-            if (rgbOut.size() == w * h * 4) {
+            if (rgbOut.size() >= (size_t)(w * h * 4)) {
                 for (int y = 0; y < h / 2; y++) {
                     uint32_t* row1 = (uint32_t*)&rgbOut[y * w * 4];
                     uint32_t* row2 = (uint32_t*)&rgbOut[(h - 1 - y) * w * 4];
@@ -4073,6 +4073,10 @@ DWORD WINAPI DecodeTaskProc(LPVOID lpParam) {
                         std::swap(row1[x], row2[x]);
                     }
                 }
+            } else {
+                char buf[256];
+                sprintf_s(buf, "Flip SKIPPED: size %zu != %d", rgbOut.size(), w * h * 4);
+                LogToFile(buf);
             }
             std::lock_guard<std::mutex> lock(g_videoMutex);
             g_videoPixelsMap[data->username] = rgbOut;
