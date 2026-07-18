@@ -704,7 +704,18 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             hr = pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &streamIndex, &flags, &timestamp, &pSample);
         } else {
             // Screen Share Capture Logic with WGC
-            if (!wgcSession.IsActive()) {
+            static int lastCaptureType = 0;
+            static HMONITOR lastCaptureMonitor = NULL;
+            static HWND lastCaptureHwnd = NULL;
+
+            if (!wgcSession.IsActive() || lastCaptureType != g_captureSourceType || 
+                (g_captureSourceType == 2 && lastCaptureMonitor != g_captureMonitor) ||
+                (g_captureSourceType == 3 && lastCaptureHwnd != g_captureHwnd)) {
+                
+                lastCaptureType = g_captureSourceType;
+                lastCaptureMonitor = g_captureMonitor;
+                lastCaptureHwnd = g_captureHwnd;
+
                 if (g_captureSourceType == 2 && g_captureMonitor) {
                     wgcSession.StartForMonitor(g_captureMonitor);
                 } else if (g_captureSourceType == 3 && g_captureHwnd) {
