@@ -651,16 +651,13 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                                 int offset = i * MAX_PAYLOAD;
                                 int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
                                 
-                                char udpPkt[2048];
-                                MediaHeader* mhdr = (MediaHeader*)udpPkt;
-                                mhdr->sessionId = g_sessionId;
-                                mhdr->seqNum = g_videoSeq;
-                                mhdr->payloadType = 5; 
-                                mhdr->flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
-                                mhdr->timestamp = i; 
-                                wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
-                                
-                                memcpy(udpPkt + sizeof(MediaHeader), h264.data() + offset, len);
+                                MediaHeader mhdr = {0};
+                                mhdr.sessionId = g_sessionId;
+                                mhdr.seqNum = g_videoSeq;
+                                mhdr.payloadType = 5; 
+                                mhdr.flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
+                                mhdr.timestamp = i; 
+                                wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
                                 
                                 sockaddr_in serverUdp = {0};
                                 serverUdp.sin_family = AF_INET;
@@ -669,7 +666,15 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                                     g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
                                 }
                                 serverUdp.sin_addr = g_serverUdpAddr;
-                                sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                                
+                                WSABUF buffers[2];
+                                buffers[0].buf = (CHAR*)&mhdr;
+                                buffers[0].len = sizeof(MediaHeader);
+                                buffers[1].buf = (CHAR*)(h264.data() + offset);
+                                buffers[1].len = len;
+                                
+                                DWORD bytesSent = 0;
+                                WSASendTo(g_sock, buffers, 2, &bytesSent, 0, (sockaddr*)&serverUdp, sizeof(serverUdp), NULL, NULL);
                                 
                                 LARGE_INTEGER start, current;
                                 QueryPerformanceCounter(&start);
@@ -707,16 +712,13 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             int offset = i * MAX_PAYLOAD;
                             int len = min(MAX_PAYLOAD, (int)jpegData.size() - offset);
                             
-                            char udpPkt[2048];
-                            MediaHeader* mhdr = (MediaHeader*)udpPkt;
-                            mhdr->sessionId = g_sessionId;
-                            mhdr->seqNum = g_videoSeq;
-                            mhdr->payloadType = 2; 
-                            mhdr->flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
-                            mhdr->timestamp = i; 
-                            wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
-                            
-                            memcpy(udpPkt + sizeof(MediaHeader), jpegData.data() + offset, len);
+                            MediaHeader mhdr = {0};
+                            mhdr.sessionId = g_sessionId;
+                            mhdr.seqNum = g_videoSeq;
+                            mhdr.payloadType = 2; 
+                            mhdr.flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
+                            mhdr.timestamp = i; 
+                            wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
                             
                             sockaddr_in serverUdp = {0};
                             serverUdp.sin_family = AF_INET;
@@ -725,7 +727,16 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                                 g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
                             }
                             serverUdp.sin_addr = g_serverUdpAddr;
-                            int sent = sendto(g_sock, udpPkt, sizeof(MediaHeader) + len, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                            
+                            WSABUF buffers[2];
+                            buffers[0].buf = (CHAR*)&mhdr;
+                            buffers[0].len = sizeof(MediaHeader);
+                            buffers[1].buf = (CHAR*)(jpegData.data() + offset);
+                            buffers[1].len = len;
+                            
+                            DWORD bytesSent = 0;
+                            WSASendTo(g_sock, buffers, 2, &bytesSent, 0, (sockaddr*)&serverUdp, sizeof(serverUdp), NULL, NULL);
+                            int sent = (int)bytesSent;
                             LogToFile("UDP Sending Video Fragment, len=" + std::to_string(len) + ", sent=" + std::to_string(sent));
 
                             LARGE_INTEGER start, current;
