@@ -4035,6 +4035,16 @@ DWORD WINAPI DecodeTaskProc(LPVOID lpParam) {
         std::shared_ptr<UserDecoder> pUserDec;
         {
             std::lock_guard<std::mutex> lock(g_decoderMutex);
+            bool isSps = false;
+            for (size_t i = 0; i + 4 < data->mediaData.size() && i < 100; ++i) {
+                if (data->mediaData[i] == 0 && data->mediaData[i+1] == 0 && data->mediaData[i+2] == 0 && data->mediaData[i+3] == 1) {
+                    if ((data->mediaData[i+4] & 0x1F) == 7) { isSps = true; break; }
+                }
+            }
+            if (isSps) {
+                g_h264Decoders.erase(data->username);
+            }
+            
             if (g_h264Decoders.find(data->username) == g_h264Decoders.end()) {
                 pUserDec = std::make_shared<UserDecoder>();
                 pUserDec->pDecoder = new H264Decoder();
@@ -4053,9 +4063,20 @@ DWORD WINAPI DecodeTaskProc(LPVOID lpParam) {
         }
         
         if (decodeSuccess) {
+            int w = (int)pUserDec->pDecoder->GetWidth();
+            int h = (int)pUserDec->pDecoder->GetHeight();
+            if (rgbOut.size() == w * h * 4) {
+                for (int y = 0; y < h / 2; y++) {
+                    uint32_t* row1 = (uint32_t*)&rgbOut[y * w * 4];
+                    uint32_t* row2 = (uint32_t*)&rgbOut[(h - 1 - y) * w * 4];
+                    for (int x = 0; x < w; x++) {
+                        std::swap(row1[x], row2[x]);
+                    }
+                }
+            }
             std::lock_guard<std::mutex> lock(g_videoMutex);
             g_videoPixelsMap[data->username] = rgbOut;
-            g_videoSizeMap[data->username] = { (int)pUserDec->pDecoder->GetWidth(), (int)pUserDec->pDecoder->GetHeight() };
+            g_videoSizeMap[data->username] = { w, h };
             HWND hView = NULL;
             auto it = g_videoWindows.find(data->username);
             if (it != g_videoWindows.end()) hView = it->second;
