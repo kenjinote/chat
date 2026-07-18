@@ -8,6 +8,8 @@
 #include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
 #include <windows.graphics.capture.interop.h>
 #include <windows.graphics.directx.direct3d11.interop.h>
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
 #include <vector>
 #include <mutex>
 
@@ -23,6 +25,8 @@ public:
     }
 
     bool StartForWindow(HWND hwnd) {
+        // Validate hwnd before attempting to create a capture item.
+        if (!IsWindowCapturable(hwnd)) return false;
         return Start(CreateItemForWindow(hwnd));
     }
 
@@ -93,22 +97,45 @@ public:
     }
 
 private:
+    static bool IsWindowCapturable(HWND hwnd) {
+        if (!hwnd) return false;
+        if (!IsWindow(hwnd)) return false;
+        if (!IsWindowVisible(hwnd)) return false;
+        if (IsIconic(hwnd)) return false;
+
+        // Check for cloaked windows (UWP/Virtual Desktop/etc.)
+        BOOL cloaked = FALSE;
+        if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) && cloaked) return false;
+
+        return true;
+    }
+
     winrt::Windows::Graphics::Capture::GraphicsCaptureItem CreateItemForWindow(HWND hwnd) {
-        auto interop_factory = winrt::get_activation_factory<winrt::Windows::Graphics::Capture::GraphicsCaptureItem, IGraphicsCaptureItemInterop>();
-        winrt::Windows::Graphics::Capture::GraphicsCaptureItem item = { nullptr };
-        winrt::check_hresult(interop_factory->CreateForWindow(hwnd, winrt::guid_of<ABI::Windows::Graphics::Capture::IGraphicsCaptureItem>(), winrt::put_abi(item)));
-        return item;
+        if (!IsWindowCapturable(hwnd)) return { nullptr };
+        try {
+            auto interop_factory = winrt::get_activation_factory<winrt::Windows::Graphics::Capture::GraphicsCaptureItem, IGraphicsCaptureItemInterop>();
+            winrt::Windows::Graphics::Capture::GraphicsCaptureItem item = { nullptr };
+            winrt::check_hresult(interop_factory->CreateForWindow(hwnd, winrt::guid_of<ABI::Windows::Graphics::Capture::IGraphicsCaptureItem>(), winrt::put_abi(item)));
+            return item;
+        } catch (winrt::hresult_error const&) {
+            return { nullptr };
+        }
     }
 
     winrt::Windows::Graphics::Capture::GraphicsCaptureItem CreateItemForMonitor(HMONITOR hmonitor) {
-        auto interop_factory = winrt::get_activation_factory<winrt::Windows::Graphics::Capture::GraphicsCaptureItem, IGraphicsCaptureItemInterop>();
-        winrt::Windows::Graphics::Capture::GraphicsCaptureItem item = { nullptr };
-        winrt::check_hresult(interop_factory->CreateForMonitor(hmonitor, winrt::guid_of<ABI::Windows::Graphics::Capture::IGraphicsCaptureItem>(), winrt::put_abi(item)));
-        return item;
+        try {
+            auto interop_factory = winrt::get_activation_factory<winrt::Windows::Graphics::Capture::GraphicsCaptureItem, IGraphicsCaptureItemInterop>();
+            winrt::Windows::Graphics::Capture::GraphicsCaptureItem item = { nullptr };
+            winrt::check_hresult(interop_factory->CreateForMonitor(hmonitor, winrt::guid_of<ABI::Windows::Graphics::Capture::IGraphicsCaptureItem>(), winrt::put_abi(item)));
+            return item;
+        } catch (winrt::hresult_error const&) {
+            return { nullptr };
+        }
     }
 
     bool Start(winrt::Windows::Graphics::Capture::GraphicsCaptureItem item) {
         Stop();
+        if (!item) return false;
 
         UINT creationFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
         D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1 };
@@ -127,11 +154,12 @@ private:
         m_item = item;
         m_item.Closed({ this, &WgcCaptureSession::OnClosed });
 
+        m_lastSize = m_item.Size();
         m_framePool = winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool::CreateFreeThreaded(
             m_device,
             winrt::Windows::Graphics::DirectX::DirectXPixelFormat::B8G8R8A8UIntNormalized,
             2,
-            m_item.Size());
+            m_lastSize);
 
         m_framePool.FrameArrived({ this, &WgcCaptureSession::OnFrameArrived });
         m_session = m_framePool.CreateCaptureSession(m_item);
@@ -143,6 +171,16 @@ private:
     void OnFrameArrived(winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool const& sender, winrt::Windows::Foundation::IInspectable const& args) {
         auto frame = sender.TryGetNextFrame();
         if (frame) {
+            auto newSize = m_item.Size();
+            if (m_lastSize.Width != newSize.Width || m_lastSize.Height != newSize.Height) {
+                m_lastSize = newSize;
+                m_framePool.Recreate(
+                    m_device,
+                    winrt::Windows::Graphics::DirectX::DirectXPixelFormat::B8G8R8A8UIntNormalized,
+                    2,
+                    m_lastSize);
+                return; // Wait for the next frame with the correct size
+            }
             auto surface = frame.Surface();
             auto access = surface.as<Windows::Graphics::DirectX::Direct3D11::IDirect3DDxgiInterfaceAccess>();
             winrt::com_ptr<ID3D11Texture2D> texture;
@@ -165,4 +203,5 @@ private:
     winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool m_framePool{ nullptr };
     winrt::Windows::Graphics::Capture::GraphicsCaptureSession m_session{ nullptr };
     winrt::com_ptr<ID3D11Texture2D> m_latestTexture{ nullptr };
+    winrt::Windows::Graphics::SizeInt32 m_lastSize{ 0, 0 };
 };

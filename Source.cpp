@@ -878,16 +878,14 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         delete g_pH264Encoder;
                         g_pH264Encoder = nullptr;
                     }
-                    if (!g_pH264Encoder) {
+                    if (!g_pH264Encoder && (s_lastEncWidth != width || s_lastEncHeight != height)) {
                         g_pH264Encoder = new H264Encoder();
                         if (!g_pH264Encoder->Initialize(width, height)) {
                             delete g_pH264Encoder;
                             g_pH264Encoder = nullptr;
-                            g_useH264 = false;
-                        } else {
-                            s_lastEncWidth = width;
-                            s_lastEncHeight = height;
                         }
+                        s_lastEncWidth = width;
+                        s_lastEncHeight = height;
                     }
                 }
                 
