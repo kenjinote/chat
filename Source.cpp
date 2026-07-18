@@ -4316,11 +4316,6 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             int fragIdx = mhdr->timestamp;
                             int len = res - (int)sizeof(MediaHeader);
                             bool isH264 = (mhdr->payloadType == 5);
-                            {
-                                std::lock_guard<std::mutex> lock(g_videoMutex);
-                                g_videoIsSWMap[wname] = !isH264 || !IsHardwareAccelerationEnabled();
-                                g_videoIsH264Map[wname] = isH264;
-                            }
                             
                             bool stateChanged = false;
                             {
@@ -4333,6 +4328,18 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             if (stateChanged) {
                                 InvalidateRect(g_hUserList, NULL, FALSE);
                             }
+                            
+                            bool isWindowOpen = false;
+                            {
+                                std::lock_guard<std::mutex> lock(g_videoMutex);
+                                if (g_videoWindows.count(wname) && g_videoWindows[wname] && IsWindow(g_videoWindows[wname])) {
+                                    isWindowOpen = true;
+                                }
+                                g_videoIsSWMap[wname] = !isH264 || !IsHardwareAccelerationEnabled();
+                                g_videoIsH264Map[wname] = isH264;
+                            }
+                            if (!isWindowOpen) continue; // Skip buffering and decoding if the window is closed
+
 
                             auto& vbuf = g_videoBuffers[wname][seq];
                             vbuf.lastUpdate = GetTickCount();
@@ -4612,6 +4619,23 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             if (*pUser == g_userId) {
                 g_isWebcamActive = false;
                 InvalidateRect(g_hUserList, NULL, FALSE);
+            } else if (g_tcpSocket != INVALID_SOCKET) {
+                std::string userA;
+                int sz = WideCharToMultiByte(CP_UTF8, 0, pUser->c_str(), (int)pUser->length(), NULL, 0, NULL, NULL);
+                if (sz > 0) {
+                    userA.resize(sz);
+                    WideCharToMultiByte(CP_UTF8, 0, pUser->c_str(), (int)pUser->length(), &userA[0], sz, NULL, NULL);
+                    json11::Json unsubMsg = json11::Json::object {
+                        {"type", "unsubscribe_video"},
+                        {"target", userA}
+                    };
+                    std::string str = unsubMsg.dump() + "\n";
+                    send(g_tcpSocket, str.c_str(), (int)str.length(), 0);
+                }
+            }
+            {
+                std::lock_guard<std::mutex> lock(g_videoMutex);
+                g_videoWindows[*pUser] = NULL;
             }
             delete pUser;
         }
@@ -5152,6 +5176,21 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                                 WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, winW, winH, NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
                             ApplyClassicStyle(hVid);
                             g_videoWindows[clickedUser] = hVid;
+                            
+                            if (g_tcpSocket != INVALID_SOCKET) {
+                                std::string userA;
+                                int sz = WideCharToMultiByte(CP_UTF8, 0, clickedUser.c_str(), (int)clickedUser.length(), NULL, 0, NULL, NULL);
+                                if (sz > 0) {
+                                    userA.resize(sz);
+                                    WideCharToMultiByte(CP_UTF8, 0, clickedUser.c_str(), (int)clickedUser.length(), &userA[0], sz, NULL, NULL);
+                                    json11::Json subMsg = json11::Json::object {
+                                        {"type", "subscribe_video"},
+                                        {"target", userA}
+                                    };
+                                    std::string str = subMsg.dump() + "\n";
+                                    send(g_tcpSocket, str.c_str(), (int)str.length(), 0);
+                                }
+                            }
                         } else {
                             SetForegroundWindow(g_videoWindows[clickedUser]);
                         }

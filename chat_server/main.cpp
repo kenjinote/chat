@@ -234,8 +234,25 @@ public:
     udp::endpoint m_udpEndpoint;
     bool m_hasUdpEndpoint;
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> m_watching;
+    
+    void subscribeVideo(const std::string& targetUserId) {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        m_subscribedVideos.insert(targetUserId);
+    }
+    
+    void unsubscribeVideo(const std::string& targetUserId) {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        m_subscribedVideos.erase(targetUserId);
+    }
+    
+    bool isSubscribedToVideo(const std::string& targetUserId) const {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        return m_subscribedVideos.find(targetUserId) != m_subscribedVideos.end();
+    }
 
 private:
+    std::set<std::string> m_subscribedVideos;
+
     void doRead() {
         auto self(shared_from_this());
         asio::async_read_until(m_socket, m_buffer, '\n',
@@ -507,6 +524,10 @@ private:
             ServerManager::get().notifyRoomListChanged();
         } else if (type == "close_rooms") {
             ServerManager::get().unsubscribeRoomList(m_sessionId);
+        } else if (type == "subscribe_video") {
+            subscribeVideo(json["target"].string_value());
+        } else if (type == "unsubscribe_video") {
+            unsubscribeVideo(json["target"].string_value());
         } else if (type == "leave") {
             if (m_room) {
                 m_room->leave(shared_from_this());
@@ -682,9 +703,8 @@ void Room::broadcastMedia(const std::shared_ptr<ChatSession>& sender, const uint
     for (auto& p : m_participants) {
         if (p != sender && p->m_hasUdpEndpoint) {
             bool shouldSend = true;
-            if (payloadType == 2) {
-                auto it = p->m_watching.find(sender->getUserId());
-                if (it == p->m_watching.end() || std::chrono::duration_cast<std::chrono::seconds>(now - it->second).count() > 10) {
+            if (payloadType == 2 || payloadType == 5) { // JPEG or H264
+                if (!p->isSubscribedToVideo(sender->getUserId())) {
                     shouldSend = false;
                 }
             }

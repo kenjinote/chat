@@ -12,7 +12,7 @@ foreach ($l in $letters) {
         az vm run-command invoke -g chat -n $vm --command-id RunShellScript --scripts "@update_docker.sh" --parameters $fqdn --subscription 00000000-0000-0000-0000-000000000000
         Write-Host "Finished $vm"
     }
-    $jobs += Start-Job -ScriptBlock $scriptBlock -ArgumentList $vmName, $fqdn -WorkingDirectory "C:\Users\kenjinote\Desktop\chat"
+    $jobs += Start-Job -ScriptBlock $scriptBlock -ArgumentList $vmName, $fqdn
 }
 
 Write-Host "Waiting for all 26 VMs to update..."
