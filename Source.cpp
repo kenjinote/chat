@@ -784,11 +784,12 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                                 while (true) {
                                     QueryPerformanceCounter(&current);
                                     long long remaining = target_count - current.QuadPart;
+                                    if (remaining <= 0) break;
+                                    
                                     if (remaining > (freq.QuadPart / 1000) * 2) {
                                         Sleep(1);
-                                    } else {
-                                        break;
                                     }
+                                    // Otherwise spin-wait for the last <2ms for high precision pacing
                                 }
                             }
                             // Swap logic moved to end of frame
