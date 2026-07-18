@@ -576,11 +576,25 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 pReaderConfig->SetUINT32(MF_SOURCE_READER_ENABLE_VIDEO_PROCESSING, TRUE);
                 MFCreateSourceReaderFromMediaSource(pSource, pReaderConfig, &pReader);
                 pReaderConfig->Release();
+                IMFMediaType* pNativeType = NULL;
+                pReader->GetNativeMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &pNativeType);
+                
                 IMFMediaType* pType = NULL;
                 MFCreateMediaType(&pType);
-                pType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+                if (pNativeType) {
+                    pNativeType->CopyAllItems(pType);
+                    pNativeType->Release();
+                } else {
+                    pType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+                }
                 pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
-                pReader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, pType);
+                
+                HRESULT hrSet = pReader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, pType);
+                if (FAILED(hrSet)) {
+                    LogToFile("Webcam SetCurrentMediaType NV12 FAILED! hr=" + std::to_string(hrSet));
+                    pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+                    pReader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, pType);
+                }
                 pType->Release();
                 pSource->Release();
             } else {
@@ -623,19 +637,28 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 pReader->GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, &pCurrentType);
                 UINT32 width = 0, height = 0;
                 MFGetAttributeSize(pCurrentType, MF_MT_FRAME_SIZE, &width, &height);
+                GUID subtype = {0};
+                pCurrentType->GetGUID(MF_MT_SUBTYPE, &subtype);
+                LONG stride = width;
+                pCurrentType->GetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32*)&stride);
                 pCurrentType->Release();
 
                 bool h264Success = false;
                 
                 std::vector<uint8_t> rgb32Data(width * height * 4);
-                if (!g_useH264 || true) { // We always need it for local preview
+                std::vector<uint8_t> nv12DataForEncoder;
+                const uint8_t* pEncoderInput = pData;
+                DWORD cbEncoderInput = cbData;
+                
+                if (subtype == MFVideoFormat_NV12) {
+                    // NV12 -> RGB32 for local preview
                     const uint8_t* yPlane = pData;
-                    const uint8_t* uvPlane = pData + width * height;
+                    const uint8_t* uvPlane = pData + abs(stride) * height;
                     uint32_t* dst = (uint32_t*)rgb32Data.data();
                     for (UINT y = 0; y < height; y++) {
-                        const uint8_t* uvRow = uvPlane + (y / 2) * width;
+                        const uint8_t* uvRow = uvPlane + (y / 2) * abs(stride);
                         for (UINT x = 0; x < width; x++) {
-                            int yVal = yPlane[y * width + x] - 16;
+                            int yVal = yPlane[y * abs(stride) + x] - 16;
                             int uVal = uvRow[(x & ~1)] - 128;
                             int vVal = uvRow[(x & ~1) + 1] - 128;
                             
@@ -650,6 +673,30 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             dst[y * width + x] = (255 << 24) | (r << 16) | (g << 8) | b;
                         }
                     }
+                } else {
+                    // Fallback (e.g. RGB32)
+                    memcpy(rgb32Data.data(), pData, min(cbData, (DWORD)rgb32Data.size()));
+                    
+                    // Convert RGB32 to NV12 for H.264 Encoder (since encoder expects NV12 now)
+                    nv12DataForEncoder.resize(width * height * 1.5);
+                    uint8_t* yPlane = nv12DataForEncoder.data();
+                    uint8_t* uvPlane = nv12DataForEncoder.data() + width * height;
+                    const uint32_t* src = (const uint32_t*)rgb32Data.data();
+                    for (UINT y = 0; y < height; y++) {
+                        for (UINT x = 0; x < width; x++) {
+                            uint32_t px = src[y * width + x];
+                            int r = (px >> 16) & 0xFF;
+                            int g = (px >> 8) & 0xFF;
+                            int b = px & 0xFF;
+                            yPlane[y * width + x] = (uint8_t)max(0, min(255, ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16));
+                            if ((y % 2 == 0) && (x % 2 == 0)) {
+                                uvPlane[(y / 2) * width + x] = (uint8_t)max(0, min(255, ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128));
+                                uvPlane[(y / 2) * width + x + 1] = (uint8_t)max(0, min(255, ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128));
+                            }
+                        }
+                    }
+                    pEncoderInput = nv12DataForEncoder.data();
+                    cbEncoderInput = (DWORD)nv12DataForEncoder.size();
                 }
 
                 if (g_useH264) {
@@ -663,7 +710,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     }
                     if (g_pH264Encoder) {
                         std::vector<uint8_t> h264;
-                        if (g_pH264Encoder->EncodeFrame(pData, cbData, h264)) {
+                        if (g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264)) {
                             h264Success = true;
                             std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
                             const int MAX_PAYLOAD = 1000;
