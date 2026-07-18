@@ -89,7 +89,7 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
     MFCreateMediaType(&pOutputType);
     pOutputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
     pOutputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
-    pOutputType->SetUINT32(MF_MT_AVG_BITRATE, 20000000); // 20 Mbps for MJPEG-level pristine quality
+    pOutputType->SetUINT32(MF_MT_AVG_BITRATE, 5000000); // 5 Mbps max fallback
     MFSetAttributeSize(pOutputType, MF_MT_FRAME_SIZE, width, height);
     MFSetAttributeRatio(pOutputType, MF_MT_FRAME_RATE, 30, 1);
     MFSetAttributeRatio(pOutputType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
@@ -113,8 +113,12 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);
         
         var.vt = VT_UI4;
-        var.ulVal = eAVEncCommonRateControlMode_CBR;
+        var.ulVal = 3; // eAVEncCommonRateControlMode_Quality
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
+        
+        var.vt = VT_UI4;
+        var.ulVal = 90; // Quality 0-100
+        pCodecAPI->SetValue(&CODECAPI_AVEncCommonQuality, &var);
         
         // Force an I-frame every 10 frames (0.33 seconds) to heal UDP packet loss almost instantly, mimicking JPEG responsiveness
         var.vt = VT_UI4;
