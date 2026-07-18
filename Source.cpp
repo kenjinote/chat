@@ -838,17 +838,28 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             bool h264Success = false;
             
             if (pEncoderInput) {
+                static UINT32 s_lastEncWidth = 0;
+                static UINT32 s_lastEncHeight = 0;
 
                 if (g_useH264) {
+                    if (g_pH264Encoder && (s_lastEncWidth != width || s_lastEncHeight != height)) {
+                        delete g_pH264Encoder;
+                        g_pH264Encoder = nullptr;
+                    }
                     if (!g_pH264Encoder) {
                         g_pH264Encoder = new H264Encoder();
                         if (!g_pH264Encoder->Initialize(width, height)) {
                             delete g_pH264Encoder;
                             g_pH264Encoder = nullptr;
                             g_useH264 = false;
+                        } else {
+                            s_lastEncWidth = width;
+                            s_lastEncHeight = height;
                         }
                     }
-                    if (g_pH264Encoder) {
+                }
+                
+                if (g_pH264Encoder) {
                         std::vector<uint8_t> h264;
                         if (g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264)) {
                             h264Success = true;
@@ -978,7 +989,6 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 auto it = g_videoWindows.find(g_userId);
                 if (it != g_videoWindows.end()) hView = it->second;
                 if (hView && IsWindow(hView)) InvalidateRect(hView, NULL, FALSE);
-            }
             if (pSample) pSample->Release();
         } else {
             Sleep(10);
