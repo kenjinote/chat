@@ -23,7 +23,6 @@ bool IsHardwareAccelerationEnabled();
 
 class H264Encoder {
     IMFTransform* pEncoder = NULL;
-    IMFTransform* pConverter = NULL;
     DWORD inputId = 0;
     DWORD outputId = 0;
     UINT32 m_width = 0;
@@ -34,7 +33,7 @@ public:
     H264Encoder();
     ~H264Encoder();
     bool Initialize(UINT32 width, UINT32 height);
-    bool EncodeFrame(const BYTE* pRgb32Data, DWORD cbData, std::vector<uint8_t>& outH264);
+    bool EncodeFrame(const BYTE* pNv12Data, DWORD cbData, std::vector<uint8_t>& outH264);
 private:
     bool InitializeInternal(UINT32 width, UINT32 height, bool useHW);
 };

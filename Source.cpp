@@ -579,7 +579,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 IMFMediaType* pType = NULL;
                 MFCreateMediaType(&pType);
                 pType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
-                pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+                pType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
                 pReader->SetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, NULL, pType);
                 pType->Release();
                 pSource->Release();
@@ -626,6 +626,32 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 pCurrentType->Release();
 
                 bool h264Success = false;
+                
+                std::vector<uint8_t> rgb32Data(width * height * 4);
+                if (!g_useH264 || true) { // We always need it for local preview
+                    const uint8_t* yPlane = pData;
+                    const uint8_t* uvPlane = pData + width * height;
+                    uint32_t* dst = (uint32_t*)rgb32Data.data();
+                    for (UINT y = 0; y < height; y++) {
+                        const uint8_t* uvRow = uvPlane + (y / 2) * width;
+                        for (UINT x = 0; x < width; x++) {
+                            int yVal = yPlane[y * width + x] - 16;
+                            int uVal = uvRow[(x & ~1)] - 128;
+                            int vVal = uvRow[(x & ~1) + 1] - 128;
+                            
+                            int r = (298 * yVal + 409 * vVal + 128) >> 8;
+                            int g = (298 * yVal - 100 * uVal - 208 * vVal + 128) >> 8;
+                            int b = (298 * yVal + 516 * uVal + 128) >> 8;
+                            
+                            r = max(0, min(255, r));
+                            g = max(0, min(255, g));
+                            b = max(0, min(255, b));
+                            
+                            dst[y * width + x] = (255 << 24) | (r << 16) | (g << 8) | b;
+                        }
+                    }
+                }
+
                 if (g_useH264) {
                     if (!g_pH264Encoder) {
                         g_pH264Encoder = new H264Encoder();
@@ -683,7 +709,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                                 } while (current.QuadPart - start.QuadPart < delay_counts);
                             }
                             
-                            std::vector<uint8_t> localPixels(pData, pData + cbData);
+                            std::vector<uint8_t> localPixels = rgb32Data;
                             {
                                 std::lock_guard<std::mutex> lock(g_videoMutex);
                                 g_videoPixelsMap[g_userId] = std::move(localPixels);
@@ -700,7 +726,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 }
                 if (!h264Success) {
                     std::vector<uint8_t> jpegData;
-                    if (EncodeJPEG(width, height, pData, cbData, jpegData)) {
+                    if (EncodeJPEG(width, height, rgb32Data.data(), (DWORD)rgb32Data.size(), jpegData)) {
                         const int MAX_PAYLOAD = 1000;
                         int totalFragments = (int)((jpegData.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
                         g_videoSeq++;
@@ -746,7 +772,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             } while (current.QuadPart - start.QuadPart < delay_counts);
                         }
                         
-                        std::vector<uint8_t> localPixels(pData, pData + cbData);
+                        std::vector<uint8_t> localPixels = rgb32Data;
                         {
                             std::lock_guard<std::mutex> lock(g_videoMutex);
                             g_videoPixelsMap[g_userId] = std::move(localPixels);
