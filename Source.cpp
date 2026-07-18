@@ -2263,6 +2263,50 @@ LRESULT CALLBACK ClientEdgeSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
     return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
 
+LRESULT CALLBACK RaisedEdgeSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (msg == WM_NCCALCSIZE) {
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        if (wParam == TRUE && (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_CLIENTEDGE)) {
+            NCCALCSIZE_PARAMS* params = (NCCALCSIZE_PARAMS*)lParam;
+            HDC hdc = GetWindowDC(hWnd);
+            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            ReleaseDC(hWnd, hdc);
+            int bw = MulDiv(1, dpiY, 96); if (bw < 1) bw = 1;
+            int offset = bw - GetSystemMetrics(SM_CXEDGE);
+            if (offset != 0) {
+                params->rgrc[0].left += offset;
+                params->rgrc[0].top += offset;
+                params->rgrc[0].right -= offset;
+                params->rgrc[0].bottom -= offset;
+            }
+        }
+        return res;
+    } else if (msg == WM_NCPAINT) {
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        if (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_CLIENTEDGE) {
+            HDC hdc = GetWindowDC(hWnd);
+            RECT rcWin; GetWindowRect(hWnd, &rcWin);
+            RECT rc = {0, 0, rcWin.right - rcWin.left, rcWin.bottom - rcWin.top};
+            
+            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+
+            HBRUSH hWhite = CreateSolidBrush(RGB(255, 255, 255));
+            HBRUSH hDarkGray = CreateSolidBrush(RGB(128, 128, 128));
+
+            RECT rcTop = { rc.left, rc.top, rc.right, rc.top + bw1 }; FillRect(hdc, &rcTop, hWhite);
+            RECT rcLeft = { rc.left, rc.top, rc.left + bw1, rc.bottom }; FillRect(hdc, &rcLeft, hWhite);
+            RECT rcBottom = { rc.left, rc.bottom - bw1, rc.right, rc.bottom }; FillRect(hdc, &rcBottom, hDarkGray);
+            RECT rcRight = { rc.right - bw1, rc.top, rc.right, rc.bottom }; FillRect(hdc, &rcRight, hDarkGray);
+
+            DeleteObject(hWhite); DeleteObject(hDarkGray);
+            ReleaseDC(hWnd, hdc);
+        }
+        return res;
+    }
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
+}
+
 bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult, bool enableAlwaysOnTopMenu = false);
 extern LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
 
@@ -2388,11 +2432,15 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         int cmd = wParam & 0xFFF0;
         if (enableAlwaysOnTopMenu && (cmd == SC_MOUSEMENU || cmd == SC_KEYMENU || cmd == 0x1230)) {
             POINT pt;
+            bool isSysMenuClick = false;
+            DWORD openTime = 0;
             if (cmd == SC_MOUSEMENU) {
                 pt.x = GET_X_LPARAM(lParam);
                 pt.y = GET_Y_LPARAM(lParam);
                 LRESULT hit = SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(pt.x, pt.y));
                 if (hit == HTSYSMENU) {
+                    isSysMenuClick = true;
+                    openTime = GetMessageTime();
                     RECT rc; GetWindowRect(hWnd, &rc);
                     RECT rcFrame = { 0, 0, 0, 0 };
                     AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
@@ -2428,7 +2476,21 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
             SetForegroundWindow(hWnd);
             int retCmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_LEFTBUTTON, pt.x, pt.y, 0, hWnd, NULL);
             DestroyMenu(hMenu);
-            if (retCmd > 0) SendMessage(hWnd, WM_SYSCOMMAND, retCmd, 0);
+            if (retCmd > 0) {
+                SendMessage(hWnd, WM_SYSCOMMAND, retCmd, 0);
+            } else if (isSysMenuClick) {
+                DWORD closeTime = GetMessageTime();
+                if (closeTime - openTime <= GetDoubleClickTime()) {
+                    if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) {
+                        POINT cursor;
+                        GetCursorPos(&cursor);
+                        LRESULT currentHit = SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(cursor.x, cursor.y));
+                        if (currentHit == HTSYSMENU) {
+                            PostMessage(hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+                        }
+                    }
+                }
+            }
             
             *pResult = 0;
             return true;
@@ -3895,8 +3957,15 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     g_isNameChanging = false;
                                 } else if (!wasJoined) {
                                     MsgData* pData = new MsgData();
-                                    pData->user = g_username;
-                                    pData->msg = GetString(IDS_ENTERED);
+                                    pData->user = L"";
+                                    std::wstring dispMyName = g_username.substr(0, g_username.find(L'#'));
+                                    if (PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_JAPANESE) {
+                                        pData->msg = g_currentRoom + L"に" + dispMyName + L"が入室しました。";
+                                    } else {
+                                        std::wstring msg = GetString(IDS_ENTERED);
+                                        if (!msg.empty() && (msg.back() == L'.' || msg.back() == 0x3002 || msg.back() == 0x0964)) msg.pop_back();
+                                        pData->msg = dispMyName + msg + L" [" + g_currentRoom + L"]";
+                                    }
                                     pData->b = false; pData->i = false; pData->u = false;
                                     pData->size = 9;
                                     pData->color = RGB(128, 128, 128);
@@ -3952,8 +4021,15 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     SortUserList();
                                     if (wuid != g_userId) {
                                         MsgData* pData = new MsgData();
-                                        pData->user = wname;
-                                        pData->msg = GetString(IDS_ENTERED);
+                                        pData->user = L"";
+                                        std::wstring dispWname = wname.substr(0, wname.find(L'#'));
+                                        if (PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_JAPANESE) {
+                                            pData->msg = g_currentRoom + L"に" + dispWname + L"が入室しました。";
+                                        } else {
+                                            std::wstring msg = GetString(IDS_ENTERED);
+                                            if (!msg.empty() && (msg.back() == L'.' || msg.back() == 0x3002 || msg.back() == 0x0964)) msg.pop_back();
+                                            pData->msg = dispWname + msg + L" [" + g_currentRoom + L"]";
+                                        }
                                         pData->b = false; pData->i = false; pData->u = false;
                                         pData->size = 9;
                                         pData->color = RGB(128, 128, 128);
@@ -4011,8 +4087,15 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     SendMessage(g_hUserList, LB_DELETESTRING, idx, 0);
                                     if (wuid != g_userId) {
                                         MsgData* pData = new MsgData();
-                                        pData->user = g_userNames[wuid];
-                                        pData->msg = GetString(IDS_LEFT);
+                                        pData->user = L"";
+                                        std::wstring dispLeaveName = g_userNames[wuid].substr(0, g_userNames[wuid].find(L'#'));
+                                        if (PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_JAPANESE) {
+                                            pData->msg = g_currentRoom + L"から" + dispLeaveName + L"が退室しました。";
+                                        } else {
+                                            std::wstring msg = GetString(IDS_LEFT);
+                                            if (!msg.empty() && (msg.back() == L'.' || msg.back() == 0x3002 || msg.back() == 0x0964)) msg.pop_back();
+                                            pData->msg = dispLeaveName + msg + L" [" + g_currentRoom + L"]";
+                                        }
                                         pData->b = false; pData->i = false; pData->u = false;
                                         pData->size = 9;
                                         pData->color = RGB(128, 128, 128);
@@ -5284,7 +5367,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         
         SetWindowSubclass(g_hLog, ClientEdgeSubclassProc, 0, 0);
         SetWindowSubclass(g_hUserList, ClientEdgeSubclassProc, 0, 0);
-        SetWindowSubclass(g_hUserListHeader, ClientEdgeSubclassProc, 0, 0);
+        SetWindowSubclass(g_hUserListHeader, RaisedEdgeSubclassProc, 0, 0);
 
         SetWindowSubclass(g_hLog, ScrollbarColorProc, 0, 0);
         SetWindowSubclass(g_hUserList, ScrollbarColorProc, 0, 0);
@@ -6021,7 +6104,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         int headerHeight = Scale(20);
         int listHeight = topHeight - roomBtnHeight - margin - headerHeight;
         hdwp = DeferWindowPos(hdwp, g_hUserListHeader, NULL, margin * 2 + logWidth, margin, listWidth, headerHeight, SWP_NOZORDER);
-        hdwp = DeferWindowPos(hdwp, g_hUserList, NULL, margin * 2 + logWidth, margin + headerHeight, listWidth, listHeight, SWP_NOZORDER);
+        hdwp = DeferWindowPos(hdwp, g_hUserList, NULL, margin * 2 + logWidth, margin + headerHeight + 1, listWidth, listHeight - 1, SWP_NOZORDER);
 
         int roomBtnY = margin + headerHeight + listHeight + margin;
         hdwp = DeferWindowPos(hdwp, g_hBtnMoveRoom, NULL, margin * 2 + logWidth, roomBtnY, listWidth, roomBtnHeight, SWP_NOZORDER);
@@ -6453,6 +6536,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     UpdateWindow(hWnd);
 
     while (GetMessage(&msg, 0, 0, 0)) {
+        if (msg.message == WM_KEYDOWN && msg.wParam == 'R' && (GetAsyncKeyState(VK_CONTROL) & 0x8000)) {
+            HWND hActive = GetActiveWindow();
+            if (hActive == hWnd || GetWindow(hActive, GW_OWNER) == hWnd) {
+                SendMessage(hWnd, WM_COMMAND, MAKEWPARAM(1008, BN_CLICKED), (LPARAM)0);
+                continue;
+            }
+        }
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
