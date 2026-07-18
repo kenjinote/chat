@@ -1024,6 +1024,10 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 pLockedBuffer->Release();
             }
             if (pSample) pSample->Release();
+            
+            if (isScreenShare) {
+                Sleep(66);
+            }
         } else {
             Sleep(10);
         }
