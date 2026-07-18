@@ -578,13 +578,40 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 MFCreateSourceReaderFromMediaSource(pSource, pReaderConfig, &pReader);
                 pReaderConfig->Release();
                 IMFMediaType* pNativeType = NULL;
-                pReader->GetNativeMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &pNativeType);
+                IMFMediaType* pBestType = NULL;
+                DWORD typeIndex = 0;
+                UINT32 bestWidth = 0;
+                
+                while (SUCCEEDED(pReader->GetNativeMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, typeIndex, &pNativeType))) {
+                    UINT32 w = 0, h = 0;
+                    if (SUCCEEDED(MFGetAttributeSize(pNativeType, MF_MT_FRAME_SIZE, &w, &h)) && h > 0) {
+                        float ratio = (float)w / (float)h;
+                        float targetRatio = 16.0f / 9.0f;
+                        float diff = ratio - targetRatio;
+                        if (diff < 0) diff = -diff;
+                        
+                        if (diff < 0.1f) {
+                            if (w > bestWidth && w <= 1280) {
+                                bestWidth = w;
+                                if (pBestType) pBestType->Release();
+                                pBestType = pNativeType;
+                                pBestType->AddRef();
+                            }
+                        }
+                    }
+                    pNativeType->Release();
+                    typeIndex++;
+                }
+                
+                if (!pBestType) {
+                    pReader->GetNativeMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &pBestType);
+                }
                 
                 IMFMediaType* pType = NULL;
                 MFCreateMediaType(&pType);
-                if (pNativeType) {
-                    pNativeType->CopyAllItems(pType);
-                    pNativeType->Release();
+                if (pBestType) {
+                    pBestType->CopyAllItems(pType);
+                    pBestType->Release();
                 } else {
                     pType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
                 }
@@ -5077,9 +5104,9 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             if (!g_videoWindows[g_userId] || !IsWindow(g_videoWindows[g_userId])) {
                                 std::wstring titleName = g_username.substr(0, g_username.find(L'#'));
                                 int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
-                                CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(240), vidX, vidY);
+                                CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(180), vidX, vidY);
                                 HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(),
-                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_userId.c_str());
+                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, Scale(320), Scale(180), NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_userId.c_str());
                                 ApplyClassicStyle(hVid);
                                 g_videoWindows[g_userId] = hVid;
                             } else {
@@ -5123,9 +5150,9 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             if (g_userNames.count(clickedUser)) titleName = g_userNames[clickedUser];
                             titleName = titleName.substr(0, titleName.find(L'#'));
                             int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
-                            CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(240), vidX, vidY);
+                            CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(180), vidX, vidY);
                             HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(),
-                                WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, Scale(320), Scale(240), NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
+                                WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, Scale(320), Scale(180), NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
                             ApplyClassicStyle(hVid);
                             g_videoWindows[clickedUser] = hVid;
                         } else {
