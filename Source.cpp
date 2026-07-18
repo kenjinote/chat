@@ -22,6 +22,7 @@
 #include <cmath>
 #include <algorithm>
 #include "H264Helper.h"
+#include "WgcCaptureSession.h"
 bool g_useH264 = true;
 H264Encoder* g_pH264Encoder = nullptr;
 #include "json11.hpp"
@@ -46,6 +47,12 @@ H264Encoder* g_pH264Encoder = nullptr;
 #include <winrt/Windows.System.Profile.h>
 #include <winrt/Windows.Security.Cryptography.h>
 #include <winrt/Windows.Storage.Streams.h>
+#include <winrt/Windows.Graphics.Capture.h>
+#include <winrt/Windows.Graphics.DirectX.Direct3D11.h>
+#include <windows.graphics.capture.interop.h>
+#include <windows.graphics.directx.direct3d11.interop.h>
+#include <d3d11.h>
+#include <dxgi1_2.h>
 #pragma comment(lib, "windowsapp")
 
 #include "resource.h"
@@ -575,12 +582,17 @@ void ConvertRGB32ToNV12(const uint8_t* rgb32Data, int width, int height, std::ve
 }
 
 DWORD WINAPI WebcamThread(LPVOID lpParam) {
+    winrt::init_apartment();
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
     MFStartup(MF_VERSION);
     IMFSourceReader* pReader = NULL;
+    WgcCaptureSession wgcSession;
 
     while (g_isAppRunning) {
         if (!g_isWebcamActive || g_sock == INVALID_SOCKET) {
+            if (wgcSession.IsActive()) {
+                wgcSession.Stop();
+            }
             if (pReader) {
                 pReader->Release();
                 pReader = NULL;
@@ -688,30 +700,19 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
         // isScreenShare already evaluated above
         
         if (!isScreenShare) {
+            if (wgcSession.IsActive()) wgcSession.Stop();
             hr = pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &streamIndex, &flags, &timestamp, &pSample);
         } else {
-            // Screen Share Capture Logic
-            HDC hdcScreen = NULL;
-            HWND hwndTarget = NULL;
-            RECT rcTarget = {0};
-            if (g_captureSourceType == 2 && g_captureMonitor) {
-                MONITORINFO mi = { sizeof(mi) };
-                if (GetMonitorInfo(g_captureMonitor, &mi)) {
-                    rcTarget = mi.rcMonitor;
-                    hdcScreen = CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL);
-                }
-            } else if (g_captureSourceType == 3 && g_captureHwnd) {
-                hwndTarget = g_captureHwnd;
-                if (IsWindow(hwndTarget)) {
-                    GetWindowRect(hwndTarget, &rcTarget);
-                    hdcScreen = GetWindowDC(hwndTarget);
+            // Screen Share Capture Logic with WGC
+            if (!wgcSession.IsActive()) {
+                if (g_captureSourceType == 2 && g_captureMonitor) {
+                    wgcSession.StartForMonitor(g_captureMonitor);
+                } else if (g_captureSourceType == 3 && g_captureHwnd) {
+                    wgcSession.StartForWindow(g_captureHwnd);
                 }
             }
             
-            if (hdcScreen) {
-                width = rcTarget.right - rcTarget.left;
-                height = rcTarget.bottom - rcTarget.top;
-                
+            if (wgcSession.GetLatestFrame(rgb32Data, width, height)) {
                 // Downscale if too large to save bandwidth (max 1280x720 ish)
                 float scale = 1.0f;
                 if (width > 1280 || height > 720) {
@@ -720,47 +721,53 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 UINT32 scaledWidth = ((UINT32)(width * scale) + 15) & ~15; // Must be multiple of 16 for H.264
                 UINT32 scaledHeight = ((UINT32)(height * scale) + 15) & ~15; // Must be multiple of 16 for H.264
                 
-                if (scaledWidth > 0 && scaledHeight > 0) {
-                    HDC hdcMem = CreateCompatibleDC(hdcScreen);
-                    HBITMAP hBmp = CreateCompatibleBitmap(hdcScreen, scaledWidth, scaledHeight);
-                    HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hBmp);
-                    
-                    SetStretchBltMode(hdcMem, HALFTONE);
-                    if (g_captureSourceType == 3 && hwndTarget) {
-                        // For overlapping windows, PrintWindow is safer but we scale manually
-                        HDC hdcFull = CreateCompatibleDC(hdcScreen);
-                        HBITMAP hBmpFull = CreateCompatibleBitmap(hdcScreen, width, height);
-                        HBITMAP hOldBmpFull = (HBITMAP)SelectObject(hdcFull, hBmpFull);
-                        PrintWindow(hwndTarget, hdcFull, PW_RENDERFULLCONTENT);
-                        StretchBlt(hdcMem, 0, 0, scaledWidth, scaledHeight, hdcFull, 0, 0, width, height, SRCCOPY);
-                        SelectObject(hdcFull, hOldBmpFull);
-                        DeleteObject(hBmpFull);
-                        DeleteDC(hdcFull);
-                    } else {
-                        StretchBlt(hdcMem, 0, 0, scaledWidth, scaledHeight, hdcScreen, rcTarget.left, rcTarget.top, width, height, SRCCOPY);
-                    }
+                if (scaledWidth != width || scaledHeight != height) {
+                    HDC hdcMemSrc = CreateCompatibleDC(NULL);
+                    HDC hdcMemDst = CreateCompatibleDC(NULL);
                     
                     BITMAPINFOHEADER bmi = {0};
                     bmi.biSize = sizeof(BITMAPINFOHEADER);
-                    bmi.biWidth = scaledWidth;
-                    bmi.biHeight = -(LONG)scaledHeight; // top-down
+                    bmi.biWidth = width;
+                    bmi.biHeight = -(LONG)height; // top-down
                     bmi.biPlanes = 1;
                     bmi.biBitCount = 32;
                     bmi.biCompression = BI_RGB;
                     
-                    rgb32Data.resize(scaledWidth * scaledHeight * 4);
-                    GetDIBits(hdcMem, hBmp, 0, scaledHeight, rgb32Data.data(), (BITMAPINFO*)&bmi, DIB_RGB_COLORS);
+                    void* pBitsSrc;
+                    HBITMAP hBmpSrc = CreateDIBSection(hdcMemSrc, (BITMAPINFO*)&bmi, DIB_RGB_COLORS, &pBitsSrc, NULL, 0);
+                    memcpy(pBitsSrc, rgb32Data.data(), rgb32Data.size());
                     
-                    SelectObject(hdcMem, hOldBmp);
-                    DeleteObject(hBmp);
-                    DeleteDC(hdcMem);
+                    bmi.biWidth = scaledWidth;
+                    bmi.biHeight = -(LONG)scaledHeight;
+                    void* pBitsDst;
+                    HBITMAP hBmpDst = CreateDIBSection(hdcMemDst, (BITMAPINFO*)&bmi, DIB_RGB_COLORS, &pBitsDst, NULL, 0);
                     
+                    HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcMemSrc, hBmpSrc);
+                    HBITMAP hOldDst = (HBITMAP)SelectObject(hdcMemDst, hBmpDst);
+                    
+                    SetStretchBltMode(hdcMemDst, HALFTONE);
+                    StretchBlt(hdcMemDst, 0, 0, scaledWidth, scaledHeight, hdcMemSrc, 0, 0, width, height, SRCCOPY);
+                    
+                    rgb32Data.assign((uint8_t*)pBitsDst, (uint8_t*)pBitsDst + (scaledWidth * scaledHeight * 4));
                     width = scaledWidth;
                     height = scaledHeight;
-                    hr = S_OK;
+                    
+                    SelectObject(hdcMemSrc, hOldSrc);
+                    SelectObject(hdcMemDst, hOldDst);
+                    DeleteObject(hBmpSrc);
+                    DeleteObject(hBmpDst);
+                    DeleteDC(hdcMemSrc);
+                    DeleteDC(hdcMemDst);
                 }
-                if (g_captureSourceType == 2) DeleteDC(hdcScreen);
-                else ReleaseDC(hwndTarget, hdcScreen);
+                
+                // Swap R and B since WGC returns BGRA, but our RGB32->NV12 expects RGBA/BGRA correctly?
+                // Wait, ConvertRGB32ToNV12 expects BGRA?
+                // ConvertRGB32ToNV12:
+                // int r = (px >> 16) & 0xFF;
+                // int b = px & 0xFF;
+                // In little-endian, a uint32_t BGRA has B in the lowest byte, so px & 0xFF is B!
+                // So it expects BGRA! And WGC outputs BGRA. Perfect.
+                hr = S_OK;
             }
             Sleep(1000 / 15); // ~15 FPS pacing for screen share
         }
