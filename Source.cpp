@@ -585,11 +585,27 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 pReader->Release();
                 pReader = NULL;
             }
+            if (g_pH264Encoder) {
+                delete g_pH264Encoder;
+                g_pH264Encoder = nullptr;
+            }
+            {
+                std::lock_guard<std::mutex> lock(g_videoMutex);
+                g_videoPixelsMap[g_userId].clear();
+                g_videoPixelsMap[g_userId].shrink_to_fit();
+                g_videoSizeMap[g_userId] = {0, 0};
+            }
             Sleep(100);
             continue;
         }
 
-        if (!pReader) {
+        bool isScreenShare = (g_captureSourceType == 2 || g_captureSourceType == 3);
+        if (isScreenShare && pReader) {
+            pReader->Release();
+            pReader = NULL;
+        }
+
+        if (!isScreenShare && !pReader) {
             IMFMediaSource* pSource = NULL;
             IMFAttributes* pAttributes = NULL;
             MFCreateAttributes(&pAttributes, 1);
@@ -669,7 +685,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
         HRESULT hr = E_FAIL;
         std::vector<uint8_t> rgb32Data;
         UINT32 width = 0, height = 0;
-        bool isScreenShare = (g_captureSourceType == 2 || g_captureSourceType == 3);
+        // isScreenShare already evaluated above
         
         if (!isScreenShare) {
             hr = pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &streamIndex, &flags, &timestamp, &pSample);
@@ -4757,6 +4773,9 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             {
                 std::lock_guard<std::mutex> lock(g_videoMutex);
                 g_videoWindows[*pUser] = NULL;
+                g_videoPixelsMap.erase(*pUser);
+                g_videoBuffers.erase(*pUser);
+                g_h264Decoders.erase(*pUser);
             }
             delete pUser;
         }
