@@ -1026,7 +1026,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             if (pSample) pSample->Release();
             
             if (isScreenShare) {
-                Sleep(66);
+                Sleep(33);
             }
         } else {
             Sleep(10);
