@@ -25,9 +25,12 @@ public:
     }
 
     bool StartForWindow(HWND hwnd) {
-        // Validate hwnd before attempting to create a capture item.
-        if (!IsWindowCapturable(hwnd)) return false;
-        return Start(CreateItemForWindow(hwnd));
+        bool res = Start(CreateItemForWindow(hwnd));
+        if (res && IsWindow(hwnd)) {
+            // Force the window to repaint so DWM composes a new frame, triggering FrameArrived immediately
+            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_FRAME);
+        }
+        return res;
     }
 
     bool StartForMonitor(HMONITOR hmonitor) {
