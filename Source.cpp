@@ -197,10 +197,22 @@ bool g_lastInputFontI = false;
 #include <Rpc.h>
 #pragma comment(lib, "Rpcrt4.lib")
 
-// --- Video Globals ---
+// --- Video & Screen Share Globals ---
 IWICImagingFactory* g_pWICFactory = NULL;
 bool g_isMuted = false;
-bool g_isWebcamActive = false;
+bool g_isWebcamActive = false; // Kept for backwards compatibility (means any capture is active)
+int g_captureSourceType = 0; // 0=None, 1=Webcam, 2=Monitor, 3=Window
+HMONITOR g_captureMonitor = NULL;
+HWND g_captureHwnd = NULL;
+
+struct ShareTarget {
+    std::wstring name;
+    HMONITOR hMonitor;
+    HWND hWnd;
+    int id;
+};
+std::vector<ShareTarget> g_shareMonitors;
+std::vector<ShareTarget> g_shareWindows;
 
 struct UserDecoder {
     H264Decoder* pDecoder;
@@ -542,6 +554,26 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
     return true;
 }
 
+void ConvertRGB32ToNV12(const uint8_t* rgb32Data, int width, int height, std::vector<uint8_t>& nv12DataForEncoder) {
+    nv12DataForEncoder.resize(width * height * 1.5);
+    uint8_t* yPlane = nv12DataForEncoder.data();
+    uint8_t* uvPlane = nv12DataForEncoder.data() + width * height;
+    const uint32_t* src = (const uint32_t*)rgb32Data;
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            uint32_t px = src[y * width + x];
+            int r = (px >> 16) & 0xFF;
+            int g = (px >> 8) & 0xFF;
+            int b = px & 0xFF;
+            yPlane[y * width + x] = (uint8_t)max(0, min(255, ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16));
+            if ((y % 2 == 0) && (x % 2 == 0)) {
+                uvPlane[(y / 2) * width + x] = (uint8_t)max(0, min(255, ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128));
+                uvPlane[(y / 2) * width + x + 1] = (uint8_t)max(0, min(255, ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128));
+            }
+        }
+    }
+}
+
 DWORD WINAPI WebcamThread(LPVOID lpParam) {
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
     MFStartup(MF_VERSION);
@@ -634,8 +666,90 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
         IMFSample* pSample = NULL;
         DWORD streamIndex, flags;
         LONGLONG timestamp;
-        HRESULT hr = pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &streamIndex, &flags, &timestamp, &pSample);
-        if (SUCCEEDED(hr) && pSample) {
+        HRESULT hr = E_FAIL;
+        std::vector<uint8_t> rgb32Data;
+        UINT32 width = 0, height = 0;
+        bool isScreenShare = (g_captureSourceType == 2 || g_captureSourceType == 3);
+        
+        if (!isScreenShare) {
+            hr = pReader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &streamIndex, &flags, &timestamp, &pSample);
+        } else {
+            // Screen Share Capture Logic
+            HDC hdcScreen = NULL;
+            HWND hwndTarget = NULL;
+            RECT rcTarget = {0};
+            if (g_captureSourceType == 2 && g_captureMonitor) {
+                MONITORINFO mi = { sizeof(mi) };
+                if (GetMonitorInfo(g_captureMonitor, &mi)) {
+                    rcTarget = mi.rcMonitor;
+                    hdcScreen = CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL);
+                }
+            } else if (g_captureSourceType == 3 && g_captureHwnd) {
+                hwndTarget = g_captureHwnd;
+                if (IsWindow(hwndTarget)) {
+                    GetWindowRect(hwndTarget, &rcTarget);
+                    hdcScreen = GetWindowDC(hwndTarget);
+                }
+            }
+            
+            if (hdcScreen) {
+                width = rcTarget.right - rcTarget.left;
+                height = rcTarget.bottom - rcTarget.top;
+                
+                // Downscale if too large to save bandwidth (max 1280x720 ish)
+                float scale = 1.0f;
+                if (width > 1280 || height > 720) {
+                    scale = min(1280.0f / width, 720.0f / height);
+                }
+                UINT32 scaledWidth = (UINT32)(width * scale) & ~1; // Must be even
+                UINT32 scaledHeight = (UINT32)(height * scale) & ~1; // Must be even
+                
+                if (scaledWidth > 0 && scaledHeight > 0) {
+                    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+                    HBITMAP hBmp = CreateCompatibleBitmap(hdcScreen, scaledWidth, scaledHeight);
+                    HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hBmp);
+                    
+                    SetStretchBltMode(hdcMem, HALFTONE);
+                    if (g_captureSourceType == 3 && hwndTarget) {
+                        // For overlapping windows, PrintWindow is safer but we scale manually
+                        HDC hdcFull = CreateCompatibleDC(hdcScreen);
+                        HBITMAP hBmpFull = CreateCompatibleBitmap(hdcScreen, width, height);
+                        HBITMAP hOldBmpFull = (HBITMAP)SelectObject(hdcFull, hBmpFull);
+                        PrintWindow(hwndTarget, hdcFull, PW_RENDERFULLCONTENT);
+                        StretchBlt(hdcMem, 0, 0, scaledWidth, scaledHeight, hdcFull, 0, 0, width, height, SRCCOPY);
+                        SelectObject(hdcFull, hOldBmpFull);
+                        DeleteObject(hBmpFull);
+                        DeleteDC(hdcFull);
+                    } else {
+                        StretchBlt(hdcMem, 0, 0, scaledWidth, scaledHeight, hdcScreen, rcTarget.left, rcTarget.top, width, height, SRCCOPY);
+                    }
+                    
+                    BITMAPINFOHEADER bmi = {0};
+                    bmi.biSize = sizeof(BITMAPINFOHEADER);
+                    bmi.biWidth = scaledWidth;
+                    bmi.biHeight = -(LONG)scaledHeight; // top-down
+                    bmi.biPlanes = 1;
+                    bmi.biBitCount = 32;
+                    bmi.biCompression = BI_RGB;
+                    
+                    rgb32Data.resize(scaledWidth * scaledHeight * 4);
+                    GetDIBits(hdcMem, hBmp, 0, scaledHeight, rgb32Data.data(), (BITMAPINFO*)&bmi, DIB_RGB_COLORS);
+                    
+                    SelectObject(hdcMem, hOldBmp);
+                    DeleteObject(hBmp);
+                    DeleteDC(hdcMem);
+                    
+                    width = scaledWidth;
+                    height = scaledHeight;
+                    hr = S_OK;
+                }
+                if (g_captureSourceType == 2) DeleteDC(hdcScreen);
+                else ReleaseDC(hwndTarget, hdcScreen);
+            }
+            Sleep(1000 / 15); // ~15 FPS pacing for screen share
+        }
+
+        if ((!isScreenShare && SUCCEEDED(hr) && pSample) || (isScreenShare && SUCCEEDED(hr))) {
             static DWORD lastStreamStatusTime = 0;
             if (GetTickCount() - lastStreamStatusTime > 2000) {
                 lastStreamStatusTime = GetTickCount();
@@ -655,77 +769,75 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 sendto(g_sock, udpPkt, sizeof(MediaHeader), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
             }
 
-            IMFMediaBuffer* pBuffer = NULL;
-            if (SUCCEEDED(pSample->ConvertToContiguousBuffer(&pBuffer)) && pBuffer) {
-                BYTE* pData = NULL;
-                DWORD cbData = 0;
-                pBuffer->Lock(&pData, NULL, &cbData);
+            const uint8_t* pEncoderInput = nullptr;
+            DWORD cbEncoderInput = 0;
+            std::vector<uint8_t> nv12DataForEncoder;
 
-                IMFMediaType* pCurrentType = NULL;
-                pReader->GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, &pCurrentType);
-                UINT32 width = 0, height = 0;
-                MFGetAttributeSize(pCurrentType, MF_MT_FRAME_SIZE, &width, &height);
-                GUID subtype = {0};
-                pCurrentType->GetGUID(MF_MT_SUBTYPE, &subtype);
-                LONG stride = width;
-                pCurrentType->GetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32*)&stride);
-                pCurrentType->Release();
+            if (isScreenShare) {
+                ConvertRGB32ToNV12(rgb32Data.data(), width, height, nv12DataForEncoder);
+                pEncoderInput = nv12DataForEncoder.data();
+                cbEncoderInput = (DWORD)nv12DataForEncoder.size();
+            } else {
+                IMFMediaBuffer* pBuffer = NULL;
+                if (SUCCEEDED(pSample->ConvertToContiguousBuffer(&pBuffer)) && pBuffer) {
+                    BYTE* pData = NULL;
+                    DWORD cbData = 0;
+                    pBuffer->Lock(&pData, NULL, &cbData);
 
-                bool h264Success = false;
-                
-                std::vector<uint8_t> rgb32Data(width * height * 4);
-                std::vector<uint8_t> nv12DataForEncoder;
-                const uint8_t* pEncoderInput = pData;
-                DWORD cbEncoderInput = cbData;
-                
-                if (subtype == MFVideoFormat_NV12) {
-                    // NV12 -> RGB32 for local preview
-                    const uint8_t* yPlane = pData;
-                    const uint8_t* uvPlane = pData + abs(stride) * height;
-                    uint32_t* dst = (uint32_t*)rgb32Data.data();
-                    for (UINT y = 0; y < height; y++) {
-                        const uint8_t* uvRow = uvPlane + (y / 2) * abs(stride);
-                        for (UINT x = 0; x < width; x++) {
-                            int yVal = yPlane[y * abs(stride) + x] - 16;
-                            int uVal = uvRow[(x & ~1)] - 128;
-                            int vVal = uvRow[(x & ~1) + 1] - 128;
-                            
-                            int r = (298 * yVal + 409 * vVal + 128) >> 8;
-                            int g = (298 * yVal - 100 * uVal - 208 * vVal + 128) >> 8;
-                            int b = (298 * yVal + 516 * uVal + 128) >> 8;
-                            
-                            r = max(0, min(255, r));
-                            g = max(0, min(255, g));
-                            b = max(0, min(255, b));
-                            
-                            dst[y * width + x] = (255 << 24) | (r << 16) | (g << 8) | b;
-                        }
-                    }
-                } else {
-                    // Fallback (e.g. RGB32)
-                    memcpy(rgb32Data.data(), pData, min(cbData, (DWORD)rgb32Data.size()));
+                    IMFMediaType* pCurrentType = NULL;
+                    pReader->GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, &pCurrentType);
+                    UINT32 w = 0, h = 0;
+                    MFGetAttributeSize(pCurrentType, MF_MT_FRAME_SIZE, &w, &h);
+                    GUID subtype = {0};
+                    pCurrentType->GetGUID(MF_MT_SUBTYPE, &subtype);
+                    LONG stride = w;
+                    pCurrentType->GetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32*)&stride);
+                    pCurrentType->Release();
                     
-                    // Convert TOP-DOWN RGB32 to TOP-DOWN NV12 for H.264 Encoder
-                    nv12DataForEncoder.resize(width * height * 1.5);
-                    uint8_t* yPlane = nv12DataForEncoder.data();
-                    uint8_t* uvPlane = nv12DataForEncoder.data() + width * height;
-                    const uint32_t* src = (const uint32_t*)rgb32Data.data();
-                    for (UINT y = 0; y < height; y++) {
-                        for (UINT x = 0; x < width; x++) {
-                            uint32_t px = src[y * width + x];
-                            int r = (px >> 16) & 0xFF;
-                            int g = (px >> 8) & 0xFF;
-                            int b = px & 0xFF;
-                            yPlane[y * width + x] = (uint8_t)max(0, min(255, ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16));
-                            if ((y % 2 == 0) && (x % 2 == 0)) {
-                                uvPlane[(y / 2) * width + x] = (uint8_t)max(0, min(255, ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128));
-                                uvPlane[(y / 2) * width + x + 1] = (uint8_t)max(0, min(255, ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128));
+                    rgb32Data.resize(w * h * 4);
+                    
+                    if (subtype == MFVideoFormat_NV12) {
+                        // NV12 -> RGB32 for local preview
+                        const uint8_t* yPlane = pData;
+                        const uint8_t* uvPlane = pData + abs(stride) * h;
+                        uint32_t* dst = (uint32_t*)rgb32Data.data();
+                        for (UINT y = 0; y < h; y++) {
+                            const uint8_t* uvRow = uvPlane + (y / 2) * abs(stride);
+                            for (UINT x = 0; x < w; x++) {
+                                int yVal = yPlane[y * abs(stride) + x] - 16;
+                                int uVal = uvRow[(x & ~1)] - 128;
+                                int vVal = uvRow[(x & ~1) + 1] - 128;
+                                
+                                int r = (298 * yVal + 409 * vVal + 128) >> 8;
+                                int g = (298 * yVal - 100 * uVal - 208 * vVal + 128) >> 8;
+                                int b = (298 * yVal + 516 * uVal + 128) >> 8;
+                                
+                                r = max(0, min(255, r));
+                                g = max(0, min(255, g));
+                                b = max(0, min(255, b));
+                                
+                                dst[y * w + x] = (255 << 24) | (r << 16) | (g << 8) | b;
                             }
                         }
+                        pEncoderInput = pData;
+                        cbEncoderInput = cbData;
+                    } else {
+                        // Fallback (e.g. RGB32)
+                        memcpy(rgb32Data.data(), pData, min(cbData, (DWORD)rgb32Data.size()));
+                        ConvertRGB32ToNV12(rgb32Data.data(), w, h, nv12DataForEncoder);
+                        pEncoderInput = nv12DataForEncoder.data();
+                        cbEncoderInput = (DWORD)nv12DataForEncoder.size();
                     }
-                    pEncoderInput = nv12DataForEncoder.data();
-                    cbEncoderInput = (DWORD)nv12DataForEncoder.size();
+                    width = w;
+                    height = h;
+                    pBuffer->Unlock();
+                    pBuffer->Release();
                 }
+            }
+
+            bool h264Success = false;
+            
+            if (pEncoderInput) {
 
                 if (g_useH264) {
                     if (!g_pH264Encoder) {
@@ -866,11 +978,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 auto it = g_videoWindows.find(g_userId);
                 if (it != g_videoWindows.end()) hView = it->second;
                 if (hView && IsWindow(hView)) InvalidateRect(hView, NULL, FALSE);
-                
-                pBuffer->Unlock();
-                pBuffer->Release();
             }
-            pSample->Release();
+            if (pSample) pSample->Release();
         } else {
             Sleep(10);
         }
@@ -5086,6 +5195,91 @@ void CalculateVideoWindowPosition(HWND hMainWnd, int width, int height, int& out
     outY = targetVisY - margin.top;
 }
 
+std::wstring GetMonitorFriendlyName(HMONITOR hMonitor, const std::wstring& fallbackGdiName) {
+    UINT32 pathCount, modeCount;
+    if (GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) == ERROR_SUCCESS) {
+        std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+        std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+        if (QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(), &modeCount, modes.data(), NULL) == ERROR_SUCCESS) {
+            for (UINT32 i = 0; i < pathCount; i++) {
+                DISPLAYCONFIG_SOURCE_DEVICE_NAME sourceName = {};
+                sourceName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+                sourceName.header.size = sizeof(sourceName);
+                sourceName.header.adapterId = paths[i].sourceInfo.adapterId;
+                sourceName.header.id = paths[i].sourceInfo.id;
+                
+                if (DisplayConfigGetDeviceInfo(&sourceName.header) == ERROR_SUCCESS) {
+                    if (fallbackGdiName == sourceName.viewGdiDeviceName) {
+                        DISPLAYCONFIG_TARGET_DEVICE_NAME targetName = {};
+                        targetName.header.type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
+                        targetName.header.size = sizeof(targetName);
+                        targetName.header.adapterId = paths[i].targetInfo.adapterId;
+                        targetName.header.id = paths[i].targetInfo.id;
+                        
+                        if (DisplayConfigGetDeviceInfo(&targetName.header) == ERROR_SUCCESS) {
+                            if (targetName.monitorFriendlyDeviceName[0] != L'\0') {
+                                return targetName.monitorFriendlyDeviceName;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Fallback to EnumDisplayDevices
+    DISPLAY_DEVICEW dd = { sizeof(dd) };
+    if (EnumDisplayDevicesW(fallbackGdiName.c_str(), 0, &dd, 0)) {
+        return dd.DeviceString;
+    }
+    return fallbackGdiName;
+}
+
+BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
+    MONITORINFOEXW mi = { sizeof(mi) };
+    if (GetMonitorInfoW(hMonitor, (MONITORINFO*)&mi)) {
+        std::wstring friendlyName = GetMonitorFriendlyName(hMonitor, mi.szDevice);
+        
+        int w = mi.rcMonitor.right - mi.rcMonitor.left;
+        int h = mi.rcMonitor.bottom - mi.rcMonitor.top;
+        
+        wchar_t buf[256];
+        swprintf_s(buf, L"ディスプレイ全体(%s,%dx%d)", friendlyName.c_str(), w, h);
+
+        ShareTarget st;
+        st.hMonitor = hMonitor;
+        st.hWnd = NULL;
+        st.name = buf;
+        st.id = 10000 + (int)g_shareMonitors.size();
+        g_shareMonitors.push_back(st);
+    }
+    return TRUE;
+}
+
+BOOL CALLBACK WindowEnumProc(HWND hwnd, LPARAM lParam) {
+    if (IsWindowVisible(hwnd)) {
+        DWORD styles = GetWindowLong(hwnd, GWL_STYLE);
+        DWORD exStyles = GetWindowLong(hwnd, GWL_EXSTYLE);
+        if ((exStyles & WS_EX_TOOLWINDOW) == 0 && (styles & WS_CHILD) == 0) {
+            int len = GetWindowTextLengthW(hwnd);
+            if (len > 0) {
+                std::vector<WCHAR> buf(len + 1, 0);
+                GetWindowTextW(hwnd, buf.data(), len + 1);
+                std::wstring title = buf.data();
+                if (title != L"Program Manager" && title != L"Settings") {
+                    ShareTarget st;
+                    st.hMonitor = NULL;
+                    st.hWnd = hwnd;
+                    st.name = title;
+                    st.id = 20000 + (int)g_shareWindows.size();
+                    g_shareWindows.push_back(st);
+                }
+            }
+        }
+    }
+    return TRUE;
+}
+
 WNDPROC g_oldListProc = NULL;
 LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_RBUTTONDOWN) {
@@ -5101,15 +5295,33 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 
                 if (clickedUser == g_userId) {
                     HMENU hMenu = CreatePopupMenu();
-                    AppendMenuW(hMenu, MF_STRING | (g_isWebcamActive ? MF_CHECKED : MF_UNCHECKED), 1, GetString(IDS_VIDEO_STREAM).c_str());
+                    AppendMenuW(hMenu, MF_STRING | ((g_isWebcamActive && g_captureSourceType == 1) ? MF_CHECKED : MF_UNCHECKED), 1, GetString(IDS_VIDEO_STREAM).c_str());
+                    
+                    HMENU hShareMenu = CreatePopupMenu();
+                    g_shareMonitors.clear();
+                    EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, 0);
+                    for (const auto& m : g_shareMonitors) {
+                        AppendMenuW(hShareMenu, MF_STRING | ((g_isWebcamActive && g_captureSourceType == 2 && g_captureMonitor == m.hMonitor) ? MF_CHECKED : MF_UNCHECKED), m.id, m.name.c_str());
+                    }
+                    AppendMenuW(hShareMenu, MF_SEPARATOR, 0, NULL);
+                    g_shareWindows.clear();
+                    EnumWindows(WindowEnumProc, 0);
+                    int winCount = 0;
+                    for (const auto& w : g_shareWindows) {
+                        AppendMenuW(hShareMenu, MF_STRING | ((g_isWebcamActive && g_captureSourceType == 3 && g_captureHwnd == w.hWnd) ? MF_CHECKED : MF_UNCHECKED), w.id, w.name.c_str());
+                        if (++winCount >= 50) break; // Limit to 50 windows to avoid massive menus
+                    }
+                    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hShareMenu, L"画面共有");
+                    
                     AppendMenuW(hMenu, MF_STRING, 3, GetString(IDS_CHANGE_NAME_TITLE).c_str()); 
 
                     ClientToScreen(hwnd, &pt);
                     int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
                     DestroyMenu(hMenu);
                     if (cmd == 1) {
-                        if (g_isWebcamActive) {
+                        if (g_isWebcamActive && g_captureSourceType == 1) {
                             g_isWebcamActive = false;
+                            g_captureSourceType = 0;
                             if (g_videoWindows[g_userId] && IsWindow(g_videoWindows[g_userId])) {
                                 DestroyWindow(g_videoWindows[g_userId]);
                             }
@@ -5129,7 +5341,68 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             } else {
                                 SetForegroundWindow(g_videoWindows[g_userId]);
                             }
+                            g_captureSourceType = 1;
                             g_isWebcamActive = true;
+                        }
+                        InvalidateRect(hwnd, NULL, FALSE);
+                    } else if (cmd >= 10000 && cmd < 20000) {
+                        // Monitor selected
+                        for (const auto& m : g_shareMonitors) {
+                            if (m.id == cmd) {
+                                if (g_isWebcamActive && g_captureSourceType == 2 && g_captureMonitor == m.hMonitor) {
+                                    g_isWebcamActive = false;
+                                    g_captureSourceType = 0;
+                                    if (g_videoWindows[g_userId] && IsWindow(g_videoWindows[g_userId])) DestroyWindow(g_videoWindows[g_userId]);
+                                } else {
+                                    g_captureMonitor = m.hMonitor;
+                                    g_captureSourceType = 2;
+                                    if (!g_videoWindows[g_userId] || !IsWindow(g_videoWindows[g_userId])) {
+                                        std::wstring titleName = g_username.substr(0, g_username.find(L'#')) + L" (Screen)";
+                                        int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
+                                        CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(180), vidX, vidY);
+                                        RECT rcTarget = { 0, 0, Scale(320), Scale(180) };
+                                        AdjustWindowRectEx(&rcTarget, WS_OVERLAPPEDWINDOW, FALSE, 0);
+                                        HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(), WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, rcTarget.right - rcTarget.left, rcTarget.bottom - rcTarget.top, NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_userId.c_str());
+                                        ApplyClassicStyle(hVid);
+                                        g_videoWindows[g_userId] = hVid;
+                                    } else {
+                                        SetWindowTextW(g_videoWindows[g_userId], (g_username.substr(0, g_username.find(L'#')) + L" (Screen)").c_str());
+                                        SetForegroundWindow(g_videoWindows[g_userId]);
+                                    }
+                                    g_isWebcamActive = true;
+                                }
+                                break;
+                            }
+                        }
+                        InvalidateRect(hwnd, NULL, FALSE);
+                    } else if (cmd >= 20000) {
+                        // Window selected
+                        for (const auto& w : g_shareWindows) {
+                            if (w.id == cmd) {
+                                if (g_isWebcamActive && g_captureSourceType == 3 && g_captureHwnd == w.hWnd) {
+                                    g_isWebcamActive = false;
+                                    g_captureSourceType = 0;
+                                    if (g_videoWindows[g_userId] && IsWindow(g_videoWindows[g_userId])) DestroyWindow(g_videoWindows[g_userId]);
+                                } else {
+                                    g_captureHwnd = w.hWnd;
+                                    g_captureSourceType = 3;
+                                    if (!g_videoWindows[g_userId] || !IsWindow(g_videoWindows[g_userId])) {
+                                        std::wstring titleName = g_username.substr(0, g_username.find(L'#')) + L" (Window)";
+                                        int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
+                                        CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(180), vidX, vidY);
+                                        RECT rcTarget = { 0, 0, Scale(320), Scale(180) };
+                                        AdjustWindowRectEx(&rcTarget, WS_OVERLAPPEDWINDOW, FALSE, 0);
+                                        HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(), WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, rcTarget.right - rcTarget.left, rcTarget.bottom - rcTarget.top, NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_userId.c_str());
+                                        ApplyClassicStyle(hVid);
+                                        g_videoWindows[g_userId] = hVid;
+                                    } else {
+                                        SetWindowTextW(g_videoWindows[g_userId], (g_username.substr(0, g_username.find(L'#')) + L" (Window)").c_str());
+                                        SetForegroundWindow(g_videoWindows[g_userId]);
+                                    }
+                                    g_isWebcamActive = true;
+                                }
+                                break;
+                            }
                         }
                         InvalidateRect(hwnd, NULL, FALSE);
                     } else if (cmd == 3) {
