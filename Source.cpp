@@ -11,6 +11,7 @@
 #include <d2d1.h>
 #include <dwrite.h>
 #include <imm.h>
+#include <mmsystem.h>
 #include <gdiplus.h>
 #pragma comment(lib, "gdiplus.lib")
 #include <uxtheme.h>
@@ -719,6 +720,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             LARGE_INTEGER freq;
                             QueryPerformanceFrequency(&freq);
                             long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay
+                            LARGE_INTEGER loop_start;
+                            QueryPerformanceCounter(&loop_start);
                             
                             for (int i = 0; i < totalFragments; i++) {
                                 int offset = i * MAX_PAYLOAD;
@@ -749,11 +752,17 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                                 DWORD bytesSent = 0;
                                 WSASendTo(g_sock, buffers, 2, &bytesSent, 0, (sockaddr*)&serverUdp, sizeof(serverUdp), NULL, NULL);
                                 
-                                LARGE_INTEGER start, current;
-                                QueryPerformanceCounter(&start);
-                                do {
+                                long long target_count = loop_start.QuadPart + (i + 1) * delay_counts;
+                                LARGE_INTEGER current;
+                                while (true) {
                                     QueryPerformanceCounter(&current);
-                                } while (current.QuadPart - start.QuadPart < delay_counts);
+                                    long long remaining = target_count - current.QuadPart;
+                                    if (remaining > (freq.QuadPart / 1000) * 2) {
+                                        Sleep(1);
+                                    } else {
+                                        break;
+                                    }
+                                }
                             }
                             // Swap logic moved to end of frame
                         }
@@ -768,6 +777,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         LARGE_INTEGER freq;
                         QueryPerformanceFrequency(&freq);
                         long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay
+                        LARGE_INTEGER loop_start;
+                        QueryPerformanceCounter(&loop_start);
 
                         for (int i = 0; i < totalFragments; i++) {
                             int offset = i * MAX_PAYLOAD;
@@ -800,11 +811,17 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             int sent = (int)bytesSent;
                             LogToFile("UDP Sending Video Fragment, len=" + std::to_string(len) + ", sent=" + std::to_string(sent));
 
-                            LARGE_INTEGER start, current;
-                            QueryPerformanceCounter(&start);
-                            do {
+                            long long target_count = loop_start.QuadPart + (i + 1) * delay_counts;
+                            LARGE_INTEGER current;
+                            while (true) {
                                 QueryPerformanceCounter(&current);
-                            } while (current.QuadPart - start.QuadPart < delay_counts);
+                                long long remaining = target_count - current.QuadPart;
+                                if (remaining > (freq.QuadPart / 1000) * 2) {
+                                    Sleep(1);
+                                } else {
+                                    break;
+                                }
+                            }
                         }
                         // Swap logic moved to end of frame
                     }
@@ -6599,6 +6616,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
+    timeBeginPeriod(1);
     winrt::init_apartment(winrt::apartment_type::single_threaded);
     InitHardwareAcceleration();
     SetThreadUILanguage(0);
@@ -6658,5 +6676,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     
     CleanupHardwareAcceleration();
     Gdiplus::GdiplusShutdown(gdiplusToken);
+    timeEndPeriod(1);
     return (int)msg.wParam;
 }
