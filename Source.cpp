@@ -675,11 +675,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     }
                 } else {
                     // Fallback (e.g. RGB32)
-                    // MFVideoFormat_RGB32 is bottom-up by default. We must flip it to top-down 
-                    // so that Local Preview is correct, and the resulting H.264 stream is standard.
-                    for (UINT y = 0; y < height; y++) {
-                        memcpy(rgb32Data.data() + y * width * 4, pData + (height - 1 - y) * width * 4, width * 4);
-                    }
+                    memcpy(rgb32Data.data(), pData, min(cbData, (DWORD)rgb32Data.size()));
                     
                     // Convert TOP-DOWN RGB32 to TOP-DOWN NV12 for H.264 Encoder
                     nv12DataForEncoder.resize(width * height * 1.5);
