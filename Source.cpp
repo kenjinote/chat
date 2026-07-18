@@ -755,19 +755,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                                     QueryPerformanceCounter(&current);
                                 } while (current.QuadPart - start.QuadPart < delay_counts);
                             }
-                            
-                            std::vector<uint8_t> localPixels = rgb32Data;
-                            {
-                                std::lock_guard<std::mutex> lock(g_videoMutex);
-                                g_videoPixelsMap[g_userId] = std::move(localPixels);
-                                g_videoSizeMap[g_userId] = { width, height };
-                                g_videoIsSWMap[g_userId] = !IsHardwareAccelerationEnabled();
-                                g_videoIsH264Map[g_userId] = true;
-                            }
-                            HWND hView = NULL;
-                            auto it = g_videoWindows.find(g_userId);
-                            if (it != g_videoWindows.end()) hView = it->second;
-                            if (hView && IsWindow(hView)) InvalidateRect(hView, NULL, FALSE);
+                            // Swap logic moved to end of frame
                         }
                     }
                 }
@@ -818,21 +806,22 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                                 QueryPerformanceCounter(&current);
                             } while (current.QuadPart - start.QuadPart < delay_counts);
                         }
-                        
-                        std::vector<uint8_t> localPixels = rgb32Data;
-                        {
-                            std::lock_guard<std::mutex> lock(g_videoMutex);
-                            g_videoPixelsMap[g_userId] = std::move(localPixels);
-                            g_videoSizeMap[g_userId] = { width, height };
-                            g_videoIsSWMap[g_userId] = true;
-                            g_videoIsH264Map[g_userId] = false;
-                        }
-                        HWND hView = NULL;
-                        auto it = g_videoWindows.find(g_userId);
-                        if (it != g_videoWindows.end()) hView = it->second;
-                        if (hView && IsWindow(hView)) InvalidateRect(hView, NULL, FALSE);
+                        // Swap logic moved to end of frame
                     }
                 }
+                
+                {
+                    std::lock_guard<std::mutex> lock(g_videoMutex);
+                    g_videoPixelsMap[g_userId].swap(rgb32Data);
+                    g_videoSizeMap[g_userId] = { width, height };
+                    g_videoIsSWMap[g_userId] = !h264Success ? true : !IsHardwareAccelerationEnabled();
+                    g_videoIsH264Map[g_userId] = h264Success;
+                }
+                HWND hView = NULL;
+                auto it = g_videoWindows.find(g_userId);
+                if (it != g_videoWindows.end()) hView = it->second;
+                if (hView && IsWindow(hView)) InvalidateRect(hView, NULL, FALSE);
+                
                 pBuffer->Unlock();
                 pBuffer->Release();
             }
