@@ -34,6 +34,8 @@ public:
     ~H264Encoder();
     bool Initialize(UINT32 width, UINT32 height);
     bool EncodeFrame(const BYTE* pRgb32Data, DWORD cbData, std::vector<uint8_t>& outH264);
+private:
+    bool InitializeInternal(UINT32 width, UINT32 height, bool useHW);
 };
 
 class H264Decoder {
@@ -47,4 +49,6 @@ public:
     ~H264Decoder();
     bool Initialize(UINT32 width, UINT32 height);
     bool DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<uint8_t>& outRgb32);
+private:
+    bool InitializeInternal(UINT32 width, UINT32 height, bool useHW);
 };

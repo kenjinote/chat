@@ -57,7 +57,15 @@ H264Encoder::~H264Encoder() {
 }
 
 bool H264Encoder::Initialize(UINT32 width, UINT32 height) {
-    Log("H264Encoder::Initialize");
+    if (g_pDXGIManager) {
+        if (InitializeInternal(width, height, true)) return true;
+        Log("H264Encoder hardware init failed, falling back to software");
+    }
+    return InitializeInternal(width, height, false);
+}
+
+bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
+    Log("H264Encoder::InitializeInternal");
     if (pEncoder) pEncoder->Release();
     if (pConverter) pConverter->Release();
     pEncoder = NULL;
@@ -69,7 +77,7 @@ bool H264Encoder::Initialize(UINT32 width, UINT32 height) {
     HRESULT hr = CoCreateInstance(CLSID_CMSH264EncoderMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pEncoder));
     if (FAILED(hr)) return false;
 
-    if (g_pDXGIManager) {
+    if (useHW && g_pDXGIManager) {
         pEncoder->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)g_pDXGIManager);
     }
 
@@ -129,7 +137,7 @@ bool H264Encoder::Initialize(UINT32 width, UINT32 height) {
     hr = CoCreateInstance(CLSID_VideoProcessorMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pConverter));
     if (FAILED(hr)) return false;
 
-    if (g_pDXGIManager) {
+    if (useHW && g_pDXGIManager) {
         pConverter->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)g_pDXGIManager);
     }
 
@@ -299,7 +307,15 @@ H264Decoder::~H264Decoder() {
 }
 
 bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
-    Log("H264Decoder::Initialize");
+    if (g_pDXGIManager) {
+        if (InitializeInternal(width, height, true)) return true;
+        Log("H264Decoder hardware init failed, falling back to software");
+    }
+    return InitializeInternal(width, height, false);
+}
+
+bool H264Decoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
+    Log("H264Decoder::InitializeInternal");
     if (pDecoder) pDecoder->Release();
     if (pConverter) pConverter->Release();
     pDecoder = NULL;
@@ -311,7 +327,7 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
     HRESULT hr = CoCreateInstance(CLSID_CMSH264DecoderMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pDecoder));
     if (FAILED(hr)) return false;
 
-    if (g_pDXGIManager) {
+    if (useHW && g_pDXGIManager) {
         pDecoder->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)g_pDXGIManager);
     }
 
@@ -332,7 +348,7 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
         var.boolVal = VARIANT_TRUE;
         pDecCodecAPI->SetValue(&CODECAPI_AVLowLatencyMode, &var);
         
-        if (!g_pDXGIManager) {
+        if (!useHW || !g_pDXGIManager) {
             var.boolVal = VARIANT_FALSE;
             pDecCodecAPI->SetValue(&CODECAPI_AVDecVideoAcceleration_H264, &var);
         }
@@ -353,7 +369,7 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
     hr = CoCreateInstance(CLSID_VideoProcessorMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pConverter));
     if (FAILED(hr)) return false;
 
-    if (g_pDXGIManager) {
+    if (useHW && g_pDXGIManager) {
         pConverter->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)g_pDXGIManager);
     }
 
