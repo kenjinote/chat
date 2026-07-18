@@ -4694,28 +4694,7 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                         float offsetX = (wW - drawW) / 2.0f;
                         float offsetY = (wH - drawH) / 2.0f;
                         
-                        bool receiverHW = false;
-                        {
-                            std::lock_guard<std::mutex> lock(g_decoderMutex);
-                            auto it = g_h264Decoders.find(*pUser);
-                            if (it != g_h264Decoders.end() && it->second->pDecoder) {
-                                receiverHW = it->second->pDecoder->IsHardware();
-                            }
-                        }
-                        
-                        if (receiverHW) {
-                            D2D1_MATRIX_3X2_F oldTransform;
-                            pRT->GetTransform(&oldTransform);
-                            D2D1_MATRIX_3X2_F flipTransform = D2D1::Matrix3x2F::Scale(
-                                1.0f, -1.0f,
-                                D2D1::Point2F(offsetX + drawW / 2.0f, offsetY + drawH / 2.0f)
-                            );
-                            pRT->SetTransform(flipTransform * oldTransform);
-                            pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
-                            pRT->SetTransform(oldTransform);
-                        } else {
-                            pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
-                        }
+                        pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
                         
                         std::wstring formatText = L"H.264";
                         {

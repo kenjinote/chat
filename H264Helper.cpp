@@ -321,6 +321,7 @@ bool H264Decoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
     pConvOutputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
     pConvOutputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
     MFSetAttributeSize(pConvOutputType, MF_MT_FRAME_SIZE, width, height);
+    pConvOutputType->SetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32)(-(LONG)(width * 4))); // Force top-down RGB32
     hr = pConverter->SetOutputType(0, pConvOutputType, 0);
     pConvOutputType->Release();
     if (FAILED(hr)) return false;
