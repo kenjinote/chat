@@ -73,6 +73,7 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
     m_width = width;
     m_height = height;
     m_rtStart = 0;
+    m_useHW = useHW;
 
     HRESULT hr = CoCreateInstance(CLSID_CMSH264EncoderMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pEncoder));
     if (FAILED(hr)) return false;
@@ -193,7 +194,15 @@ bool H264Encoder::EncodeFrame(const BYTE* pRgb32Data, DWORD cbData, std::vector<
     
     HRESULT hr = pConverter->ProcessInput(0, pSample, 0);
     pSample->Release();
-    if (FAILED(hr)) { return false; }
+    if (FAILED(hr)) {
+        if (m_useHW) {
+            Log("H264Encoder EncodeFrame HW failed, falling back to SW dynamically");
+            if (InitializeInternal(m_width, m_height, false)) {
+                return EncodeFrame(pRgb32Data, cbData, outH264);
+            }
+        }
+        return false;
+    }
 
     while (true) {
         MFT_OUTPUT_DATA_BUFFER convOutput = {0};
@@ -207,7 +216,9 @@ bool H264Encoder::EncodeFrame(const BYTE* pRgb32Data, DWORD cbData, std::vector<
         IMFMediaBuffer* pConvBuffer = NULL;
         if (!convProvides) {
             MFCreateSample(&pConvSample);
-            MFCreateMemoryBuffer(m_width * m_height * 2, &pConvBuffer); // NV12
+            DWORD cbSize = convInfo.cbSize > 0 ? convInfo.cbSize : (m_width * m_height * 2);
+            DWORD cbAlignment = convInfo.cbAlignment > 0 ? convInfo.cbAlignment : MF_16_BYTE_ALIGNMENT;
+            MFCreateAlignedMemoryBuffer(cbSize, cbAlignment, &pConvBuffer);
             pConvSample->AddBuffer(pConvBuffer);
             pConvBuffer->Release();
             convOutput.pSample = pConvSample;
@@ -244,7 +255,9 @@ bool H264Encoder::EncodeFrame(const BYTE* pRgb32Data, DWORD cbData, std::vector<
                     IMFMediaBuffer* pEncBuffer = NULL;
                     if (!encProvides) {
                         MFCreateSample(&pEncSample);
-                        MFCreateMemoryBuffer(m_width * m_height * 4, &pEncBuffer); // H264
+                        DWORD cbSize = encInfo.cbSize > 0 ? encInfo.cbSize : (m_width * m_height * 4);
+                        DWORD cbAlignment = encInfo.cbAlignment > 0 ? encInfo.cbAlignment : MF_16_BYTE_ALIGNMENT;
+                        MFCreateAlignedMemoryBuffer(cbSize, cbAlignment, &pEncBuffer);
                         pEncSample->AddBuffer(pEncBuffer);
                         pEncBuffer->Release();
                         encOutput.pSample = pEncSample;
@@ -323,6 +336,7 @@ bool H264Decoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
     m_width = width;
     m_height = height;
     m_rtStart = 0;
+    m_useHW = useHW;
 
     HRESULT hr = CoCreateInstance(CLSID_CMSH264DecoderMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pDecoder));
     if (FAILED(hr)) return false;
@@ -426,8 +440,16 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
     
     HRESULT hr = pDecoder->ProcessInput(0, pSample, 0);
     pSample->Release();
-    
-    if (FAILED(hr)) Log("Dec ProcessInput FAILED hr=" + std::to_string(hr));
+    if (FAILED(hr)) {
+        if (m_useHW) {
+            Log("H264Decoder DecodeFrame HW failed, falling back to SW dynamically");
+            if (InitializeInternal(m_width, m_height, false)) {
+                return DecodeFrame(inH264, outRgb32);
+            }
+        }
+        Log("Dec ProcessInput FAILED hr=" + std::to_string(hr));
+        return false;
+    }
     
     outRgb32.clear();
     

@@ -29,6 +29,7 @@ class H264Encoder {
     UINT32 m_width = 0;
     UINT32 m_height = 0;
     LONGLONG m_rtStart = 0;
+    bool m_useHW = false;
 public:
     H264Encoder();
     ~H264Encoder();
@@ -44,6 +45,7 @@ class H264Decoder {
     UINT32 m_width = 0;
     UINT32 m_height = 0;
     LONGLONG m_rtStart = 0;
+    bool m_useHW = false;
 public:
     H264Decoder();
     ~H264Decoder();
