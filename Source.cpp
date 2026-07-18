@@ -4639,8 +4639,8 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                             if (pBrush && pShadowBrush) {
                                 D2D1_TEXT_ANTIALIAS_MODE oldMode = pRT->GetTextAntialiasMode();
                                 pRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_ALIASED);
-                                pRT->DrawTextW(formatText.c_str(), (UINT32)formatText.length(), g_pVideoSWTextFormat, D2D1::RectF(0, 0, (float)rc.right - 1.0f, (float)rc.bottom - 1.0f), pShadowBrush);
-                                pRT->DrawTextW(formatText.c_str(), (UINT32)formatText.length(), g_pVideoSWTextFormat, D2D1::RectF(0, 0, (float)rc.right - 2.0f, (float)rc.bottom - 2.0f), pBrush);
+                                pRT->DrawTextW(formatText.c_str(), (UINT32)formatText.length(), g_pVideoSWTextFormat, D2D1::RectF(0, 0, wW - 1.0f, wH - 1.0f), pShadowBrush);
+                                pRT->DrawTextW(formatText.c_str(), (UINT32)formatText.length(), g_pVideoSWTextFormat, D2D1::RectF(0, 0, wW - 2.0f, wH - 2.0f), pBrush);
                                 pRT->SetTextAntialiasMode(oldMode);
                             }
                             if (pBrush) pBrush->Release();
