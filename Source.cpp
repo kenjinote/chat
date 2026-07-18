@@ -717,8 +717,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 if (width > 1280 || height > 720) {
                     scale = min(1280.0f / width, 720.0f / height);
                 }
-                UINT32 scaledWidth = (UINT32)(width * scale) & ~1; // Must be even
-                UINT32 scaledHeight = (UINT32)(height * scale) & ~1; // Must be even
+                UINT32 scaledWidth = ((UINT32)(width * scale) + 15) & ~15; // Must be multiple of 16 for H.264
+                UINT32 scaledHeight = ((UINT32)(height * scale) + 15) & ~15; // Must be multiple of 16 for H.264
                 
                 if (scaledWidth > 0 && scaledHeight > 0) {
                     HDC hdcMem = CreateCompatibleDC(hdcScreen);
@@ -874,18 +874,18 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 }
                 
                 if (g_pH264Encoder) {
-                        std::vector<uint8_t> h264;
-                        if (g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264)) {
-                            h264Success = true;
-                            std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
-                            const int MAX_PAYLOAD = 1000;
-                            int totalFragments = (int)((h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
-                            g_videoSeq++;
-                            LARGE_INTEGER freq;
-                            QueryPerformanceFrequency(&freq);
-                            long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay
-                            LARGE_INTEGER loop_start;
-                            QueryPerformanceCounter(&loop_start);
+                    h264Success = true; // Never fallback to JPEG if H.264 is active
+                    std::vector<uint8_t> h264;
+                    if (g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264)) {
+                        std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
+                        const int MAX_PAYLOAD = 1000;
+                        int totalFragments = (int)((h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
+                        g_videoSeq++;
+                        LARGE_INTEGER freq;
+                        QueryPerformanceFrequency(&freq);
+                        long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay
+                        LARGE_INTEGER loop_start;
+                        QueryPerformanceCounter(&loop_start);
                             
                             for (int i = 0; i < totalFragments; i++) {
                                 int offset = i * MAX_PAYLOAD;
