@@ -51,6 +51,8 @@ public:
     bool Initialize(UINT32 width, UINT32 height);
     bool DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<uint8_t>& outRgb32);
     bool IsHardware() const { return m_useHW; }
+    UINT32 GetWidth() const { return m_width; }
+    UINT32 GetHeight() const { return m_height; }
 private:
     bool InitializeInternal(UINT32 width, UINT32 height, bool useHW);
 };

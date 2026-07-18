@@ -3901,7 +3901,7 @@ DWORD WINAPI DecodeTaskProc(LPVOID lpParam) {
         if (decodeSuccess) {
             std::lock_guard<std::mutex> lock(g_videoMutex);
             g_videoPixelsMap[data->username] = rgbOut;
-            g_videoSizeMap[data->username] = {640, 480};
+            g_videoSizeMap[data->username] = { (int)pUserDec->pDecoder->GetWidth(), (int)pUserDec->pDecoder->GetHeight() };
             HWND hView = NULL;
             auto it = g_videoWindows.find(data->username);
             if (it != g_videoWindows.end()) hView = it->second;

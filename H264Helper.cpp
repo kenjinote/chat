@@ -407,6 +407,18 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
             if (SUCCEEDED(pDecoder->GetOutputAvailableType(0, 0, &pNewType))) {
                 pDecoder->SetOutputType(0, pNewType, 0);
                 pConverter->SetInputType(0, pNewType, 0); // UPDATE CONVERTER TOO!
+                
+                MFGetAttributeSize(pNewType, MF_MT_FRAME_SIZE, &m_width, &m_height);
+                
+                IMFMediaType* pConvOutType = NULL;
+                if (SUCCEEDED(MFCreateMediaType(&pConvOutType))) {
+                    pConvOutType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+                    pConvOutType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
+                    MFSetAttributeSize(pConvOutType, MF_MT_FRAME_SIZE, m_width, m_height);
+                    pConverter->SetOutputType(0, pConvOutType, 0);
+                    pConvOutType->Release();
+                }
+                
                 pNewType->Release();
             }
             continue;
