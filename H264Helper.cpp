@@ -89,7 +89,7 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
     MFCreateMediaType(&pOutputType);
     pOutputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
     pOutputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
-    pOutputType->SetUINT32(MF_MT_AVG_BITRATE, 5000000); // 5 Mbps max fallback
+    pOutputType->SetUINT32(MF_MT_AVG_BITRATE, 1000000); // 1 Mbps for stable UDP
     MFSetAttributeSize(pOutputType, MF_MT_FRAME_SIZE, width, height);
     MFSetAttributeRatio(pOutputType, MF_MT_FRAME_RATE, 30, 1);
     MFSetAttributeRatio(pOutputType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
@@ -113,16 +113,12 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);
         
         var.vt = VT_UI4;
-        var.ulVal = 3; // eAVEncCommonRateControlMode_Quality
+        var.ulVal = eAVEncCommonRateControlMode_CBR;
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
         
+        // Force an I-frame every 30 frames (1 second) to heal UDP packet loss
         var.vt = VT_UI4;
-        var.ulVal = 90; // Quality 0-100
-        pCodecAPI->SetValue(&CODECAPI_AVEncCommonQuality, &var);
-        
-        // Force an I-frame every 10 frames (0.33 seconds) to heal UDP packet loss almost instantly, mimicking JPEG responsiveness
-        var.vt = VT_UI4;
-        var.ulVal = 10;
+        var.ulVal = 30;
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVGOPSize, &var);
         
         pCodecAPI->Release();
