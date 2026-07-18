@@ -4565,6 +4565,8 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
 
     std::wstring* pUser = (std::wstring*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
     switch (message) {
+    case WM_ERASEBKGND:
+        return 1;
     case WM_ENTERSIZEMOVE: {
         extern bool g_isNewDrag;
         g_isNewDrag = true;

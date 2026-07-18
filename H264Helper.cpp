@@ -89,7 +89,7 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
     MFCreateMediaType(&pOutputType);
     pOutputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
     pOutputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
-    pOutputType->SetUINT32(MF_MT_AVG_BITRATE, 1000000); 
+    pOutputType->SetUINT32(MF_MT_AVG_BITRATE, 800000); // 800 kbps for 720p
     MFSetAttributeSize(pOutputType, MF_MT_FRAME_SIZE, width, height);
     MFSetAttributeRatio(pOutputType, MF_MT_FRAME_RATE, 30, 1);
     MFSetAttributeRatio(pOutputType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
@@ -115,6 +115,11 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
         var.vt = VT_UI4;
         var.ulVal = eAVEncCommonRateControlMode_CBR;
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
+        
+        // Force an I-frame every 30 frames (1 second) to heal UDP packet loss quickly
+        var.vt = VT_UI4;
+        var.ulVal = 30;
+        pCodecAPI->SetValue(&CODECAPI_AVEncMPVGOPSize, &var);
         
         pCodecAPI->Release();
     }
