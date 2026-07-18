@@ -1507,7 +1507,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             hasSelection = false;
         }
         HMENU hMenu = CreatePopupMenu();
-        AppendMenu(hMenu, MF_STRING | (hasSelection ? 0 : MF_GRAYED), 1001, L"コピー(C)");
+        AppendMenuW(hMenu, MF_STRING | (hasSelection ? 0 : MF_GRAYED), 1001, GetString(IDS_COPY).c_str());
         int xPos = GET_X_LPARAM(lParam);
         int yPos = GET_Y_LPARAM(lParam);
         if (xPos == -1 && yPos == -1) {
@@ -2036,12 +2036,12 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     case WM_CONTEXTMENU: {
         HMENU hMenu = CreatePopupMenu();
-        AppendMenuW(hMenu, MF_STRING, 1, L"切り取り(T)");
-        AppendMenuW(hMenu, MF_STRING, 2, L"コピー(C)");
-        AppendMenuW(hMenu, MF_STRING, 3, L"貼り付け(P)");
+        AppendMenuW(hMenu, MF_STRING, 1, GetString(IDS_CUT).c_str());
+        AppendMenuW(hMenu, MF_STRING, 2, GetString(IDS_COPY).c_str());
+        AppendMenuW(hMenu, MF_STRING, 3, GetString(IDS_PASTE).c_str());
         AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-        AppendMenuW(hMenu, MF_STRING, 4, L"すべて選択(A)");
-        AppendMenuW(hMenu, MF_STRING, 5, L"削除(D)");
+        AppendMenuW(hMenu, MF_STRING, 4, GetString(IDS_SELECT_ALL).c_str());
+        AppendMenuW(hMenu, MF_STRING, 5, GetString(IDS_DELETE).c_str());
         
         POINT pt;
         pt.x = GET_X_LPARAM(lParam);
@@ -2263,7 +2263,7 @@ LRESULT CALLBACK ClientEdgeSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
     return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
 
-bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult);
+bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult, bool enableAlwaysOnTopMenu = false);
 extern LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
 
 BOOL CALLBACK EnumChildProcColorDlg(HWND hwndChild, LPARAM lParam) {
@@ -2296,7 +2296,7 @@ UINT_PTR CALLBACK ColorHookProc(HWND hdlg, UINT uiMsg, WPARAM wParam, LPARAM lPa
     return 0;
 }
 
-bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult) {
+bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult, bool enableAlwaysOnTopMenu) {
     switch (msg) {
     case WM_CTLCOLORDLG:
     case WM_CTLCOLORMSGBOX:
@@ -2347,6 +2347,9 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         }
         return false;
     }
+    case WM_NCLBUTTONDBLCLK: {
+        return false;
+    }
     case WM_NCLBUTTONDOWN: {
         int hit = (int)wParam;
         if (hit == HTCLOSE || hit == HTMINBUTTON || hit == HTMAXBUTTON) {
@@ -2361,6 +2364,74 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
             SendMessage(hWnd, WM_NCPAINT, 1, 0);
             *pResult = 0;
             return true; // Handled
+        }
+        return false;
+    }
+    case WM_CONTEXTMENU: {
+        return false;
+    }
+    case WM_INITMENUPOPUP: {
+        if (!enableAlwaysOnTopMenu) return false;
+        BOOL isSystemMenu = (BOOL)HIWORD(lParam);
+        if (isSystemMenu) {
+            // Only used as fallback for taskbar right-click
+            SendMessage(hWnd, WM_CANCELMODE, 0, 0);
+            POINT pt;
+            GetCursorPos(&pt);
+            PostMessage(hWnd, WM_SYSCOMMAND, 0x1230, MAKELPARAM(pt.x, pt.y));
+            *pResult = 0;
+            return true;
+        }
+        return false;
+    }
+    case WM_SYSCOMMAND: {
+        int cmd = wParam & 0xFFF0;
+        if (enableAlwaysOnTopMenu && (cmd == SC_MOUSEMENU || cmd == SC_KEYMENU || cmd == 0x1230)) {
+            POINT pt;
+            if (cmd == SC_MOUSEMENU) {
+                pt.x = GET_X_LPARAM(lParam);
+                pt.y = GET_Y_LPARAM(lParam);
+                LRESULT hit = SendMessage(hWnd, WM_NCHITTEST, 0, MAKELPARAM(pt.x, pt.y));
+                if (hit == HTSYSMENU) {
+                    RECT rc; GetWindowRect(hWnd, &rc);
+                    RECT rcFrame = { 0, 0, 0, 0 };
+                    AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+                    pt.x = rc.left - rcFrame.left;
+                    pt.y = rc.top - rcFrame.top;
+                }
+            } else if (cmd == SC_KEYMENU) {
+                RECT rc; GetWindowRect(hWnd, &rc);
+                RECT rcFrame = { 0, 0, 0, 0 };
+                AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+                pt.x = rc.left - rcFrame.left;
+                pt.y = rc.top - rcFrame.top;
+            } else {
+                pt.x = GET_X_LPARAM(lParam);
+                pt.y = GET_Y_LPARAM(lParam);
+            }
+            
+            HMENU hMenu = CreatePopupMenu();
+            bool canRestore = IsZoomed(hWnd) || IsIconic(hWnd);
+            AppendMenuW(hMenu, MF_STRING | (canRestore ? 0 : MF_GRAYED), SC_RESTORE, GetString(IDS_RESTORE).c_str());
+            AppendMenuW(hMenu, MF_STRING | (IsZoomed(hWnd) ? MF_GRAYED : 0), SC_MOVE, GetString(IDS_MOVE).c_str());
+            AppendMenuW(hMenu, MF_STRING | (IsZoomed(hWnd) ? MF_GRAYED : 0), SC_SIZE, GetString(IDS_SIZE).c_str());
+            AppendMenuW(hMenu, MF_STRING | (IsIconic(hWnd) ? MF_GRAYED : 0), SC_MINIMIZE, GetString(IDS_MINIMIZE).c_str());
+            AppendMenuW(hMenu, MF_STRING | (IsZoomed(hWnd) ? MF_GRAYED : 0), SC_MAXIMIZE, GetString(IDS_MAXIMIZE).c_str());
+            AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+            AppendMenuW(hMenu, MF_STRING, SC_CLOSE, GetString(IDS_CLOSE).c_str());
+            AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+            DWORD exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+            AppendMenuW(hMenu, MF_STRING | ((exStyle & WS_EX_TOPMOST) ? MF_CHECKED : MF_UNCHECKED), 0x0100, GetString(IDS_ALWAYS_ON_TOP).c_str());
+
+            SetMenuDefaultItem(hMenu, SC_CLOSE, FALSE);
+
+            SetForegroundWindow(hWnd);
+            int retCmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_LEFTBUTTON, pt.x, pt.y, 0, hWnd, NULL);
+            DestroyMenu(hMenu);
+            if (retCmd > 0) SendMessage(hWnd, WM_SYSCOMMAND, retCmd, 0);
+            
+            *pResult = 0;
+            return true;
         }
         return false;
     }
@@ -2530,10 +2601,14 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
     }
     case WM_NCPAINT:
     case WM_NCACTIVATE: {
-        DWORD style = GetWindowLong(hWnd, GWL_STYLE);
-        if (style & WS_VISIBLE) SetWindowLong(hWnd, GWL_STYLE, style & ~WS_VISIBLE);
-        *pResult = DefWindowProc(hWnd, msg, wParam, lParam);
-        if (style & WS_VISIBLE) SetWindowLong(hWnd, GWL_STYLE, style);
+        if (msg == WM_NCACTIVATE) {
+            DWORD style = GetWindowLong(hWnd, GWL_STYLE);
+            if (style & WS_VISIBLE) SetWindowLong(hWnd, GWL_STYLE, style & ~WS_VISIBLE);
+            *pResult = DefWindowProc(hWnd, msg, wParam, lParam);
+            if (style & WS_VISIBLE) SetWindowLong(hWnd, GWL_STYLE, style);
+        } else {
+            *pResult = 0; // Completely suppress native WM_NCPAINT
+        }
         
         if (!IsIconic(hWnd)) {
             HDC hdc = GetWindowDC(hWnd);
@@ -2844,7 +2919,7 @@ void DrawColorButton(LPDRAWITEMSTRUCT lpdis, COLORREF colorToDraw) {
 
 LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     LRESULT classicResult = 0;
-    if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult)) return classicResult;
+    if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult, false)) return classicResult;
 
     static HWND hEdit, hBtnOK, hBtnCancel;
     switch (msg) {
@@ -2866,7 +2941,7 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         
         hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
             okX, y, btnWidth, btnHeight, hWnd, (HMENU)1, GetModuleHandle(0), 0);
-        hBtnCancel = CreateWindow(L"BUTTON", L"キャンセル", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+        hBtnCancel = CreateWindow(L"BUTTON", GetString(IDS_CANCEL).c_str(), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             cancelX, y, btnWidth, btnHeight, hWnd, (HMENU)2, GetModuleHandle(0), 0);
             
         static HWND hBtnColorLocal;
@@ -3277,7 +3352,7 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
             okX, y, btnWidth, btnHeight, hWnd, (HMENU)1, GetModuleHandle(0), 0);
             
-        hBtnCancel = CreateWindow(L"BUTTON", L"キャンセル", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+        hBtnCancel = CreateWindow(L"BUTTON", GetString(IDS_CANCEL).c_str(), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
             cancelX, y, btnWidth, btnHeight, hWnd, (HMENU)2, GetModuleHandle(0), 0);
             
         SetWindowSubclass(hBtnOK, ClassicButtonProc, 0, 0);
@@ -4282,7 +4357,7 @@ std::map<HWND, std::pair<int, int>> g_videoBitmapSizes;
 
 LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     LRESULT classicResult = 0;
-    if (HandleClassicStyle(hwnd, message, wParam, lParam, &classicResult)) return classicResult;
+    if (HandleClassicStyle(hwnd, message, wParam, lParam, &classicResult, true)) return classicResult;
 
     std::wstring* pUser = (std::wstring*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
     switch (message) {
@@ -4302,6 +4377,18 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)u);
         SetTimer(hwnd, 1, 2000, NULL);
         return TRUE;
+    }
+    case WM_SYSCOMMAND: {
+        if ((wParam & 0xFFF0) == 0x0100) {
+            DWORD exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+            if (exStyle & WS_EX_TOPMOST) {
+                SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            } else {
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            }
+            return 0;
+        }
+        break;
     }
     case WM_NCDESTROY: {
         KillTimer(hwnd, 1);
@@ -5050,7 +5137,7 @@ LRESULT CALLBACK ComboBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     LRESULT classicResult = 0;
-    if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult)) return classicResult;
+    if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult, true)) return classicResult;
 
     switch (msg) {
     case WM_ENTERSIZEMOVE: {
@@ -5187,7 +5274,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
             WS_CHILD | WS_VISIBLE | WS_VSCROLL | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT,
             0, 0, 0, 0, hWnd, (HMENU)1050, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
-        g_hUserListHeader = CreateWindowEx(WS_EX_CLIENTEDGE, L"STATIC", L"ユーザ一覧 (0)",
+        g_hUserListHeader = CreateWindowEx(WS_EX_CLIENTEDGE, L"STATIC", GetString(IDS_USER_LIST_0).c_str(),
             WS_CHILD | WS_VISIBLE | SS_CENTER | SS_CENTERIMAGE,
             0, 0, 0, 0, hWnd, (HMENU)1054, ((LPCREATESTRUCT)lParam)->hInstance, 0);
             
@@ -5323,6 +5410,23 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         InitVolumeSync(hWnd);
 
         return 0;
+    }
+    case WM_EXITMENULOOP: {
+        auto ret = DefWindowProc(hWnd, msg, wParam, lParam);
+		SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+		return ret;
+    }
+    case WM_SYSCOMMAND: {
+        if ((wParam & 0xFFF0) == 0x0100) {
+            DWORD exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+            if (exStyle & WS_EX_TOPMOST) {
+                SetWindowPos(hWnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            } else {
+                SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+            }
+            return 0;
+        }
+        break;
     }
 
     case WM_MEASUREITEM: {
@@ -5478,7 +5582,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                     SetTextColor(hdc, RGB(255, 0, 0));
                     HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
                     RECT textRc = rc;
-                    DrawText(hdc, L"接続なし", -1, &textRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+                    DrawTextW(hdc, GetString(IDS_NO_CONNECTION).c_str(), -1, &textRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                     SelectObject(hdc, hOldFont);
                 } else {
                     int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
@@ -6178,7 +6282,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
                 if (count != lastCount) {
                     lastCount = count;
                     WCHAR buf[256];
-                    swprintf_s(buf, L"ユーザ一覧 (%d)", count);
+                    swprintf_s(buf, GetString(IDS_USER_LIST_FMT).c_str(), count);
                     SetWindowText(g_hUserListHeader, buf);
                 }
             }
@@ -6303,8 +6407,6 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
     return DefWindowProc(hWnd, msg, wParam, lParam);
 }
 
-#include "resource.h"
-
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     winrt::init_apartment(winrt::apartment_type::single_threaded);
     SetThreadUILanguage(0);
@@ -6341,9 +6443,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         CW_USEDEFAULT, 0, rcMin.right - rcMin.left, rcMin.bottom - rcMin.top,
         0, 0, hInstance, 0);
-        
-    // SetThemeAppProperties(0);
-    SetWindowTheme(hWnd, L" ", L" ");
+
+    SetThemeAppProperties(0);
     SystemParametersInfo(SPI_SETGRADIENTCAPTIONS, 0, (PVOID)FALSE, 0);
 
     ApplyClassicStyle(hWnd);
