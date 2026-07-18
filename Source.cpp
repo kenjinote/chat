@@ -223,6 +223,7 @@ std::map<std::wstring, HWND> g_videoWindows;
 std::map<std::wstring, std::vector<uint8_t>> g_videoPixelsMap;
 std::map<std::wstring, std::pair<int, int>> g_videoSizeMap;
 std::map<std::wstring, bool> g_videoIsSWMap;
+std::map<std::wstring, bool> g_videoIsH264Map;
 std::map<std::wstring, std::map<std::wstring, DWORD>> g_videoViewers;
 std::mutex g_videoMutex;
 
@@ -739,6 +740,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             g_videoPixelsMap[g_userId] = std::move(localPixels);
                             g_videoSizeMap[g_userId] = { width, height };
                             g_videoIsSWMap[g_userId] = !IsHardwareAccelerationEnabled();
+                            g_videoIsH264Map[g_userId] = true;
                         }
                         HWND hView = NULL;
                         auto it = g_videoWindows.find(g_userId);
@@ -4198,6 +4200,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             {
                                 std::lock_guard<std::mutex> lock(g_videoMutex);
                                 g_videoIsSWMap[wname] = !isH264 || !IsHardwareAccelerationEnabled();
+                                g_videoIsH264Map[wname] = isH264;
                             }
                             
                             bool stateChanged = false;
@@ -4607,31 +4610,41 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                         float offsetY = (wH - drawH) / 2.0f;
                         pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
                         
-                        if (isSW) {
-                            if (!g_pVideoSWTextFormat) {
-                                g_pDWriteFactory->CreateTextFormat(
-                                    L"Arial", NULL, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, 
-                                    DWRITE_FONT_STRETCH_NORMAL, 10.0f, L"en-US", &g_pVideoSWTextFormat);
-                                if (g_pVideoSWTextFormat) {
-                                    g_pVideoSWTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
-                                    g_pVideoSWTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_FAR);
-                                }
-                            }
+                        std::wstring formatText = L"H.264";
+                        {
+                            auto itFormat = g_videoIsH264Map.find(*pUser);
+                            if (itFormat != g_videoIsH264Map.end() && !itFormat->second) formatText = L"JPEG";
+                        }
+                        if (isSW) formatText += L" SW";
+                        else formatText += L" HW";
+                        
+                        if (!g_pVideoSWTextFormat) {
+                            g_pDWriteFactory->CreateTextFormat(
+                                L"Arial", NULL, DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, 
+                                DWRITE_FONT_STRETCH_NORMAL, 10.0f, L"en-US", &g_pVideoSWTextFormat);
                             if (g_pVideoSWTextFormat) {
-                                ID2D1SolidColorBrush* pBrush = nullptr;
-                                ID2D1SolidColorBrush* pShadowBrush = nullptr;
-                                pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.5f, 0.0f, 1.0f), &pBrush);
-                                pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 1.0f), &pShadowBrush);
-                                if (pBrush && pShadowBrush) {
-                                    D2D1_TEXT_ANTIALIAS_MODE oldMode = pRT->GetTextAntialiasMode();
-                                    pRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_ALIASED);
-                                    pRT->DrawTextW(L"SW", 2, g_pVideoSWTextFormat, D2D1::RectF(0, 0, (float)rc.right - 1.0f, (float)rc.bottom - 1.0f), pShadowBrush);
-                                    pRT->DrawTextW(L"SW", 2, g_pVideoSWTextFormat, D2D1::RectF(0, 0, (float)rc.right - 2.0f, (float)rc.bottom - 2.0f), pBrush);
-                                    pRT->SetTextAntialiasMode(oldMode);
-                                }
-                                if (pBrush) pBrush->Release();
-                                if (pShadowBrush) pShadowBrush->Release();
+                                g_pVideoSWTextFormat->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_TRAILING);
+                                g_pVideoSWTextFormat->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_FAR);
                             }
+                        }
+                        if (g_pVideoSWTextFormat) {
+                            ID2D1SolidColorBrush* pBrush = nullptr;
+                            ID2D1SolidColorBrush* pShadowBrush = nullptr;
+                            if (isSW) {
+                                pRT->CreateSolidColorBrush(D2D1::ColorF(1.0f, 0.5f, 0.0f, 1.0f), &pBrush); // Orange for SW
+                            } else {
+                                pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.8f, 0.2f, 1.0f), &pBrush); // Green for HW
+                            }
+                            pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 0.0f, 1.0f), &pShadowBrush);
+                            if (pBrush && pShadowBrush) {
+                                D2D1_TEXT_ANTIALIAS_MODE oldMode = pRT->GetTextAntialiasMode();
+                                pRT->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_ALIASED);
+                                pRT->DrawTextW(formatText.c_str(), (UINT32)formatText.length(), g_pVideoSWTextFormat, D2D1::RectF(0, 0, (float)rc.right - 1.0f, (float)rc.bottom - 1.0f), pShadowBrush);
+                                pRT->DrawTextW(formatText.c_str(), (UINT32)formatText.length(), g_pVideoSWTextFormat, D2D1::RectF(0, 0, (float)rc.right - 2.0f, (float)rc.bottom - 2.0f), pBrush);
+                                pRT->SetTextAntialiasMode(oldMode);
+                            }
+                            if (pBrush) pBrush->Release();
+                            if (pShadowBrush) pShadowBrush->Release();
                         }
                     } else {
                         char buf[256]; sprintf_s(buf, "VideoViewProc FAILED: CreateBitmap hr=0x%X, sz=%dx%d", hrBmp, sz.first, sz.second); LogToFile(buf);
