@@ -21,6 +21,8 @@
 #include <set>
 #include <cmath>
 #include <algorithm>
+#include <queue>
+#include <condition_variable>
 #include "H264Helper.h"
 #include "WgcCaptureSession.h"
 bool g_useH264 = true;
@@ -894,7 +896,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     std::vector<uint8_t> h264;
                     if (g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264)) {
                         std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
-                        const int MAX_PAYLOAD = 1000;
+                        const int MAX_PAYLOAD = 1300;
                         int totalFragments = (int)((h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
                         g_videoSeq++;
                         LARGE_INTEGER freq;
@@ -952,7 +954,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 if (!h264Success) {
                     std::vector<uint8_t> jpegData;
                     if (EncodeJPEG(width, height, rgb32Data.data(), (DWORD)rgb32Data.size(), jpegData)) {
-                        const int MAX_PAYLOAD = 1000;
+                        const int MAX_PAYLOAD = 1300;
                         int totalFragments = (int)((jpegData.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
                         g_videoSeq++;
                         LARGE_INTEGER freq;
@@ -4100,6 +4102,31 @@ DWORD WINAPI DecodeTaskProc(LPVOID lpParam) {
     return 0;
 }
 
+std::queue<DecodeTaskData*> g_decodeQueue;
+std::mutex g_decodeQueueMutex;
+std::condition_variable g_decodeQueueCV;
+HANDLE g_hDecodeThread = NULL;
+
+DWORD WINAPI DecodeWorkerThread(LPVOID lpParam) {
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    while (g_isAppRunning) {
+        DecodeTaskData* data = nullptr;
+        {
+            std::unique_lock<std::mutex> lock(g_decodeQueueMutex);
+            g_decodeQueueCV.wait(lock, [] { return !g_decodeQueue.empty() || !g_isAppRunning; });
+            if (!g_isAppRunning && g_decodeQueue.empty()) break;
+            if (!g_decodeQueue.empty()) {
+                data = g_decodeQueue.front();
+                g_decodeQueue.pop();
+            }
+        }
+        if (data) {
+            DecodeTaskProc(data);
+        }
+    }
+    CoUninitialize();
+    return 0;
+}
 
 DWORD WINAPI RecvThread(LPVOID param) {
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
@@ -4538,7 +4565,11 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 for (int i = 0; i < vbuf.totalFragments; i++) {
                                     taskData->mediaData.insert(taskData->mediaData.end(), vbuf.fragments[i].begin(), vbuf.fragments[i].end());
                                 }
-                                QueueUserWorkItem(DecodeTaskProc, taskData, WT_EXECUTEDEFAULT);
+                                {
+                                    std::lock_guard<std::mutex> lock(g_decodeQueueMutex);
+                                    g_decodeQueue.push(taskData);
+                                }
+                                g_decodeQueueCV.notify_one();
                                 g_videoBuffers[wname].erase(seq);
                             }
                             
@@ -6025,6 +6056,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         EnableWindow(g_hSendBtn, FALSE);
         SendJoinRequest(g_currentRoom, g_isPrivateRoom);
         g_hRecvThread = CreateThread(0, 0, RecvThread, hWnd, 0, 0);
+        g_hDecodeThread = CreateThread(0, 0, DecodeWorkerThread, 0, 0, 0);
         SetTimer(hWnd, 1, 3000, NULL);
         SetTimer(hWnd, 2, 100, NULL);
         InitVolumeSync(hWnd);
@@ -6999,6 +7031,11 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         if (g_hRecvThread) {
             WaitForSingleObject(g_hRecvThread, 1000);
             CloseHandle(g_hRecvThread);
+        }
+        g_decodeQueueCV.notify_all();
+        if (g_hDecodeThread) {
+            WaitForSingleObject(g_hDecodeThread, 1000);
+            CloseHandle(g_hDecodeThread);
         }
         
         closesocket(g_sock);
