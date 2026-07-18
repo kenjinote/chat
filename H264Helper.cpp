@@ -545,19 +545,6 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
                         outRgb32.resize(oldSize + cbResData);
                         memcpy(outRgb32.data() + oldSize, pResData, cbResData);
                         
-                        if (m_useHW && cbResData >= m_width * m_height * 4) {
-                            uint32_t stride = m_width * 4;
-                            std::vector<uint8_t> tempRow(stride);
-                            uint8_t* pBuf = outRgb32.data() + oldSize;
-                            for (UINT32 y = 0; y < m_height / 2; ++y) {
-                                uint8_t* rowA = pBuf + y * stride;
-                                uint8_t* rowB = pBuf + (m_height - 1 - y) * stride;
-                                memcpy(tempRow.data(), rowA, stride);
-                                memcpy(rowA, rowB, stride);
-                                memcpy(rowB, tempRow.data(), stride);
-                            }
-                        }
-                        
                         pResBuffer->Unlock();
                         pResBuffer->Release();
                         convOutput.pSample->Release();
