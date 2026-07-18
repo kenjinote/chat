@@ -3960,7 +3960,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     pData->user = L"";
                                     std::wstring dispMyName = g_username.substr(0, g_username.find(L'#'));
                                     if (PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_JAPANESE) {
-                                        pData->msg = g_currentRoom + L"に" + dispMyName + L"が入室しました。";
+                                        pData->msg = dispMyName + L"が" + g_currentRoom + L"に入室しました。";
                                     } else {
                                         std::wstring msg = GetString(IDS_ENTERED);
                                         if (!msg.empty() && (msg.back() == L'.' || msg.back() == 0x3002 || msg.back() == 0x0964)) msg.pop_back();
@@ -4024,7 +4024,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         pData->user = L"";
                                         std::wstring dispWname = wname.substr(0, wname.find(L'#'));
                                         if (PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_JAPANESE) {
-                                            pData->msg = g_currentRoom + L"に" + dispWname + L"が入室しました。";
+                                            pData->msg = dispWname + L"が" + g_currentRoom + L"に入室しました。";
                                         } else {
                                             std::wstring msg = GetString(IDS_ENTERED);
                                             if (!msg.empty() && (msg.back() == L'.' || msg.back() == 0x3002 || msg.back() == 0x0964)) msg.pop_back();
@@ -4090,7 +4090,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         pData->user = L"";
                                         std::wstring dispLeaveName = g_userNames[wuid].substr(0, g_userNames[wuid].find(L'#'));
                                         if (PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_JAPANESE) {
-                                            pData->msg = g_currentRoom + L"から" + dispLeaveName + L"が退室しました。";
+                                            pData->msg = dispLeaveName + L"が" + g_currentRoom + L"から退室しました。";
                                         } else {
                                             std::wstring msg = GetString(IDS_LEFT);
                                             if (!msg.empty() && (msg.back() == L'.' || msg.back() == 0x3002 || msg.back() == 0x0964)) msg.pop_back();
@@ -6492,6 +6492,7 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     winrt::init_apartment(winrt::apartment_type::single_threaded);
+    InitHardwareAcceleration();
     SetThreadUILanguage(0);
     g_currentRoom = GetString(IDS_LOBBY);
     LoadIgnoredUsers();
@@ -6547,6 +6548,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         DispatchMessage(&msg);
     }
     
+    CleanupHardwareAcceleration();
     Gdiplus::GdiplusShutdown(gdiplusToken);
     return (int)msg.wParam;
 }

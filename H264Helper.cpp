@@ -8,6 +8,44 @@ static void Log(const std::string& msg) {
     ofs << GetTickCount() << " " << msg << std::endl;
 }
 
+ID3D11Device* g_pD3D11Device = NULL;
+ID3D11DeviceContext* g_pD3D11Context = NULL;
+IMFDXGIDeviceManager* g_pDXGIManager = NULL;
+UINT g_resetToken = 0;
+
+bool InitHardwareAcceleration() {
+    UINT creationFlags = D3D11_CREATE_DEVICE_VIDEO_SUPPORT | D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+    D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1, D3D_FEATURE_LEVEL_10_0 };
+    D3D_FEATURE_LEVEL featureLevel;
+    HRESULT hr = D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, creationFlags, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, &g_pD3D11Device, &featureLevel, &g_pD3D11Context);
+    
+    if (SUCCEEDED(hr)) {
+        ID3D10Multithread* pMultithread = NULL;
+        if (SUCCEEDED(g_pD3D11Device->QueryInterface(IID_PPV_ARGS(&pMultithread)))) {
+            pMultithread->SetMultithreadProtected(TRUE);
+            pMultithread->Release();
+        }
+        
+        hr = MFCreateDXGIDeviceManager(&g_resetToken, &g_pDXGIManager);
+        if (SUCCEEDED(hr)) {
+            hr = g_pDXGIManager->ResetDevice(g_pD3D11Device, g_resetToken);
+            if (SUCCEEDED(hr)) {
+                Log("Hardware Acceleration Initialized successfully.");
+                return true;
+            }
+        }
+    }
+    Log("Hardware Acceleration Initialization failed. hr=" + std::to_string(hr));
+    CleanupHardwareAcceleration();
+    return false;
+}
+
+void CleanupHardwareAcceleration() {
+    if (g_pDXGIManager) { g_pDXGIManager->Release(); g_pDXGIManager = NULL; }
+    if (g_pD3D11Context) { g_pD3D11Context->Release(); g_pD3D11Context = NULL; }
+    if (g_pD3D11Device) { g_pD3D11Device->Release(); g_pD3D11Device = NULL; }
+}
+
 H264Encoder::H264Encoder() {}
 H264Encoder::~H264Encoder() {
     if (pEncoder) pEncoder->Release();
@@ -26,6 +64,10 @@ bool H264Encoder::Initialize(UINT32 width, UINT32 height) {
 
     HRESULT hr = CoCreateInstance(CLSID_CMSH264EncoderMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pEncoder));
     if (FAILED(hr)) return false;
+
+    if (g_pDXGIManager) {
+        pEncoder->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)g_pDXGIManager);
+    }
 
     IMFAttributes* pAttributes = NULL;
     if (SUCCEEDED(pEncoder->GetAttributes(&pAttributes))) {
@@ -82,6 +124,10 @@ bool H264Encoder::Initialize(UINT32 width, UINT32 height) {
 
     hr = CoCreateInstance(CLSID_VideoProcessorMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pConverter));
     if (FAILED(hr)) return false;
+
+    if (g_pDXGIManager) {
+        pConverter->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)g_pDXGIManager);
+    }
 
     IMFMediaType* pConvInputType = NULL;
     MFCreateMediaType(&pConvInputType);
@@ -261,6 +307,10 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
     HRESULT hr = CoCreateInstance(CLSID_CMSH264DecoderMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pDecoder));
     if (FAILED(hr)) return false;
 
+    if (g_pDXGIManager) {
+        pDecoder->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)g_pDXGIManager);
+    }
+
     IMFMediaType* pDecInputType = NULL;
     MFCreateMediaType(&pDecInputType);
     pDecInputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
@@ -277,6 +327,12 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
         var.vt = VT_BOOL;
         var.boolVal = VARIANT_TRUE;
         pDecCodecAPI->SetValue(&CODECAPI_AVLowLatencyMode, &var);
+        
+        if (!g_pDXGIManager) {
+            var.boolVal = VARIANT_FALSE;
+            pDecCodecAPI->SetValue(&CODECAPI_AVDecVideoAcceleration_H264, &var);
+        }
+        
         pDecCodecAPI->Release();
     }
 
@@ -292,6 +348,10 @@ bool H264Decoder::Initialize(UINT32 width, UINT32 height) {
 
     hr = CoCreateInstance(CLSID_VideoProcessorMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pConverter));
     if (FAILED(hr)) return false;
+
+    if (g_pDXGIManager) {
+        pConverter->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)g_pDXGIManager);
+    }
 
     IMFMediaType* pConvInputType = NULL;
     MFCreateMediaType(&pConvInputType);
@@ -363,7 +423,9 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
         IMFMediaBuffer* pOutBuffer = NULL;
         if (!decProvides) {
             MFCreateSample(&pOutSample);
-            MFCreateMemoryBuffer(m_width * m_height * 2, &pOutBuffer); // NV12
+            DWORD cbSize = decInfo.cbSize > 0 ? decInfo.cbSize : (m_width * m_height * 2);
+            DWORD cbAlignment = decInfo.cbAlignment > 0 ? decInfo.cbAlignment : MF_16_BYTE_ALIGNMENT;
+            MFCreateAlignedMemoryBuffer(cbSize, cbAlignment, &pOutBuffer);
             pOutSample->AddBuffer(pOutBuffer);
             pOutBuffer->Release();
             outputDataBuffer.pSample = pOutSample;

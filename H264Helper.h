@@ -5,6 +5,7 @@
 #include <mfreadwrite.h>
 #include <mferror.h>
 #include <wmcodecdsp.h>
+#include <d3d11.h>
 #include <vector>
 #include <mutex>
 #include <iostream>
@@ -14,6 +15,10 @@
 #pragma comment(lib, "mfuuid.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "wmcodecdspuuid.lib")
+#pragma comment(lib, "d3d11.lib")
+
+bool InitHardwareAcceleration();
+void CleanupHardwareAcceleration();
 
 class H264Encoder {
     IMFTransform* pEncoder = NULL;
