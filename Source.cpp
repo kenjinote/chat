@@ -772,17 +772,17 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             const uint8_t* pEncoderInput = nullptr;
             DWORD cbEncoderInput = 0;
             std::vector<uint8_t> nv12DataForEncoder;
+            IMFMediaBuffer* pLockedBuffer = nullptr;
 
             if (isScreenShare) {
                 ConvertRGB32ToNV12(rgb32Data.data(), width, height, nv12DataForEncoder);
                 pEncoderInput = nv12DataForEncoder.data();
                 cbEncoderInput = (DWORD)nv12DataForEncoder.size();
             } else {
-                IMFMediaBuffer* pBuffer = NULL;
-                if (SUCCEEDED(pSample->ConvertToContiguousBuffer(&pBuffer)) && pBuffer) {
+                if (SUCCEEDED(pSample->ConvertToContiguousBuffer(&pLockedBuffer)) && pLockedBuffer) {
                     BYTE* pData = NULL;
                     DWORD cbData = 0;
-                    pBuffer->Lock(&pData, NULL, &cbData);
+                    pLockedBuffer->Lock(&pData, NULL, &cbData);
 
                     IMFMediaType* pCurrentType = NULL;
                     pReader->GetCurrentMediaType(MF_SOURCE_READER_FIRST_VIDEO_STREAM, &pCurrentType);
@@ -830,8 +830,6 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     }
                     width = w;
                     height = h;
-                    pBuffer->Unlock();
-                    pBuffer->Release();
                 }
             }
 
@@ -989,6 +987,10 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 auto it = g_videoWindows.find(g_userId);
                 if (it != g_videoWindows.end()) hView = it->second;
                 if (hView && IsWindow(hView)) InvalidateRect(hView, NULL, FALSE);
+            if (pLockedBuffer) {
+                pLockedBuffer->Unlock();
+                pLockedBuffer->Release();
+            }
             if (pSample) pSample->Release();
         } else {
             Sleep(10);
