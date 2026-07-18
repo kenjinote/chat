@@ -4732,22 +4732,8 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                             auto itFormat = g_videoIsH264Map.find(*pUser);
                             if (itFormat != g_videoIsH264Map.end()) isH264 = itFormat->second;
                         }
-                        bool isLocal = (*pUser == g_userId);
-                        bool needsFlip = isH264 && !isLocal;
                         
-                        if (needsFlip) {
-                            D2D1_MATRIX_3X2_F oldTransform;
-                            pRT->GetTransform(&oldTransform);
-                            D2D1_MATRIX_3X2_F flipTransform = D2D1::Matrix3x2F::Scale(
-                                1.0f, -1.0f,
-                                D2D1::Point2F(offsetX + drawW / 2.0f, offsetY + drawH / 2.0f)
-                            );
-                            pRT->SetTransform(flipTransform * oldTransform);
-                            pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
-                            pRT->SetTransform(oldTransform);
-                        } else {
-                            pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
-                        }
+                        pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
                         
                         std::wstring formatText = L"H.264";
                         {
@@ -5105,8 +5091,12 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                                 std::wstring titleName = g_username.substr(0, g_username.find(L'#'));
                                 int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
                                 CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(180), vidX, vidY);
+                                RECT rcTarget = { 0, 0, Scale(320), Scale(180) };
+                                AdjustWindowRectEx(&rcTarget, WS_OVERLAPPEDWINDOW, FALSE, 0);
+                                int winW = rcTarget.right - rcTarget.left;
+                                int winH = rcTarget.bottom - rcTarget.top;
                                 HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(),
-                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, Scale(320), Scale(180), NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_userId.c_str());
+                                    WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, winW, winH, NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_userId.c_str());
                                 ApplyClassicStyle(hVid);
                                 g_videoWindows[g_userId] = hVid;
                             } else {
@@ -5151,8 +5141,12 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             titleName = titleName.substr(0, titleName.find(L'#'));
                             int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
                             CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(180), vidX, vidY);
+                            RECT rcTarget = { 0, 0, Scale(320), Scale(180) };
+                            AdjustWindowRectEx(&rcTarget, WS_OVERLAPPEDWINDOW, FALSE, 0);
+                            int winW = rcTarget.right - rcTarget.left;
+                            int winH = rcTarget.bottom - rcTarget.top;
                             HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(),
-                                WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, Scale(320), Scale(180), NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
+                                WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, winW, winH, NULL, NULL, GetModuleHandle(NULL), (LPVOID)clickedUser.c_str());
                             ApplyClassicStyle(hVid);
                             g_videoWindows[clickedUser] = hVid;
                         } else {
