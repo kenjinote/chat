@@ -671,25 +671,29 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
             Log("Dec ProcessOutput STREAM_CHANGE");
             if (pOutSample) pOutSample->Release();
             IMFMediaType* pNewType = NULL;
-            if (SUCCEEDED(pDecoder->GetOutputAvailableType(0, 0, &pNewType))) {
-                pDecoder->SetOutputType(0, pNewType, 0);
-                pConverter->SetInputType(0, pNewType, 0); // UPDATE CONVERTER TOO!
+            HRESULT hrType = pDecoder->GetOutputAvailableType(0, 0, &pNewType);
+            if (SUCCEEDED(hrType)) {
+                hrType = pDecoder->SetOutputType(0, pNewType, 0);
+                if (SUCCEEDED(hrType)) {
+                    hrType = pConverter->SetInputType(0, pNewType, 0); // UPDATE CONVERTER TOO!
+                }
                 
                 MFGetAttributeSize(pNewType, MF_MT_FRAME_SIZE, &m_width, &m_height);
                 
                 IMFMediaType* pConvOutType = NULL;
-                if (SUCCEEDED(MFCreateMediaType(&pConvOutType))) {
+                if (SUCCEEDED(hrType) && SUCCEEDED(MFCreateMediaType(&pConvOutType))) {
                     pConvOutType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
                     pConvOutType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
                     MFSetAttributeSize(pConvOutType, MF_MT_FRAME_SIZE, m_width, m_height);
                     pConvOutType->SetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32)(m_width * 4));
-                    pConverter->SetOutputType(0, pConvOutType, 0);
+                    hrType = pConverter->SetOutputType(0, pConvOutType, 0);
                     pConvOutType->Release();
                 }
                 
                 pNewType->Release();
+                if (SUCCEEDED(hrType)) continue;
             }
-            continue;
+            break;
         }
         
         if (FAILED(hr)) Log("Dec ProcessOutput FAILED hr=" + std::to_string(hr));
@@ -726,15 +730,17 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
                     if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
                         if (pConvSample) pConvSample->Release();
                         IMFMediaType* pNewType = NULL;
-                        if (SUCCEEDED(MFCreateMediaType(&pNewType))) {
+                        HRESULT hrType = MFCreateMediaType(&pNewType);
+                        if (SUCCEEDED(hrType)) {
                             pNewType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
                             pNewType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
                             MFSetAttributeSize(pNewType, MF_MT_FRAME_SIZE, m_width, m_height);
                             pNewType->SetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32)(m_width * 4));
-                            pConverter->SetOutputType(0, pNewType, 0);
+                            hrType = pConverter->SetOutputType(0, pNewType, 0);
                             pNewType->Release();
+                            if (SUCCEEDED(hrType)) continue;
                         }
-                        continue;
+                        break;
                     }
                     
                     if (FAILED(hr)) Log("Conv ProcessOutput FAILED hr=" + std::to_string(hr));
