@@ -183,22 +183,11 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
         var.ulVal = 0;
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);
         
-        if (isScreenShare) {
-            // Use Quality-based VBR for better quality in screen sharing while saving bandwidth on static scenes
-            var.vt = VT_UI4;
-            var.ulVal = eAVEncCommonRateControlMode_Quality;
-            pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
-            
-            // Set Quality level (0 to 100). Higher = better quality.
-            var.vt = VT_UI4;
-            var.ulVal = 70; // Good balance for screen share
-            pCodecAPI->SetValue(&CODECAPI_AVEncCommonQuality, &var);
-        } else {
-            // Unconstrained VBR or CBR for webcam (avoids quality-driven bitrate spikes from noise)
-            var.vt = VT_UI4;
-            var.ulVal = eAVEncCommonRateControlMode_UnconstrainedVBR;
-            pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
-        }
+        // Use Unconstrained VBR for both screen share and webcam
+        // This ensures the encoder respects the targetBitrate and prevents massive I-frames that overflow the UDP queue
+        var.vt = VT_UI4;
+        var.ulVal = eAVEncCommonRateControlMode_UnconstrainedVBR;
+        pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
         
         // Force an I-frame every 60 frames (2 seconds) to heal UDP packet loss less frequently
         var.vt = VT_UI4;
