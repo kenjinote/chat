@@ -4779,6 +4779,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     std::wstring target;
                                     target.resize(wsize - 1);
                                     MultiByteToWideChar(CP_UTF8, 0, targetA.c_str(), -1, &target[0], wsize - 1);
+                                    std::lock_guard<std::mutex> lock(g_videoMutex);
                                     g_videoViewers[target][viewer] = GetTickCount();
                                 }
                             }
@@ -5066,30 +5067,27 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             int sent = sendto(g_sock, pkt, sizeof(hdr) + (int)targetA.length(), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
             LogToFile("UDP Sending watch packet to " + targetA + ", sent=" + std::to_string(sent));
             
-            g_videoViewers[*pUser][g_userId] = GetTickCount();
-            
-            int count = 0;
-            DWORD now = GetTickCount();
-            std::wstring viewerText = L"Viewers: ";
-            for (auto& pair : g_videoViewers[*pUser]) {
-                if (now - pair.second < 5000) {
-                    if (pair.first == *pUser) continue;
-                    
-                    count++;
-                    std::wstring vname = pair.first;
-                    if (g_userNames.count(pair.first)) vname = g_userNames[pair.first];
-                    viewerText += vname + L", ";
+            {
+                std::lock_guard<std::mutex> lock(g_videoMutex);
+                g_videoViewers[*pUser][g_userId] = GetTickCount();
+                
+                int count = 0;
+                DWORD now = GetTickCount();
+                for (auto& pair : g_videoViewers[*pUser]) {
+                    if (now - pair.second < 5000) {
+                        if (pair.first == *pUser) continue;
+                        count++;
+                    }
                 }
+                
+                WCHAR viewBuf[256];
+                swprintf_s(viewBuf, GetString(IDS_VIEWING_COUNT).c_str(), count);
+                std::wstring dispName = *pUser;
+                if (g_userNames.count(*pUser)) dispName = g_userNames[*pUser];
+                dispName = dispName.substr(0, dispName.find(L'#'));
+                std::wstring title = dispName + viewBuf;
+                SetWindowTextW(hwnd, title.c_str());
             }
-            if (count > 0) viewerText = viewerText.substr(0, viewerText.length() - 2);
-            
-            WCHAR viewBuf[256];
-            swprintf_s(viewBuf, GetString(IDS_VIEWING_COUNT).c_str(), count);
-            std::wstring dispName = *pUser;
-            if (g_userNames.count(*pUser)) dispName = g_userNames[*pUser];
-            dispName = dispName.substr(0, dispName.find(L'#'));
-            std::wstring title = dispName + viewBuf;
-            SetWindowTextW(hwnd, title.c_str());
         }
         return 0;
     }
