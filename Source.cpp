@@ -958,8 +958,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         bool skipFrame = false;
                         {
                             std::unique_lock<std::mutex> lock(g_udpSendMutex);
-                            // If queuing this frame exceeds 1000 fragments (~1.3MB), drop the entire frame
-                            if (g_udpSendQueue.size() + totalFragments > 1000) skipFrame = true;
+                            // Increase queue limit to 5000 (~6.5MB) to ensure huge 4K I-frames are never dropped
+                            if (g_udpSendQueue.size() + totalFragments > 5000) skipFrame = true;
                         }
 
                         if (!skipFrame) {
@@ -998,7 +998,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         bool skipFrame = false;
                         {
                             std::unique_lock<std::mutex> lock(g_udpSendMutex);
-                            if (g_udpSendQueue.size() + totalFragments > 1000) skipFrame = true;
+                            if (g_udpSendQueue.size() + totalFragments > 5000) skipFrame = true;
                         }
 
                         if (!skipFrame) {
