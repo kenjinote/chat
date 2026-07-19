@@ -597,7 +597,15 @@ std::queue<std::vector<uint8_t>> g_udpSendQueue;
 DWORD WINAPI UdpSenderThread(LPVOID) {
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
-    long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay to prevent UDP packet loss
+    
+    // Token Bucket Settings
+    DWORD targetBitrate = 8000000; // 8 Mbps
+    double targetBytesPerSec = targetBitrate / 8.0;
+    double maxTokens = targetBytesPerSec * 0.05; // 50ms burst (~50KB)
+    double currentTokens = maxTokens;
+    
+    LARGE_INTEGER lastTime;
+    QueryPerformanceCounter(&lastTime);
 
     while (g_isAppRunning) {
         std::vector<uint8_t> pkt;
@@ -610,6 +618,27 @@ DWORD WINAPI UdpSenderThread(LPVOID) {
         }
 
         if (g_sock != INVALID_SOCKET) {
+            // Wait for enough tokens
+            while (g_isAppRunning) {
+                LARGE_INTEGER now;
+                QueryPerformanceCounter(&now);
+                double elapsedSec = (double)(now.QuadPart - lastTime.QuadPart) / (double)freq.QuadPart;
+                lastTime = now;
+                
+                currentTokens += elapsedSec * targetBytesPerSec;
+                if (currentTokens > maxTokens) currentTokens = maxTokens;
+                
+                if (currentTokens >= pkt.size()) {
+                    currentTokens -= pkt.size();
+                    break;
+                }
+                
+                double deficit = pkt.size() - currentTokens;
+                double waitSec = deficit / targetBytesPerSec;
+                if (waitSec > 0.001) Sleep(1);
+                else SwitchToThread();
+            }
+
             sockaddr_in serverUdp = {0};
             serverUdp.sin_family = AF_INET;
             serverUdp.sin_port = htons(4001);
@@ -618,18 +647,6 @@ DWORD WINAPI UdpSenderThread(LPVOID) {
             }
             serverUdp.sin_addr = g_serverUdpAddr;
             sendto(g_sock, (const char*)pkt.data(), (int)pkt.size(), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
-            
-            LARGE_INTEGER loop_start;
-            QueryPerformanceCounter(&loop_start);
-            long long target_count = loop_start.QuadPart + delay_counts;
-            while (true) {
-                LARGE_INTEGER now;
-                QueryPerformanceCounter(&now);
-                long long remaining = target_count - now.QuadPart;
-                if (remaining <= 0) break;
-                if (remaining > (freq.QuadPart / 1000) * 2) Sleep(1);
-                SwitchToThread();
-            }
         }
     }
     return 0;
@@ -938,13 +955,6 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         const int MAX_PAYLOAD = 1300;
                         int totalFragments = (int)((h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
                         g_videoSeq++;
-                        LARGE_INTEGER freq;
-                        QueryPerformanceFrequency(&freq);
-                        long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay to prevent capture thread stuttering
-                        LARGE_INTEGER loop_start;
-                        QueryPerformanceCounter(&loop_start);
-
-                        
                         for (int i = 0; i < totalFragments; i++) {
                             int offset = i * MAX_PAYLOAD;
                             int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
