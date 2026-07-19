@@ -985,7 +985,11 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                                 g_udpSendCv.notify_one();
                             }
                         } else {
-                            std::cout << "[Webcam] Dropped entire H264 frame to prevent queue overflow!" << std::endl;
+                            std::cout << "[Webcam] Dropped entire H264 frame to prevent queue overflow! Forcing I-frame for next." << std::endl;
+                            // Critical: If we drop a frame, the receiver's state will be corrupted (missing reference).
+                            // We MUST force the next frame to be an I-frame by recreating the encoder.
+                            delete g_pH264Encoder;
+                            g_pH264Encoder = nullptr;
                         }
                     }
                 }
