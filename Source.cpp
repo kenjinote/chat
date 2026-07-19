@@ -592,7 +592,7 @@ std::queue<std::vector<uint8_t>> g_udpSendQueue;
 DWORD WINAPI UdpSenderThread(LPVOID) {
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
-    long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay to fix stutter
+    long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay to prevent UDP packet loss
 
     while (g_isAppRunning) {
         std::vector<uint8_t> pkt;
@@ -4086,21 +4086,10 @@ DWORD WINAPI DecodeTaskProc(LPVOID lpParam) {
         if (decodeSuccess) {
             int w = (int)pUserDec->pDecoder->GetWidth();
             int h = (int)pUserDec->pDecoder->GetHeight();
-            if (rgbOut.size() >= (size_t)(w * h * 4)) {
-                for (int y = 0; y < h / 2; y++) {
-                    uint32_t* row1 = (uint32_t*)&rgbOut[y * w * 4];
-                    uint32_t* row2 = (uint32_t*)&rgbOut[(h - 1 - y) * w * 4];
-                    for (int x = 0; x < w; x++) {
-                        std::swap(row1[x], row2[x]);
-                    }
-                }
-            } else {
-                char buf[256];
-                sprintf_s(buf, "Flip SKIPPED: size %zu != %d", rgbOut.size(), w * h * 4);
-                LogToFile(buf);
-            }
+            // The decoder outputs top-down when stride is positive.
+            // D2D expects top-down, so NO flip is needed here.
             std::lock_guard<std::mutex> lock(g_videoMutex);
-            g_videoPixelsMap[data->username] = rgbOut;
+            g_videoPixelsMap[data->username].swap(rgbOut);
             g_videoSizeMap[data->username] = { w, h };
             HWND hView = NULL;
             auto it = g_videoWindows.find(data->username);

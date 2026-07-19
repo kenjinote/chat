@@ -108,6 +108,11 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
         var.boolVal = VARIANT_TRUE;
         pCodecAPI->SetValue(&CODECAPI_AVLowLatencyMode, &var);
         
+        // Set Bitrate
+        var.vt = VT_UI4;
+        var.ulVal = 500000; // 500 Kbps (reduced to prevent I-frame network stutter)
+        pCodecAPI->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &var);
+
         var.vt = VT_UI4;
         var.ulVal = 0;
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);
@@ -116,9 +121,9 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
         var.ulVal = eAVEncCommonRateControlMode_CBR;
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
         
-        // Force an I-frame every 30 frames (1 second) to heal UDP packet loss
+        // Force an I-frame every 60 frames (2 seconds) to heal UDP packet loss less frequently
         var.vt = VT_UI4;
-        var.ulVal = 30;
+        var.ulVal = 60;
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVGOPSize, &var);
         
         pCodecAPI->Release();
@@ -326,7 +331,7 @@ bool H264Decoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
     pConvOutputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
     pConvOutputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
     MFSetAttributeSize(pConvOutputType, MF_MT_FRAME_SIZE, width, height);
-    pConvOutputType->SetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32)(-(LONG)(width * 4))); // Force top-down RGB32
+    pConvOutputType->SetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32)(width * 4));
     hr = pConverter->SetOutputType(0, pConvOutputType, 0);
     pConvOutputType->Release();
     if (FAILED(hr)) return false;
@@ -420,7 +425,7 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
                     pConvOutType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
                     pConvOutType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
                     MFSetAttributeSize(pConvOutType, MF_MT_FRAME_SIZE, m_width, m_height);
-                    pConvOutType->SetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32)(-(LONG)(m_width * 4)));
+                    pConvOutType->SetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32)(m_width * 4));
                     pConverter->SetOutputType(0, pConvOutType, 0);
                     pConvOutType->Release();
                 }
@@ -468,7 +473,7 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
                             pNewType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
                             pNewType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_RGB32);
                             MFSetAttributeSize(pNewType, MF_MT_FRAME_SIZE, m_width, m_height);
-                            pNewType->SetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32)(-(LONG)(m_width * 4)));
+                            pNewType->SetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32)(m_width * 4));
                             pConverter->SetOutputType(0, pNewType, 0);
                             pNewType->Release();
                         }
