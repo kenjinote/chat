@@ -271,11 +271,17 @@ private:
                 } else {
                     if (m_room) {
                         m_room->leave(self);
-                        json11::Json leaveMsg = json11::Json::object {
-                            {"type", "leave"},
-                            {"userId", m_userId}
-                        };
-                        m_room->deliver(leaveMsg.dump() + "\n");
+                        bool stillInRoom = false;
+                        for (const auto& u : m_room->getUsers()) {
+                            if (u.at("userId").string_value() == m_userId) { stillInRoom = true; break; }
+                        }
+                        if (!stillInRoom) {
+                            json11::Json leaveMsg = json11::Json::object {
+                                {"type", "leave"},
+                                {"userId", m_userId}
+                            };
+                            m_room->deliver(leaveMsg.dump() + "\n");
+                        }
                         if (m_room->getUsers().empty() && m_roomName != "Public") {
                             ServerManager::get().removeRoom(m_roomName);
                             if (ServerManager::get().getRedis()) {
@@ -309,11 +315,17 @@ private:
                 } else {
                     if (m_room) {
                         m_room->leave(self);
-                        json11::Json leaveMsg = json11::Json::object {
-                            {"type", "leave"},
-                            {"userId", m_userId}
-                        };
-                        m_room->deliver(leaveMsg.dump() + "\n");
+                        bool stillInRoom = false;
+                        for (const auto& u : m_room->getUsers()) {
+                            if (u.at("userId").string_value() == m_userId) { stillInRoom = true; break; }
+                        }
+                        if (!stillInRoom) {
+                            json11::Json leaveMsg = json11::Json::object {
+                                {"type", "leave"},
+                                {"userId", m_userId}
+                            };
+                            m_room->deliver(leaveMsg.dump() + "\n");
+                        }
                         if (m_room->getUsers().empty() && m_roomName != "Public") {
                             ServerManager::get().removeRoom(m_roomName);
                             if (ServerManager::get().getRedis()) {

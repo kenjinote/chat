@@ -89,7 +89,18 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
     MFCreateMediaType(&pOutputType);
     pOutputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
     pOutputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
-    pOutputType->SetUINT32(MF_MT_AVG_BITRATE, 1000000); // 1 Mbps for stable UDP
+    
+    // Dynamic bitrate calculation based on resolution
+    UINT32 pixels = width * height;
+    UINT32 targetBitrate = 1000000; // Base 1Mbps
+    if (pixels >= 3840 * 2160) targetBitrate = 6000000; // 4K -> 6Mbps
+    else if (pixels >= 2560 * 1440) targetBitrate = 4000000; // 1440p -> 4Mbps
+    else if (pixels >= 1920 * 1080) targetBitrate = 2500000; // 1080p -> 2.5Mbps
+    else if (pixels >= 1280 * 720) targetBitrate = 1500000; // 720p -> 1.5Mbps
+    else targetBitrate = (pixels * 30 * 2) / 10; // Dynamic fallback (~1.5-2.0 bits per pixel)
+    if (targetBitrate < 500000) targetBitrate = 500000; // Minimum 500Kbps
+    
+    pOutputType->SetUINT32(MF_MT_AVG_BITRATE, targetBitrate);
     MFSetAttributeSize(pOutputType, MF_MT_FRAME_SIZE, width, height);
     MFSetAttributeRatio(pOutputType, MF_MT_FRAME_RATE, 30, 1);
     MFSetAttributeRatio(pOutputType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
@@ -108,18 +119,24 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
         var.boolVal = VARIANT_TRUE;
         pCodecAPI->SetValue(&CODECAPI_AVLowLatencyMode, &var);
         
-        // Set Bitrate
+        // Set dynamic bitrate to CodecAPI as well
         var.vt = VT_UI4;
-        var.ulVal = 500000; // 500 Kbps (reduced to prevent I-frame network stutter)
+        var.ulVal = targetBitrate;
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &var);
 
         var.vt = VT_UI4;
         var.ulVal = 0;
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);
         
+        // Use Quality-based VBR for better quality in screen sharing while saving bandwidth on static scenes
         var.vt = VT_UI4;
-        var.ulVal = eAVEncCommonRateControlMode_CBR;
+        var.ulVal = eAVEncCommonRateControlMode_Quality;
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
+        
+        // Set Quality level (0 to 100). Higher = better quality.
+        var.vt = VT_UI4;
+        var.ulVal = 70; // Good balance for screen share
+        pCodecAPI->SetValue(&CODECAPI_AVEncCommonQuality, &var);
         
         // Force an I-frame every 60 frames (2 seconds) to heal UDP packet loss less frequently
         var.vt = VT_UI4;
