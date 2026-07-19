@@ -179,6 +179,16 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
         var.ulVal = targetBitrate;
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &var);
 
+        // Explicitly set MaxBitRate and BufferSize to prevent the initial I-frame from exploding in size
+        // A smaller VBV buffer forces the encoder to compress the I-frame heavily, keeping it under the network queue limit
+        var.vt = VT_UI4;
+        var.ulVal = targetBitrate; 
+        pCodecAPI->SetValue(&CODECAPI_AVEncCommonMaxBitRate, &var);
+        
+        var.vt = VT_UI4;
+        var.ulVal = targetBitrate; // VBV buffer size = 1 second of bitrate
+        pCodecAPI->SetValue(&CODECAPI_AVEncCommonBufferSize, &var);
+
         var.vt = VT_UI4;
         var.ulVal = 0;
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);

@@ -658,6 +658,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
     MFStartup(MF_VERSION);
     IMFSourceReader* pReader = NULL;
     WgcCaptureSession wgcSession;
+    
+    static bool s_firstFrameEncoded = false;
 
     while (g_isAppRunning) {
         if (!g_isWebcamActive || g_sock == INVALID_SOCKET) {
@@ -809,6 +811,13 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             if (wgcSession.GetLatestTexture(&pWgcTexture, width, height, &isNewFrame)) {
                 static bool s_hasPendingFrame = false;
                 if (isNewFrame) s_hasPendingFrame = true;
+                
+                // If the encoder hasn't produced its first output yet (e.g. at startup or after a drop),
+                // we MUST force rapid encoding to fill the MFT's internal buffer.
+                // Otherwise, a static screen at 1 FPS would take several seconds to appear.
+                if (!s_firstFrameEncoded || g_pH264Encoder == nullptr) {
+                    s_hasPendingFrame = true;
+                }
 
                 DWORD maxFps = 30;
                 DWORD minDelay = 1000 / maxFps;
@@ -951,6 +960,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         encSuccess = g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264);
                     }
                     if (encSuccess) {
+                        s_firstFrameEncoded = true;
                         std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
                         const int MAX_PAYLOAD = 1300;
                         int totalFragments = (int)((h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
@@ -990,6 +1000,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             // We MUST force the next frame to be an I-frame by recreating the encoder.
                             delete g_pH264Encoder;
                             g_pH264Encoder = nullptr;
+                            s_firstFrameEncoded = false;
                         }
                     }
                 }
