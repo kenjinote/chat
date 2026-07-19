@@ -183,15 +183,17 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
         var.ulVal = 0;
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);
         
-        // Use Unconstrained VBR for both screen share and webcam
-        // This ensures the encoder respects the targetBitrate and prevents massive I-frames that overflow the UDP queue
+        // Use CBR (Constant Bitrate) for both screen share and webcam
+        // This strictly enforces the targetBitrate, preventing any single I-frame from spiking
+        // and overflowing our 8Mbps network UDP queue.
         var.vt = VT_UI4;
-        var.ulVal = eAVEncCommonRateControlMode_UnconstrainedVBR;
+        var.ulVal = eAVEncCommonRateControlMode_CBR;
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
         
-        // Force an I-frame every 60 frames (2 seconds) to heal UDP packet loss less frequently
+        // Force an I-frame every 300 frames (10 seconds) instead of 2 seconds
+        // Generating I-frames too frequently causes network congestion at 8Mbps
         var.vt = VT_UI4;
-        var.ulVal = 60;
+        var.ulVal = 300;
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVGOPSize, &var);
         
         pCodecAPI->Release();
