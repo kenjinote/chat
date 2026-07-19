@@ -4461,7 +4461,8 @@ DWORD WINAPI RecvThread(LPVOID param) {
 
 
             if (g_sock != INVALID_SOCKET && FD_ISSET(g_sock, &readfds)) {
-                while (true) {
+                int maxUdpPerLoop = 50;
+                while (maxUdpPerLoop-- > 0) {
                     sockaddr_in from;
                     int fromlen = sizeof(from);
                     int res = recvfrom(g_sock, udpBuf, sizeof(udpBuf), 0, (sockaddr*)&from, &fromlen);
@@ -6916,6 +6917,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     serverUdp.sin_addr = g_serverUdpAddr;
                     sendto(g_sock, (char*)&hdr, sizeof(hdr), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
                 }
+            }
+            
+            // Keep TCP NAT mapping alive with heartbeat
+            if (g_tcpSocket != INVALID_SOCKET) {
+                std::string pingStr = "{\"type\":\"ping\"}\n";
+                send(g_tcpSocket, pingStr.c_str(), (int)pingStr.length(), 0);
             }
             
             bool listChanged = false;
