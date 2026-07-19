@@ -912,13 +912,19 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     LONG stride = w;
                     if (subtype == MFVideoFormat_YUY2) stride = w * 2;
                     else if (subtype == MFVideoFormat_NV12) stride = w;
-                    pCurrentType->GetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32*)&stride);
+                    
+                    UINT32 driverStride = 0;
+                    if (SUCCEEDED(pCurrentType->GetUINT32(MF_MT_DEFAULT_STRIDE, &driverStride))) {
+                        if (driverStride >= (UINT32)stride && driverStride < (UINT32)(stride * 2)) {
+                            stride = driverStride;
+                        }
+                    }
                     pCurrentType->Release();
                     
                     rgb32Data.resize(w * h * 4);
                     
                     if (subtype == MFVideoFormat_NV12) {
-                        DWORD expectedSize = abs(stride) * h * 3 / 2;
+                        DWORD expectedSize = w * h * 3 / 2; // Use logical min size
                         if (pData != nullptr && cbData >= expectedSize && w > 0 && h > 0) {
                             // ... existing NV12 code ...
                             const uint8_t* yPlane = pData;
@@ -948,7 +954,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             LogToFile("[Webcam] Frame dropped: Buffer size too small for NV12 conversion. cbData=" + std::to_string(cbData) + " expected=" + std::to_string(expectedSize));
                         }
                     } else if (subtype == MFVideoFormat_YUY2) {
-                        DWORD expectedSize = abs(stride) * h;
+                        DWORD expectedSize = w * h * 2; // Use logical min size
                         if (pData != nullptr && cbData >= expectedSize && w > 0 && h > 0) {
                             uint32_t* dst = (uint32_t*)rgb32Data.data();
                             for (UINT y = 0; y < h; y++) {
@@ -994,6 +1000,27 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
 
             bool h264Success = false;
             
+            static int droppedFrameCount = 0;
+            if (pEncoderInput == nullptr && !isScreenShare) {
+                droppedFrameCount++;
+                // If it's empty but width/height is valid, it means we are getting empty frames (e.g., privacy shutter, missing format, block)
+                if (droppedFrameCount > 30 && width > 0 && height > 0) {
+                    std::lock_guard<std::mutex> lock(g_videoMutex);
+                    rgb32Data.resize(width * height * 4, 0); // Solid black
+                    uint32_t* dst = (uint32_t*)rgb32Data.data();
+                    // Draw a simple red line on the top to indicate error
+                    for (UINT y = 0; y < 10 && y < height; y++) {
+                        for (UINT x = 0; x < width; x++) dst[y * width + x] = 0xFFFF0000;
+                    }
+                    g_videoPixelsMap[g_userId].swap(rgb32Data);
+                    g_videoSizeMap[g_userId] = { width, height };
+                    g_videoIsSWMap[g_userId] = false;
+                    g_videoIsH264Map[g_userId] = false;
+                }
+            } else {
+                droppedFrameCount = 0;
+            }
+
             if (pEncoderInput || pWgcTexture) {
                 static UINT32 s_lastEncWidth = 0;
                 static UINT32 s_lastEncHeight = 0;
