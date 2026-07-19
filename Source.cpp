@@ -438,8 +438,11 @@ HWAVEOUT g_hWaveOut = NULL;
 bool g_isVoiceActive = false;
 bool g_suspectMicDead = false;
 
-#define AUDIO_BUF_SIZE 1280 // 40ms of 16000Hz 16-bit Mono
-#define AUDIO_BUF_COUNT 4
+extern ID3D11Device* g_pD3D11Device;
+extern ID3D11DeviceContext* g_pD3D11Context;
+
+const int AUDIO_BUF_SIZE = 1920; 
+const int AUDIO_BUF_COUNT = 16;
 WAVEHDR g_waveInHdr[AUDIO_BUF_COUNT];
 char g_waveInBuf[AUDIO_BUF_COUNT][AUDIO_BUF_SIZE];
 
@@ -564,21 +567,23 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
 }
 
 void ConvertRGB32ToNV12(const uint8_t* rgb32Data, int width, int height, std::vector<uint8_t>& nv12DataForEncoder, bool flip = false) {
-    nv12DataForEncoder.resize(width * height * 1.5);
+    int w = width & ~1;
+    int h = height & ~1;
+    nv12DataForEncoder.resize(w * h * 1.5);
     uint8_t* yPlane = nv12DataForEncoder.data();
-    uint8_t* uvPlane = nv12DataForEncoder.data() + width * height;
+    uint8_t* uvPlane = nv12DataForEncoder.data() + w * h;
     const uint32_t* src = (const uint32_t*)rgb32Data;
-    for (int y = 0; y < height; y++) {
+    for (int y = 0; y < h; y++) {
         int srcY = flip ? (height - 1 - y) : y;
-        for (int x = 0; x < width; x++) {
+        for (int x = 0; x < w; x++) {
             uint32_t px = src[srcY * width + x];
             int r = (px >> 16) & 0xFF;
             int g = (px >> 8) & 0xFF;
             int b = px & 0xFF;
-            yPlane[y * width + x] = (uint8_t)max(0, min(255, ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16));
+            yPlane[y * w + x] = (uint8_t)max(0, min(255, ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16));
             if ((y % 2 == 0) && (x % 2 == 0)) {
-                uvPlane[(y / 2) * width + x] = (uint8_t)max(0, min(255, ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128));
-                uvPlane[(y / 2) * width + x + 1] = (uint8_t)max(0, min(255, ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128));
+                uvPlane[(y / 2) * w + x] = (uint8_t)max(0, min(255, ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128));
+                uvPlane[(y / 2) * w + x + 1] = (uint8_t)max(0, min(255, ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128));
             }
         }
     }
@@ -767,9 +772,9 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 lastCaptureHwnd = g_captureHwnd;
 
                 if (g_captureSourceType == 2 && g_captureMonitor) {
-                    wgcSession.StartForMonitor(g_captureMonitor);
+                    wgcSession.StartForMonitor(g_captureMonitor, g_pD3D11Device, g_pD3D11Context);
                 } else if (g_captureSourceType == 3 && g_captureHwnd) {
-                    wgcSession.StartForWindow(g_captureHwnd);
+                    wgcSession.StartForWindow(g_captureHwnd, g_pD3D11Device, g_pD3D11Context);
                 }
             }
             
@@ -783,12 +788,27 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 continue;
             }
             
-            if (wgcSession.GetLatestTexture(&pWgcTexture, width, height)) {
-                // Get the frame for local preview and JPEG fallback
-                wgcSession.GetLatestFrame(rgb32Data, width, height);
-                hr = S_OK;
+            bool isNewFrame = false;
+            if (wgcSession.GetLatestTexture(&pWgcTexture, width, height, &isNewFrame)) {
+                static bool s_hasPendingFrame = false;
+                if (isNewFrame) s_hasPendingFrame = true;
+
+                DWORD maxFps = 30;
+                DWORD minDelay = 1000 / maxFps;
+                static DWORD lastEncodeTime = 0;
+                DWORD now = GetTickCount();
+
+                if ((s_hasPendingFrame && (now - lastEncodeTime >= minDelay)) || (now - lastEncodeTime >= 1000)) {
+                    // Get the frame for local preview and JPEG fallback
+                    wgcSession.GetLatestFrame(rgb32Data, width, height);
+                    hr = S_OK;
+                    lastEncodeTime = now;
+                    s_hasPendingFrame = false;
+                } else {
+                    hr = E_FAIL; // Drop frame
+                }
             }
-            Sleep(1000 / 15); // ~15 FPS pacing for screen share
+            Sleep(10); // Short sleep to prevent busy loop
         }
 
         if ((!isScreenShare && SUCCEEDED(hr) && pSample) || (isScreenShare && SUCCEEDED(hr))) {
@@ -880,20 +900,27 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             if (pEncoderInput || pWgcTexture) {
                 static UINT32 s_lastEncWidth = 0;
                 static UINT32 s_lastEncHeight = 0;
+                static ID3D11Device* s_lastDevice = nullptr;
 
                 if (g_useH264) {
-                    if (g_pH264Encoder && (s_lastEncWidth != width || s_lastEncHeight != height)) {
+                    ID3D11Device* currentDevice = pWgcTexture ? wgcSession.GetDevice() : nullptr;
+                    bool isSharingScreen = (g_captureSourceType == 2 || g_captureSourceType == 3);
+                    static bool s_lastIsScreenShare = false;
+                    
+                    if (g_pH264Encoder && (s_lastEncWidth != width || s_lastEncHeight != height || s_lastDevice != currentDevice || s_lastIsScreenShare != isSharingScreen)) {
                         delete g_pH264Encoder;
                         g_pH264Encoder = nullptr;
                     }
                     if (!g_pH264Encoder) {
                         g_pH264Encoder = new H264Encoder();
-                        if (!g_pH264Encoder->Initialize(width, height, pWgcTexture ? wgcSession.GetDevice() : nullptr)) {
+                        if (!g_pH264Encoder->Initialize(width, height, isSharingScreen, currentDevice)) {
                             delete g_pH264Encoder;
                             g_pH264Encoder = nullptr;
                         }
                         s_lastEncWidth = width;
                         s_lastEncHeight = height;
+                        s_lastDevice = currentDevice;
+                        s_lastIsScreenShare = isSharingScreen;
                     }
                 }
                 
@@ -995,6 +1022,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 pLockedBuffer->Release();
             }
             if (pSample) pSample->Release();
+            if (pWgcTexture) pWgcTexture->Release();
             
             if (isScreenShare) {
                 Sleep(33);
@@ -7027,6 +7055,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         if (g_pAudioSessionControl) { g_pAudioSessionControl->Release(); g_pAudioSessionControl = nullptr; }
         if (g_pSimpleAudioVolume) { g_pSimpleAudioVolume->Release(); g_pSimpleAudioVolume = nullptr; }
+        MFShutdown();
         CoUninitialize();
 
         if (g_pDWriteFactory) g_pDWriteFactory->Release();
@@ -7040,6 +7069,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     timeBeginPeriod(1);
     winrt::init_apartment(winrt::apartment_type::single_threaded);
+    MFStartup(MF_VERSION);
     InitHardwareAcceleration();
     SetThreadUILanguage(0);
     g_currentRoom = GetString(IDS_LOBBY);

@@ -50,44 +50,88 @@ bool IsHardwareAccelerationEnabled() {
     return g_pDXGIManager != NULL;
 }
 
+static void SafeReleaseMFT(IMFTransform** ppMFT) {
+    if (ppMFT) {
+        IMFTransform* pMFT = (IMFTransform*)InterlockedExchangePointer((PVOID*)ppMFT, NULL);
+        if (pMFT) {
+            pMFT->Release();
+        }
+    }
+}
+
+static void SafeReleaseDXGI(IMFDXGIDeviceManager** ppDXGI) {
+    if (ppDXGI) {
+        IMFDXGIDeviceManager* pDXGI = (IMFDXGIDeviceManager*)InterlockedExchangePointer((PVOID*)ppDXGI, NULL);
+        if (pDXGI) {
+            pDXGI->Release();
+        }
+    }
+}
+
 H264Encoder::H264Encoder() {}
 H264Encoder::~H264Encoder() {
-    if (pEncoder) pEncoder->Release();
-    if (pColorConv) pColorConv->Release();
-    if (pDXGIManager) pDXGIManager->Release();
+    SafeReleaseMFT(&pEncoder);
+    SafeReleaseMFT(&pColorConv);
+    SafeReleaseDXGI(&pDXGIManager);
 }
 
-bool H264Encoder::Initialize(UINT32 width, UINT32 height, ID3D11Device* pD3DDevice) {
-    if (g_pDXGIManager || pD3DDevice) {
-        if (InitializeInternal(width, height, true, pD3DDevice)) return true;
-        Log("H264Encoder hardware init failed, falling back to software");
+bool H264Encoder::Initialize(UINT32 width, UINT32 height, bool isScreenShare, ID3D11Device* pD3D11Device) {
+    if (IsHardwareAccelerationEnabled()) {
+        if (InitializeInternal(width, height, isScreenShare, true, pD3D11Device)) return true;
+        Log("H264Encoder HW init failed, falling back to SW");
     }
-    return InitializeInternal(width, height, false, nullptr);
+    return InitializeInternal(width, height, isScreenShare, false, nullptr);
 }
 
-bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW, ID3D11Device* pD3DDevice) {
+static HRESULT SafeCoCreateH264Encoder(IMFTransform** ppEncoder) {
+    __try {
+        return CoCreateInstance(CLSID_CMSH264EncoderMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(ppEncoder));
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return E_FAIL;
+    }
+}
+
+bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenShare, bool useHW, ID3D11Device* pD3DDevice) {
     Log("H264Encoder::InitializeInternal");
     if (pEncoder) { pEncoder->Release(); pEncoder = NULL; }
     if (pColorConv) { pColorConv->Release(); pColorConv = NULL; }
-    if (pDXGIManager) { pDXGIManager->Release(); pDXGIManager = NULL; }
-    m_width = width;
-    m_height = height;
+    m_origWidth = width;
+    m_origHeight = height;
+    m_isScreenShare = isScreenShare;
+
+    UINT32 encWidth = width;
+    UINT32 encHeight = height;
+    if (isScreenShare) {
+        if (encWidth > 1920 || encHeight > 1080) {
+            float ratioX = 1920.0f / encWidth;
+            float ratioY = 1080.0f / encHeight;
+            float ratio = min(ratioX, ratioY);
+            encWidth = (UINT32)(encWidth * ratio);
+            encHeight = (UINT32)(encHeight * ratio);
+        }
+    }
+
+    // H264 requires even width and height
+    if (encWidth % 2 != 0) encWidth--;
+    if (encHeight % 2 != 0) encHeight--;
+
+    m_width = encWidth;
+    m_height = encHeight;
     m_rtStart = 0;
     m_useHW = useHW;
 
-    if (pD3DDevice) {
-        MFCreateDXGIDeviceManager(&m_dxgiToken, &pDXGIManager);
-        if (pDXGIManager) pDXGIManager->ResetDevice(pD3DDevice, m_dxgiToken);
-    } else if (useHW && g_pDXGIManager) {
+    if (useHW && g_pDXGIManager) {
         pDXGIManager = g_pDXGIManager;
         pDXGIManager->AddRef();
+    } else if (pD3DDevice) {
+        MFCreateDXGIDeviceManager(&m_dxgiToken, &pDXGIManager);
+        if (pDXGIManager) pDXGIManager->ResetDevice(pD3DDevice, m_dxgiToken);
     }
 
-    HRESULT hr = CoCreateInstance(CLSID_CMSH264EncoderMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pEncoder));
-    if (FAILED(hr)) return false;
-
-    if (pDXGIManager) {
-        pEncoder->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)pDXGIManager);
+    HRESULT hr = SafeCoCreateH264Encoder(&pEncoder);
+    if (FAILED(hr)) {
+        Log("Exception or failure caught during CoCreateInstance for H264 Encoder MFT!");
+        return false;
     }
 
     IMFAttributes* pAttributes = NULL;
@@ -102,7 +146,7 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW, ID
     pOutputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_H264);
     
     // Dynamic bitrate calculation based on resolution
-    UINT32 pixels = width * height;
+    UINT32 pixels = encWidth * encHeight;
     UINT32 targetBitrate = 1000000; // Base 1Mbps
     if (pixels >= 3840 * 2160) targetBitrate = 6000000; // 4K -> 6Mbps
     else if (pixels >= 2560 * 1440) targetBitrate = 4000000; // 1440p -> 4Mbps
@@ -112,7 +156,7 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW, ID
     if (targetBitrate < 500000) targetBitrate = 500000; // Minimum 500Kbps
     
     pOutputType->SetUINT32(MF_MT_AVG_BITRATE, targetBitrate);
-    MFSetAttributeSize(pOutputType, MF_MT_FRAME_SIZE, width, height);
+    MFSetAttributeSize(pOutputType, MF_MT_FRAME_SIZE, encWidth, encHeight);
     MFSetAttributeRatio(pOutputType, MF_MT_FRAME_RATE, 30, 1);
     MFSetAttributeRatio(pOutputType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
     pOutputType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
@@ -139,15 +183,22 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW, ID
         var.ulVal = 0;
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);
         
-        // Use Quality-based VBR for better quality in screen sharing while saving bandwidth on static scenes
-        var.vt = VT_UI4;
-        var.ulVal = eAVEncCommonRateControlMode_Quality;
-        pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
-        
-        // Set Quality level (0 to 100). Higher = better quality.
-        var.vt = VT_UI4;
-        var.ulVal = 70; // Good balance for screen share
-        pCodecAPI->SetValue(&CODECAPI_AVEncCommonQuality, &var);
+        if (isScreenShare) {
+            // Use Quality-based VBR for better quality in screen sharing while saving bandwidth on static scenes
+            var.vt = VT_UI4;
+            var.ulVal = eAVEncCommonRateControlMode_Quality;
+            pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
+            
+            // Set Quality level (0 to 100). Higher = better quality.
+            var.vt = VT_UI4;
+            var.ulVal = 70; // Good balance for screen share
+            pCodecAPI->SetValue(&CODECAPI_AVEncCommonQuality, &var);
+        } else {
+            // Unconstrained VBR or CBR for webcam (avoids quality-driven bitrate spikes from noise)
+            var.vt = VT_UI4;
+            var.ulVal = eAVEncCommonRateControlMode_UnconstrainedVBR;
+            pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
+        }
         
         // Force an I-frame every 60 frames (2 seconds) to heal UDP packet loss less frequently
         var.vt = VT_UI4;
@@ -162,7 +213,7 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW, ID
     pInputType->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
     pInputType->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
     pInputType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
-    MFSetAttributeSize(pInputType, MF_MT_FRAME_SIZE, width, height);
+    MFSetAttributeSize(pInputType, MF_MT_FRAME_SIZE, encWidth, encHeight);
     MFSetAttributeRatio(pInputType, MF_MT_FRAME_RATE, 30, 1);
     MFSetAttributeRatio(pInputType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
     
@@ -179,7 +230,7 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW, ID
             MFCreateMediaType(&pVpIn);
             pVpIn->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
             pVpIn->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_ARGB32);
-            MFSetAttributeSize(pVpIn, MF_MT_FRAME_SIZE, width, height);
+            MFSetAttributeSize(pVpIn, MF_MT_FRAME_SIZE, width, height); // Native width/height
             pColorConv->SetInputType(0, pVpIn, 0);
             pVpIn->Release();
             
@@ -187,7 +238,7 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW, ID
             MFCreateMediaType(&pVpOut);
             pVpOut->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
             pVpOut->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
-            MFSetAttributeSize(pVpOut, MF_MT_FRAME_SIZE, width, height);
+            MFSetAttributeSize(pVpOut, MF_MT_FRAME_SIZE, encWidth, encHeight); // Scaled width/height
             pColorConv->SetOutputType(0, pVpOut, 0);
             pVpOut->Release();
             
@@ -230,7 +281,7 @@ bool H264Encoder::EncodeFrame(const BYTE* pNv12Data, DWORD cbData, std::vector<u
     if (FAILED(hr)) {
         if (m_useHW) {
             Log("H264Encoder EncodeFrame HW failed, falling back to SW dynamically");
-            if (InitializeInternal(m_width, m_height, false, nullptr)) {
+            if (InitializeInternal(m_origWidth, m_origHeight, m_isScreenShare, false, nullptr)) {
                 return EncodeFrame(pNv12Data, cbData, outH264);
             }
         }

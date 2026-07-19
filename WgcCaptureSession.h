@@ -24,17 +24,12 @@ public:
         Stop();
     }
 
-    bool StartForWindow(HWND hwnd) {
-        bool res = Start(CreateItemForWindow(hwnd));
-        if (res && IsWindow(hwnd)) {
-            // Force the window to repaint so DWM composes a new frame, triggering FrameArrived immediately
-            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN | RDW_FRAME);
-        }
-        return res;
+    bool StartForWindow(HWND hwnd, ID3D11Device* pDevice, ID3D11DeviceContext* pContext) {
+        return Start(CreateItemForWindow(hwnd), pDevice, pContext);
     }
 
-    bool StartForMonitor(HMONITOR hmonitor) {
-        return Start(CreateItemForMonitor(hmonitor));
+    bool StartForMonitor(HMONITOR hmonitor, ID3D11Device* pDevice, ID3D11DeviceContext* pContext) {
+        return Start(CreateItemForMonitor(hmonitor), pDevice, pContext);
     }
 
     void Stop() {
@@ -48,10 +43,10 @@ public:
         }
         m_item = nullptr;
         m_device = nullptr;
-        m_d3dDevice = nullptr;
         m_d3dContext = nullptr;
         {
             std::lock_guard<std::mutex> lock(m_mutex);
+            m_d3dDevice = nullptr;
             m_latestTexture = nullptr;
         }
     }
@@ -100,12 +95,17 @@ public:
     }
 
     ID3D11Device* GetDevice() {
+        std::lock_guard<std::mutex> lock(m_mutex);
         return m_d3dDevice.get();
     }
 
-    bool GetLatestTexture(ID3D11Texture2D** ppTexture, UINT32& outWidth, UINT32& outHeight) {
+    bool GetLatestTexture(ID3D11Texture2D** ppTexture, UINT32& outWidth, UINT32& outHeight, bool* pIsNew = nullptr) {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (!m_latestTexture) return false;
+        if (!m_latestTexture || !m_d3dDevice) return false;
+
+        winrt::com_ptr<ID3D11Device> texDevice;
+        m_latestTexture->GetDevice(texDevice.put());
+        if (texDevice.get() != m_d3dDevice.get()) return false;
 
         D3D11_TEXTURE2D_DESC desc;
         m_latestTexture->GetDesc(&desc);
@@ -113,6 +113,10 @@ public:
         outHeight = desc.Height;
 
         m_latestTexture.copy_to(ppTexture);
+        if (pIsNew) {
+            *pIsNew = m_isNewFrame;
+            m_isNewFrame = false;
+        }
         return true;
     }
 
@@ -153,16 +157,12 @@ public:
         }
     }
 
-    bool Start(winrt::Windows::Graphics::Capture::GraphicsCaptureItem item) {
+    bool Start(winrt::Windows::Graphics::Capture::GraphicsCaptureItem item, ID3D11Device* pDevice, ID3D11DeviceContext* pContext) {
         Stop();
-        if (!item) return false;
+        if (!item || !pDevice || !pContext) return false;
 
-        UINT creationFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-        D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_1 };
-        
-        if (FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, creationFlags, featureLevels, ARRAYSIZE(featureLevels), D3D11_SDK_VERSION, m_d3dDevice.put(), nullptr, m_d3dContext.put()))) {
-            return false;
-        }
+        m_d3dDevice.copy_from(pDevice);
+        m_d3dContext.copy_from(pContext);
 
         winrt::com_ptr<IDXGIDevice> dxgiDevice = m_d3dDevice.as<IDXGIDevice>();
         winrt::com_ptr<::IInspectable> inspectable;
@@ -207,6 +207,7 @@ public:
             if (SUCCEEDED(access->GetInterface(winrt::guid_of<ID3D11Texture2D>(), texture.put_void()))) {
                 std::lock_guard<std::mutex> lock(m_mutex);
                 m_latestTexture = texture;
+                m_isNewFrame = true;
             }
         }
     }
@@ -222,6 +223,7 @@ public:
     winrt::Windows::Graphics::Capture::GraphicsCaptureItem m_item{ nullptr };
     winrt::Windows::Graphics::Capture::Direct3D11CaptureFramePool m_framePool{ nullptr };
     winrt::Windows::Graphics::Capture::GraphicsCaptureSession m_session{ nullptr };
-    winrt::com_ptr<ID3D11Texture2D> m_latestTexture{ nullptr };
+    winrt::com_ptr<ID3D11Texture2D> m_latestTexture = nullptr;
+    bool m_isNewFrame = false;
     winrt::Windows::Graphics::SizeInt32 m_lastSize{ 0, 0 };
 };
