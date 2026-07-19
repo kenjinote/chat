@@ -563,14 +563,15 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
     return true;
 }
 
-void ConvertRGB32ToNV12(const uint8_t* rgb32Data, int width, int height, std::vector<uint8_t>& nv12DataForEncoder) {
+void ConvertRGB32ToNV12(const uint8_t* rgb32Data, int width, int height, std::vector<uint8_t>& nv12DataForEncoder, bool flip = false) {
     nv12DataForEncoder.resize(width * height * 1.5);
     uint8_t* yPlane = nv12DataForEncoder.data();
     uint8_t* uvPlane = nv12DataForEncoder.data() + width * height;
     const uint32_t* src = (const uint32_t*)rgb32Data;
     for (int y = 0; y < height; y++) {
+        int srcY = flip ? (height - 1 - y) : y;
         for (int x = 0; x < width; x++) {
-            uint32_t px = src[y * width + x];
+            uint32_t px = src[srcY * width + x];
             int r = (px >> 16) & 0xFF;
             int g = (px >> 8) & 0xFF;
             int b = px & 0xFF;
@@ -822,7 +823,18 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             IMFMediaBuffer* pLockedBuffer = nullptr;
 
             if (isScreenShare) {
-                ConvertRGB32ToNV12(rgb32Data.data(), width, height, nv12DataForEncoder);
+                // WGC returns bottom-up data, so we must flip it to top-down for correct H.264 and JPEG encoding
+                int rowPitch = width * 4;
+                std::vector<uint8_t> rowBuffer(rowPitch);
+                for (int y = 0; y < height / 2; y++) {
+                    uint8_t* rowA = rgb32Data.data() + y * rowPitch;
+                    uint8_t* rowB = rgb32Data.data() + (height - 1 - y) * rowPitch;
+                    memcpy(rowBuffer.data(), rowA, rowPitch);
+                    memcpy(rowA, rowB, rowPitch);
+                    memcpy(rowB, rowBuffer.data(), rowPitch);
+                }
+                
+                ConvertRGB32ToNV12(rgb32Data.data(), width, height, nv12DataForEncoder, false);
                 pEncoderInput = nv12DataForEncoder.data();
                 cbEncoderInput = (DWORD)nv12DataForEncoder.size();
             } else {
