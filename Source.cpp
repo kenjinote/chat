@@ -954,27 +954,38 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
                         const int MAX_PAYLOAD = 1300;
                         int totalFragments = (int)((h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
-                        g_videoSeq++;
-                        for (int i = 0; i < totalFragments; i++) {
-                            int offset = i * MAX_PAYLOAD;
-                            int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
-                            
-                            MediaHeader mhdr = {0};
-                            mhdr.sessionId = g_sessionId;
-                            mhdr.seqNum = g_videoSeq;
-                            mhdr.payloadType = 5; 
-                            mhdr.flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
-                            mhdr.timestamp = i; 
-                            wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
-                            
-                            std::vector<uint8_t> packet(sizeof(MediaHeader) + len);
-                            memcpy(packet.data(), &mhdr, sizeof(MediaHeader));
-                            memcpy(packet.data() + sizeof(MediaHeader), h264.data() + offset, len);
-                            
+                        
+                        bool skipFrame = false;
+                        {
                             std::unique_lock<std::mutex> lock(g_udpSendMutex);
-                            if (g_udpSendQueue.size() > 500) g_udpSendQueue.pop(); // Prevent unlimited queue growth
-                            g_udpSendQueue.push(std::move(packet));
-                            g_udpSendCv.notify_one();
+                            // If queuing this frame exceeds 1000 fragments (~1.3MB), drop the entire frame
+                            if (g_udpSendQueue.size() + totalFragments > 1000) skipFrame = true;
+                        }
+
+                        if (!skipFrame) {
+                            g_videoSeq++;
+                            for (int i = 0; i < totalFragments; i++) {
+                                int offset = i * MAX_PAYLOAD;
+                                int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
+                                
+                                MediaHeader mhdr = {0};
+                                mhdr.sessionId = g_sessionId;
+                                mhdr.seqNum = g_videoSeq;
+                                mhdr.payloadType = 5; 
+                                mhdr.flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
+                                mhdr.timestamp = i; 
+                                wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
+                                
+                                std::vector<uint8_t> packet(sizeof(MediaHeader) + len);
+                                memcpy(packet.data(), &mhdr, sizeof(MediaHeader));
+                                memcpy(packet.data() + sizeof(MediaHeader), h264.data() + offset, len);
+                                
+                                std::unique_lock<std::mutex> lock(g_udpSendMutex);
+                                g_udpSendQueue.push(std::move(packet));
+                                g_udpSendCv.notify_one();
+                            }
+                        } else {
+                            std::cout << "[Webcam] Dropped entire H264 frame to prevent queue overflow!" << std::endl;
                         }
                     }
                 }
@@ -983,35 +994,38 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     if (EncodeJPEG(width, height, rgb32Data.data(), (DWORD)rgb32Data.size(), jpegData)) {
                         const int MAX_PAYLOAD = 1300;
                         int totalFragments = (int)((jpegData.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
-                        g_videoSeq++;
-                        LARGE_INTEGER freq;
-                        QueryPerformanceFrequency(&freq);
-                        long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay
-                        LARGE_INTEGER loop_start;
-                        QueryPerformanceCounter(&loop_start);
-
-                        for (int i = 0; i < totalFragments; i++) {
-                            int offset = i * MAX_PAYLOAD;
-                            int len = min(MAX_PAYLOAD, (int)jpegData.size() - offset);
-                            
-                            MediaHeader mhdr = {0};
-                            mhdr.sessionId = g_sessionId;
-                            mhdr.seqNum = g_videoSeq;
-                            mhdr.payloadType = 2; 
-                            mhdr.flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
-                            mhdr.timestamp = i; 
-                            wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
-                            
-                            std::vector<uint8_t> packet(sizeof(MediaHeader) + len);
-                            memcpy(packet.data(), &mhdr, sizeof(MediaHeader));
-                            memcpy(packet.data() + sizeof(MediaHeader), jpegData.data() + offset, len);
-                            
+                        
+                        bool skipFrame = false;
+                        {
                             std::unique_lock<std::mutex> lock(g_udpSendMutex);
-                            if (g_udpSendQueue.size() > 500) g_udpSendQueue.pop(); // Prevent unlimited queue growth
-                            g_udpSendQueue.push(std::move(packet));
-                            g_udpSendCv.notify_one();
+                            if (g_udpSendQueue.size() + totalFragments > 1000) skipFrame = true;
                         }
-                        // Swap logic moved to end of frame
+
+                        if (!skipFrame) {
+                            g_videoSeq++;
+                            for (int i = 0; i < totalFragments; i++) {
+                                int offset = i * MAX_PAYLOAD;
+                                int len = min(MAX_PAYLOAD, (int)jpegData.size() - offset);
+                                
+                                MediaHeader mhdr = {0};
+                                mhdr.sessionId = g_sessionId;
+                                mhdr.seqNum = g_videoSeq;
+                                mhdr.payloadType = 2; 
+                                mhdr.flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
+                                mhdr.timestamp = i; 
+                                wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
+                                
+                                std::vector<uint8_t> packet(sizeof(MediaHeader) + len);
+                                memcpy(packet.data(), &mhdr, sizeof(MediaHeader));
+                                memcpy(packet.data() + sizeof(MediaHeader), jpegData.data() + offset, len);
+                                
+                                std::unique_lock<std::mutex> lock(g_udpSendMutex);
+                                g_udpSendQueue.push(std::move(packet));
+                                g_udpSendCv.notify_one();
+                            }
+                        } else {
+                            std::cout << "[Webcam] Dropped entire JPEG frame to prevent queue overflow!" << std::endl;
+                        }
                     }
                 }
             } // Close if (pEncoderInput)
