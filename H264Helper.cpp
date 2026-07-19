@@ -398,7 +398,15 @@ bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>&
             if (!vpProvides && pNv12Sample) { pNv12Sample->Release(); pNv12Sample = NULL; }
             break;
         }
-        if (hr == MF_E_TRANSFORM_STREAM_CHANGE) continue;
+        if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
+            if (!vpProvides && pNv12Sample) { pNv12Sample->Release(); pNv12Sample = NULL; }
+            IMFMediaType* pNewType = NULL;
+            if (SUCCEEDED(pColorConv->GetOutputAvailableType(0, 0, &pNewType))) {
+                pColorConv->SetOutputType(0, pNewType, 0);
+                pNewType->Release();
+            }
+            continue;
+        }
         
         if (SUCCEEDED(hr) && vpOutput.pSample) {
             if (vpProvides) {
