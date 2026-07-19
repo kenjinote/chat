@@ -99,6 +99,23 @@ public:
         return false;
     }
 
+    ID3D11Device* GetDevice() {
+        return m_d3dDevice.get();
+    }
+
+    bool GetLatestTexture(ID3D11Texture2D** ppTexture, UINT32& outWidth, UINT32& outHeight) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (!m_latestTexture) return false;
+
+        D3D11_TEXTURE2D_DESC desc;
+        m_latestTexture->GetDesc(&desc);
+        outWidth = desc.Width;
+        outHeight = desc.Height;
+
+        m_latestTexture.copy_to(ppTexture);
+        return true;
+    }
+
 public:
     static bool IsWindowCapturable(HWND hwnd) {
         if (!hwnd) return false;

@@ -23,6 +23,9 @@ bool IsHardwareAccelerationEnabled();
 
 class H264Encoder {
     IMFTransform* pEncoder = NULL;
+    IMFTransform* pColorConv = NULL;
+    IMFDXGIDeviceManager* pDXGIManager = NULL;
+    UINT m_dxgiToken = 0;
     DWORD inputId = 0;
     DWORD outputId = 0;
     UINT32 m_width = 0;
@@ -32,10 +35,11 @@ class H264Encoder {
 public:
     H264Encoder();
     ~H264Encoder();
-    bool Initialize(UINT32 width, UINT32 height);
+    bool Initialize(UINT32 width, UINT32 height, ID3D11Device* pD3DDevice = nullptr);
     bool EncodeFrame(const BYTE* pNv12Data, DWORD cbData, std::vector<uint8_t>& outH264);
+    bool EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>& outH264);
 private:
-    bool InitializeInternal(UINT32 width, UINT32 height, bool useHW);
+    bool InitializeInternal(UINT32 width, UINT32 height, bool useHW, ID3D11Device* pD3DDevice);
 };
 
 class H264Decoder {

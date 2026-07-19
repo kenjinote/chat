@@ -746,6 +746,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
         HRESULT hr = E_FAIL;
         std::vector<uint8_t> rgb32Data;
         UINT32 width = 0, height = 0;
+        ID3D11Texture2D* pWgcTexture = nullptr;
         // isScreenShare already evaluated above
         
         if (!isScreenShare) {
@@ -782,62 +783,9 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 continue;
             }
             
-            if (wgcSession.GetLatestFrame(rgb32Data, width, height)) {
-                // Downscale if too large to save bandwidth (max 1280x720 ish)
-                float scale = 1.0f;
-                if (width > 1280 || height > 720) {
-                    scale = min(1280.0f / width, 720.0f / height);
-                }
-                UINT32 scaledWidth = ((UINT32)(width * scale) + 15) & ~15; // Must be multiple of 16 for H.264
-                UINT32 scaledHeight = ((UINT32)(height * scale) + 15) & ~15; // Must be multiple of 16 for H.264
-                
-                if (scaledWidth != width || scaledHeight != height) {
-                    HDC hdcMemSrc = CreateCompatibleDC(NULL);
-                    HDC hdcMemDst = CreateCompatibleDC(NULL);
-                    
-                    BITMAPINFOHEADER bmi = {0};
-                    bmi.biSize = sizeof(BITMAPINFOHEADER);
-                    bmi.biWidth = width;
-                    bmi.biHeight = -(LONG)height; // top-down
-                    bmi.biPlanes = 1;
-                    bmi.biBitCount = 32;
-                    bmi.biCompression = BI_RGB;
-                    
-                    void* pBitsSrc;
-                    HBITMAP hBmpSrc = CreateDIBSection(hdcMemSrc, (BITMAPINFO*)&bmi, DIB_RGB_COLORS, &pBitsSrc, NULL, 0);
-                    memcpy(pBitsSrc, rgb32Data.data(), rgb32Data.size());
-                    
-                    bmi.biWidth = scaledWidth;
-                    bmi.biHeight = -(LONG)scaledHeight;
-                    void* pBitsDst;
-                    HBITMAP hBmpDst = CreateDIBSection(hdcMemDst, (BITMAPINFO*)&bmi, DIB_RGB_COLORS, &pBitsDst, NULL, 0);
-                    
-                    HBITMAP hOldSrc = (HBITMAP)SelectObject(hdcMemSrc, hBmpSrc);
-                    HBITMAP hOldDst = (HBITMAP)SelectObject(hdcMemDst, hBmpDst);
-                    
-                    SetStretchBltMode(hdcMemDst, HALFTONE);
-                    StretchBlt(hdcMemDst, 0, 0, scaledWidth, scaledHeight, hdcMemSrc, 0, 0, width, height, SRCCOPY);
-                    GdiFlush(); // CRITICAL: Ensure StretchBlt completes before reading pBitsDst
-                    
-                    rgb32Data.assign((uint8_t*)pBitsDst, (uint8_t*)pBitsDst + (scaledWidth * scaledHeight * 4));
-                    width = scaledWidth;
-                    height = scaledHeight;
-                    
-                    SelectObject(hdcMemSrc, hOldSrc);
-                    SelectObject(hdcMemDst, hOldDst);
-                    DeleteObject(hBmpSrc);
-                    DeleteObject(hBmpDst);
-                    DeleteDC(hdcMemSrc);
-                    DeleteDC(hdcMemDst);
-                }
-                
-                // Swap R and B since WGC returns BGRA, but our RGB32->NV12 expects RGBA/BGRA correctly?
-                // Wait, ConvertRGB32ToNV12 expects BGRA?
-                // ConvertRGB32ToNV12:
-                // int r = (px >> 16) & 0xFF;
-                // int b = px & 0xFF;
-                // In little-endian, a uint32_t BGRA has B in the lowest byte, so px & 0xFF is B!
-                // So it expects BGRA! And WGC outputs BGRA. Perfect.
+            if (wgcSession.GetLatestTexture(&pWgcTexture, width, height)) {
+                // Get the frame for local preview and JPEG fallback
+                wgcSession.GetLatestFrame(rgb32Data, width, height);
                 hr = S_OK;
             }
             Sleep(1000 / 15); // ~15 FPS pacing for screen share
@@ -929,7 +877,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
 
             bool h264Success = false;
             
-            if (pEncoderInput) {
+            if (pEncoderInput || pWgcTexture) {
                 static UINT32 s_lastEncWidth = 0;
                 static UINT32 s_lastEncHeight = 0;
 
@@ -940,7 +888,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     }
                     if (!g_pH264Encoder) {
                         g_pH264Encoder = new H264Encoder();
-                        if (!g_pH264Encoder->Initialize(width, height)) {
+                        if (!g_pH264Encoder->Initialize(width, height, pWgcTexture ? wgcSession.GetDevice() : nullptr)) {
                             delete g_pH264Encoder;
                             g_pH264Encoder = nullptr;
                         }
@@ -952,7 +900,13 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 if (g_pH264Encoder) {
                     h264Success = true; // Never fallback to JPEG if H.264 is active
                     std::vector<uint8_t> h264;
-                    if (g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264)) {
+                    bool encSuccess = false;
+                    if (pWgcTexture) {
+                        encSuccess = g_pH264Encoder->EncodeTexture(pWgcTexture, h264);
+                    } else {
+                        encSuccess = g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264);
+                    }
+                    if (encSuccess) {
                         std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
                         const int MAX_PAYLOAD = 1300;
                         int totalFragments = (int)((h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);

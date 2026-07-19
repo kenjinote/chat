@@ -53,30 +53,41 @@ bool IsHardwareAccelerationEnabled() {
 H264Encoder::H264Encoder() {}
 H264Encoder::~H264Encoder() {
     if (pEncoder) pEncoder->Release();
+    if (pColorConv) pColorConv->Release();
+    if (pDXGIManager) pDXGIManager->Release();
 }
 
-bool H264Encoder::Initialize(UINT32 width, UINT32 height) {
-    if (g_pDXGIManager) {
-        if (InitializeInternal(width, height, true)) return true;
+bool H264Encoder::Initialize(UINT32 width, UINT32 height, ID3D11Device* pD3DDevice) {
+    if (g_pDXGIManager || pD3DDevice) {
+        if (InitializeInternal(width, height, true, pD3DDevice)) return true;
         Log("H264Encoder hardware init failed, falling back to software");
     }
-    return InitializeInternal(width, height, false);
+    return InitializeInternal(width, height, false, nullptr);
 }
 
-bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
+bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW, ID3D11Device* pD3DDevice) {
     Log("H264Encoder::InitializeInternal");
-    if (pEncoder) pEncoder->Release();
-    pEncoder = NULL;
+    if (pEncoder) { pEncoder->Release(); pEncoder = NULL; }
+    if (pColorConv) { pColorConv->Release(); pColorConv = NULL; }
+    if (pDXGIManager) { pDXGIManager->Release(); pDXGIManager = NULL; }
     m_width = width;
     m_height = height;
     m_rtStart = 0;
     m_useHW = useHW;
 
+    if (pD3DDevice) {
+        MFCreateDXGIDeviceManager(&m_dxgiToken, &pDXGIManager);
+        if (pDXGIManager) pDXGIManager->ResetDevice(pD3DDevice, m_dxgiToken);
+    } else if (useHW && g_pDXGIManager) {
+        pDXGIManager = g_pDXGIManager;
+        pDXGIManager->AddRef();
+    }
+
     HRESULT hr = CoCreateInstance(CLSID_CMSH264EncoderMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pEncoder));
     if (FAILED(hr)) return false;
 
-    if (useHW && g_pDXGIManager) {
-        pEncoder->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)g_pDXGIManager);
+    if (pDXGIManager) {
+        pEncoder->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)pDXGIManager);
     }
 
     IMFAttributes* pAttributes = NULL;
@@ -159,6 +170,33 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool useHW) {
     pInputType->Release();
     if (FAILED(hr)) return false;
 
+    if (pDXGIManager) {
+        hr = CoCreateInstance(CLSID_VideoProcessorMFT, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pColorConv));
+        if (SUCCEEDED(hr)) {
+            pColorConv->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)pDXGIManager);
+            
+            IMFMediaType* pVpIn = NULL;
+            MFCreateMediaType(&pVpIn);
+            pVpIn->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+            pVpIn->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_ARGB32);
+            MFSetAttributeSize(pVpIn, MF_MT_FRAME_SIZE, width, height);
+            pColorConv->SetInputType(0, pVpIn, 0);
+            pVpIn->Release();
+            
+            IMFMediaType* pVpOut = NULL;
+            MFCreateMediaType(&pVpOut);
+            pVpOut->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
+            pVpOut->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
+            MFSetAttributeSize(pVpOut, MF_MT_FRAME_SIZE, width, height);
+            pColorConv->SetOutputType(0, pVpOut, 0);
+            pVpOut->Release();
+            
+            pColorConv->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, NULL);
+            pColorConv->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, NULL);
+            pColorConv->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, NULL);
+        }
+    }
+
     pEncoder->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, NULL);
     pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, NULL);
     pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, NULL);
@@ -192,13 +230,142 @@ bool H264Encoder::EncodeFrame(const BYTE* pNv12Data, DWORD cbData, std::vector<u
     if (FAILED(hr)) {
         if (m_useHW) {
             Log("H264Encoder EncodeFrame HW failed, falling back to SW dynamically");
-            if (InitializeInternal(m_width, m_height, false)) {
+            if (InitializeInternal(m_width, m_height, false, nullptr)) {
                 return EncodeFrame(pNv12Data, cbData, outH264);
             }
         }
         return false;
     }
 
+    while (true) {
+        MFT_OUTPUT_DATA_BUFFER encOutput = {0};
+        encOutput.dwStreamID = 0;
+        
+        MFT_OUTPUT_STREAM_INFO encInfo = {0};
+        pEncoder->GetOutputStreamInfo(0, &encInfo);
+        bool encProvides = (encInfo.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) != 0;
+
+        IMFSample* pEncSample = NULL;
+        IMFMediaBuffer* pEncBuffer = NULL;
+        if (!encProvides) {
+            MFCreateSample(&pEncSample);
+            DWORD cbSize = encInfo.cbSize > 0 ? encInfo.cbSize : (m_width * m_height * 4);
+            DWORD cbAlignment = encInfo.cbAlignment > 0 ? encInfo.cbAlignment : MF_16_BYTE_ALIGNMENT;
+            MFCreateAlignedMemoryBuffer(cbSize, cbAlignment, &pEncBuffer);
+            pEncSample->AddBuffer(pEncBuffer);
+            pEncBuffer->Release();
+            encOutput.pSample = pEncSample;
+        }
+
+        DWORD encStatus = 0;
+        hr = pEncoder->ProcessOutput(0, 1, &encOutput, &encStatus);
+        if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
+            if (pEncSample) pEncSample->Release();
+            break;
+        }
+        if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
+            if (pEncSample) pEncSample->Release();
+            IMFMediaType* pNewType = NULL;
+            if (SUCCEEDED(pEncoder->GetOutputAvailableType(0, 0, &pNewType))) {
+                pEncoder->SetOutputType(0, pNewType, 0);
+                pNewType->Release();
+            }
+            continue;
+        }
+        
+        if (SUCCEEDED(hr) && encOutput.pSample) {
+            IMFMediaBuffer* pResBuffer = NULL;
+            encOutput.pSample->ConvertToContiguousBuffer(&pResBuffer);
+            BYTE* pResData = NULL;
+            DWORD cbResData = 0;
+            pResBuffer->Lock(&pResData, NULL, &cbResData);
+            
+            size_t oldSize = outH264.size();
+            outH264.resize(oldSize + cbResData);
+            memcpy(outH264.data() + oldSize, pResData, cbResData);
+            
+            pResBuffer->Unlock();
+            pResBuffer->Release();
+            encOutput.pSample->Release();
+        } else {
+            if (encOutput.pSample) encOutput.pSample->Release();
+            if (pEncSample) pEncSample->Release();
+            break;
+        }
+        if (encOutput.pEvents) encOutput.pEvents->Release();
+    }
+    
+    return !outH264.empty();
+}
+
+bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>& outH264) {
+    if (!pEncoder || !pDXGIManager || !pColorConv) return false;
+    outH264.clear();
+
+    IMFSample* pSample = NULL;
+    MFCreateSample(&pSample);
+    
+    IMFMediaBuffer* pBuffer = NULL;
+    MFCreateDXGISurfaceBuffer(__uuidof(ID3D11Texture2D), pTexture, 0, FALSE, &pBuffer);
+    
+    pSample->AddBuffer(pBuffer);
+    pBuffer->Release();
+    pSample->SetSampleTime(m_rtStart);
+    pSample->SetSampleDuration(333333);
+    m_rtStart += 333333;
+
+    // Process through Color Converter MFT (BGRA -> NV12)
+    HRESULT hr = pColorConv->ProcessInput(0, pSample, 0);
+    pSample->Release();
+    if (FAILED(hr)) return false;
+    
+    IMFSample* pNv12Sample = NULL;
+    while (true) {
+        MFT_OUTPUT_DATA_BUFFER vpOutput = {0};
+        vpOutput.dwStreamID = 0;
+        
+        MFT_OUTPUT_STREAM_INFO vpInfo = {0};
+        pColorConv->GetOutputStreamInfo(0, &vpInfo);
+        bool vpProvides = (vpInfo.dwFlags & (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) != 0;
+
+        IMFMediaBuffer* pVpBuffer = NULL;
+        if (!vpProvides) {
+            MFCreateSample(&pNv12Sample);
+            DWORD cbSize = vpInfo.cbSize > 0 ? vpInfo.cbSize : (m_width * m_height * 2); // NV12 is 1.5x but give some leeway
+            DWORD cbAlignment = vpInfo.cbAlignment > 0 ? vpInfo.cbAlignment : MF_16_BYTE_ALIGNMENT;
+            MFCreateAlignedMemoryBuffer(cbSize, cbAlignment, &pVpBuffer);
+            pNv12Sample->AddBuffer(pVpBuffer);
+            pVpBuffer->Release();
+            vpOutput.pSample = pNv12Sample;
+        }
+
+        DWORD vpStatus = 0;
+        hr = pColorConv->ProcessOutput(0, 1, &vpOutput, &vpStatus);
+        if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
+            if (!vpProvides && pNv12Sample) { pNv12Sample->Release(); pNv12Sample = NULL; }
+            break;
+        }
+        if (hr == MF_E_TRANSFORM_STREAM_CHANGE) continue;
+        
+        if (SUCCEEDED(hr) && vpOutput.pSample) {
+            pNv12Sample = vpOutput.pSample;
+            pNv12Sample->AddRef();
+            vpOutput.pSample->Release();
+            break; // We got our converted sample
+        } else {
+            if (vpOutput.pSample) vpOutput.pSample->Release();
+            break;
+        }
+    }
+    
+    if (!pNv12Sample) return false;
+    
+    // Now pass NV12 sample to H.264 Encoder
+    hr = pEncoder->ProcessInput(0, pNv12Sample, 0);
+    pNv12Sample->Release();
+    if (FAILED(hr)) return false;
+
+    // Process output from encoder (same as EncodeFrame)
     while (true) {
         MFT_OUTPUT_DATA_BUFFER encOutput = {0};
         encOutput.dwStreamID = 0;
