@@ -5067,6 +5067,7 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
             int sent = sendto(g_sock, pkt, sizeof(hdr) + (int)targetA.length(), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
             LogToFile("UDP Sending watch packet to " + targetA + ", sent=" + std::to_string(sent));
             
+            std::wstring title;
             {
                 std::lock_guard<std::mutex> lock(g_videoMutex);
                 g_videoViewers[*pUser][g_userId] = GetTickCount();
@@ -5085,9 +5086,9 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                 std::wstring dispName = *pUser;
                 if (g_userNames.count(*pUser)) dispName = g_userNames[*pUser];
                 dispName = dispName.substr(0, dispName.find(L'#'));
-                std::wstring title = dispName + viewBuf;
-                SetWindowTextW(hwnd, title.c_str());
+                title = dispName + viewBuf;
             }
+            SetWindowTextW(hwnd, title.c_str());
         }
         return 0;
     }
