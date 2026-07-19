@@ -366,15 +366,21 @@ void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& userna
         LogToFile("DecodeJPEG: jpegData is empty");
         return;
     }
-    IStream* pStream = NULL;
-    HGLOBAL hGlobal = GlobalAlloc(GMEM_MOVEABLE, jpegData.size());
-    void* pData = GlobalLock(hGlobal);
-    memcpy(pData, jpegData.data(), jpegData.size());
-    GlobalUnlock(hGlobal);
-    CreateStreamOnHGlobal(hGlobal, TRUE, &pStream);
     
+    IWICImagingFactory* pLocalFactory = NULL;
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pLocalFactory)))) {
+        LogToFile("DecodeJPEG FAILED: CoCreateInstance WICImagingFactory");
+        return;
+    }
+    
+    IStream* pStream = NULL;
+    CreateStreamOnHGlobal(NULL, TRUE, &pStream);
+    pStream->Write(jpegData.data(), (ULONG)jpegData.size(), NULL);
+    LARGE_INTEGER liZero = {0};
+    pStream->Seek(liZero, STREAM_SEEK_SET, NULL);
+
     IWICBitmapDecoder* pDecoder = NULL;
-    HRESULT hrDec = g_pWICFactory->CreateDecoderFromStream(pStream, NULL, WICDecodeMetadataCacheOnDemand, &pDecoder);
+    HRESULT hrDec = pLocalFactory->CreateDecoderFromStream(pStream, NULL, WICDecodeMetadataCacheOnDemand, &pDecoder);
     if (SUCCEEDED(hrDec)) {
         IWICBitmapFrameDecode* pFrame = NULL;
         HRESULT hrFrame = pDecoder->GetFrame(0, &pFrame);
@@ -383,7 +389,7 @@ void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& userna
             pFrame->GetSize(&width, &height);
             
             IWICFormatConverter* pConverter = NULL;
-            g_pWICFactory->CreateFormatConverter(&pConverter);
+            pLocalFactory->CreateFormatConverter(&pConverter);
             HRESULT hrConv = pConverter->Initialize(pFrame, GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, NULL, 0.0f, WICBitmapPaletteTypeCustom);
             if (SUCCEEDED(hrConv)) {
                 std::vector<uint8_t> pixels(width * height * 4);
@@ -407,7 +413,7 @@ void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& userna
             } else {
                 char buf[256]; sprintf_s(buf, "DecodeJPEG FAILED: Initialize FormatConverter hr=0x%X", hrConv); LogToFile(buf);
             }
-            pConverter->Release();
+            if (pConverter) pConverter->Release();
             pFrame->Release();
         } else {
             char buf[256]; sprintf_s(buf, "DecodeJPEG FAILED: GetFrame hr=0x%X", hrFrame); LogToFile(buf);
@@ -417,6 +423,8 @@ void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& userna
         char buf[256]; sprintf_s(buf, "DecodeJPEG FAILED: CreateDecoderFromStream hr=0x%X", hrDec); LogToFile(buf);
     }
     pStream->Release();
+    pLocalFactory->Release();
+    
     HWND hView = NULL;
     auto it = g_videoWindows.find(username);
     if (it != g_videoWindows.end()) {
@@ -528,13 +536,30 @@ struct MediaHeader {
 #pragma pack(pop)
 
 bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<uint8_t>& outJpeg) {
+    IWICImagingFactory* pLocalFactory = NULL;
+    if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pLocalFactory)))) {
+        std::cerr << "[Webcam] EncodeJPEG FAILED: CoCreateInstance WICImagingFactory" << std::endl;
+        return false;
+    }
+    
     IWICBitmap* pWicBitmap = NULL;
-    if (FAILED(g_pWICFactory->CreateBitmapFromMemory(width, height, GUID_WICPixelFormat32bppBGRA, width * 4, cbData, pData, &pWicBitmap))) return false;
+    if (FAILED(pLocalFactory->CreateBitmapFromMemory(width, height, GUID_WICPixelFormat32bppBGRA, width * 4, cbData, pData, &pWicBitmap))) {
+        std::cerr << "[Webcam] EncodeJPEG FAILED: CreateBitmapFromMemory" << std::endl;
+        pLocalFactory->Release();
+        return false;
+    }
     
     IStream* pStream = NULL;
     CreateStreamOnHGlobal(NULL, TRUE, &pStream);
     IWICBitmapEncoder* pEncoder = NULL;
-    g_pWICFactory->CreateEncoder(GUID_ContainerFormatJpeg, NULL, &pEncoder);
+    if (FAILED(pLocalFactory->CreateEncoder(GUID_ContainerFormatJpeg, NULL, &pEncoder))) {
+        std::cerr << "[Webcam] EncodeJPEG FAILED: CreateEncoder" << std::endl;
+        pStream->Release();
+        pWicBitmap->Release();
+        pLocalFactory->Release();
+        return false;
+    }
+    
     pEncoder->Initialize(pStream, WICBitmapEncoderNoCache);
     
     IWICBitmapFrameEncode* pFrame = NULL;
@@ -544,7 +569,7 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
     WICPixelFormatGUID format = GUID_WICPixelFormat24bppBGR;
     pFrame->SetPixelFormat(&format);
     IWICFormatConverter* pConverter = NULL;
-    if (SUCCEEDED(g_pWICFactory->CreateFormatConverter(&pConverter))) {
+    if (SUCCEEDED(pLocalFactory->CreateFormatConverter(&pConverter))) {
         pConverter->Initialize(pWicBitmap, GUID_WICPixelFormat24bppBGR, WICBitmapDitherTypeNone, NULL, 0.0f, WICBitmapPaletteTypeCustom);
         pFrame->WriteSource(pConverter, NULL);
         pConverter->Release();
@@ -563,6 +588,7 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
     pStream->Read(outJpeg.data(), jpegSize, &bytesRead);
     
     pFrame->Release(); pEncoder->Release(); pStream->Release(); pWicBitmap->Release();
+    pLocalFactory->Release();
     return true;
 }
 
@@ -884,6 +910,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     GUID subtype = {0};
                     pCurrentType->GetGUID(MF_MT_SUBTYPE, &subtype);
                     LONG stride = w;
+                    if (subtype == MFVideoFormat_YUY2) stride = w * 2;
+                    else if (subtype == MFVideoFormat_NV12) stride = w;
                     pCurrentType->GetUINT32(MF_MT_DEFAULT_STRIDE, (UINT32*)&stride);
                     pCurrentType->Release();
                     
@@ -1043,7 +1071,13 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             delete g_pH264Encoder;
                             g_pH264Encoder = nullptr;
                             s_firstFrameEncoded = false;
+                            h264Success = false;
                         }
+                    } else {
+                        delete g_pH264Encoder;
+                        g_pH264Encoder = nullptr;
+                        s_firstFrameEncoded = false;
+                        h264Success = false;
                     }
                 }
                 if (!h264Success) {

@@ -102,9 +102,9 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
     UINT32 encWidth = width;
     UINT32 encHeight = height;
     if (isScreenShare) {
-        if (encWidth > 1920 || encHeight > 1080) {
-            float ratioX = 1920.0f / encWidth;
-            float ratioY = 1080.0f / encHeight;
+        if (encWidth > 1280 || encHeight > 720) {
+            float ratioX = 1280.0f / encWidth;
+            float ratioY = 720.0f / encHeight;
             float ratio = min(ratioX, ratioY);
             encWidth = (UINT32)(encWidth * ratio);
             encHeight = (UINT32)(encHeight * ratio);
