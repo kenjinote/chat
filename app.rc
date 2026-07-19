@@ -10,7 +10,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobby"
-    IDS_CHANGE_NAME_TITLE "Change Name"
+    IDS_CHANGE_NAME_TITLE "Change Username..."
     IDS_MOVE_ROOM_TITLE "Move Room"
     IDS_PRIVATE "Private"
     IDS_VIDEO_STREAM "Video Stream"
@@ -49,13 +49,14 @@ BEGIN
     IDS_USER_LIST_0         "User List (0)"
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
+    IDS_SCREEN_SHARE        "Screen Share"
 END
 
 LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "ロビー"
-    IDS_CHANGE_NAME_TITLE "名前の変更"
+    IDS_CHANGE_NAME_TITLE "ユーザ名を変更..."
     IDS_MOVE_ROOM_TITLE "部屋移動"
     IDS_PRIVATE "非公開"
     IDS_VIDEO_STREAM "ビデオ配信"
@@ -94,13 +95,14 @@ BEGIN
     IDS_USER_LIST_0         "ユーザ一覧 (0)"
     IDS_NO_CONNECTION       "接続なし"
     IDS_USER_LIST_FMT       "ユーザ一覧 (%d)"
+    IDS_SCREEN_SHARE        "画面共有"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
 STRINGTABLE
 BEGIN
     IDS_LOBBY "大厅"
-    IDS_CHANGE_NAME_TITLE "更改名称"
+    IDS_CHANGE_NAME_TITLE "更改用户名..."
     IDS_MOVE_ROOM_TITLE "移动房间"
     IDS_PRIVATE "私密"
     IDS_VIDEO_STREAM "视频推流"
@@ -139,13 +141,14 @@ BEGIN
     IDS_USER_LIST_0         "用户列表 (0)"
     IDS_NO_CONNECTION       "未连接"
     IDS_USER_LIST_FMT       "用户列表 (%d)"
+    IDS_SCREEN_SHARE        "屏幕共享"
 END
 
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "로비"
-    IDS_CHANGE_NAME_TITLE "이름 변경"
+    IDS_CHANGE_NAME_TITLE "사용자 이름 변경..."
     IDS_MOVE_ROOM_TITLE "방 이동"
     IDS_PRIVATE "비공개"
     IDS_VIDEO_STREAM "비디오 스트리밍"
@@ -184,13 +187,14 @@ BEGIN
     IDS_USER_LIST_0         "사용자 목록 (0)"
     IDS_NO_CONNECTION       "연결 없음"
     IDS_USER_LIST_FMT       "사용자 목록 (%d)"
+    IDS_SCREEN_SHARE        "화면 공유"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL
 STRINGTABLE
 BEGIN
     IDS_LOBBY "大廳"
-    IDS_CHANGE_NAME_TITLE "更改名稱"
+    IDS_CHANGE_NAME_TITLE "更改使用者名稱..."
     IDS_MOVE_ROOM_TITLE "移動房間"
     IDS_PRIVATE "私密"
     IDS_VIDEO_STREAM "視訊串流"
@@ -229,13 +233,14 @@ BEGIN
     IDS_USER_LIST_0         "使用者清單 (0)"
     IDS_NO_CONNECTION       "未連接"
     IDS_USER_LIST_FMT       "使用者清單 (%d)"
+    IDS_SCREEN_SHARE        "螢幕分享"
 END
 
 LANGUAGE LANG_FRENCH, SUBLANG_FRENCH
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Accueil"
-    IDS_CHANGE_NAME_TITLE "Changer de nom"
+    IDS_CHANGE_NAME_TITLE "Changer le nom d'utilisateur..."
     IDS_MOVE_ROOM_TITLE "Changer de salon"
     IDS_PRIVATE "Prive"
     IDS_VIDEO_STREAM "Diffuser la video"
@@ -274,13 +279,14 @@ BEGIN
     IDS_USER_LIST_0         "Liste des utilisateurs (0)"
     IDS_NO_CONNECTION       "Pas de connexion"
     IDS_USER_LIST_FMT       "Liste des utilisateurs (%d)"
+    IDS_SCREEN_SHARE        "Partage d'écran"
 END
 
 LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobby"
-    IDS_CHANGE_NAME_TITLE "Name andern"
+    IDS_CHANGE_NAME_TITLE "Benutzername ändern..."
     IDS_MOVE_ROOM_TITLE "Raum wechseln"
     IDS_PRIVATE "Privat"
     IDS_VIDEO_STREAM "Video-Stream"
@@ -319,13 +325,14 @@ BEGIN
     IDS_USER_LIST_0         "Benutzerliste (0)"
     IDS_NO_CONNECTION       "Keine Verbindung"
     IDS_USER_LIST_FMT       "Benutzerliste (%d)"
+    IDS_SCREEN_SHARE        "Bildschirmfreigabe"
 END
 
 LANGUAGE LANG_SPANISH, SUBLANG_SPANISH_MODERN
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Sala principal"
-    IDS_CHANGE_NAME_TITLE "Cambiar nombre"
+    IDS_CHANGE_NAME_TITLE "Cambiar nombre de usuario..."
     IDS_MOVE_ROOM_TITLE "Mover Sala"
     IDS_PRIVATE "Privado"
     IDS_VIDEO_STREAM "Transmitir video"
@@ -364,13 +371,14 @@ BEGIN
     IDS_USER_LIST_0         "Lista de usuarios (0)"
     IDS_NO_CONNECTION       "Sin conexión"
     IDS_USER_LIST_FMT       "Lista de usuarios (%d)"
+    IDS_SCREEN_SHARE        "Compartir pantalla"
 END
 
 LANGUAGE LANG_HINDI, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "लॉबी"
-    IDS_CHANGE_NAME_TITLE "नाम बदलें"
+    IDS_CHANGE_NAME_TITLE "उपयोगकर्ता नाम बदलें..."
     IDS_MOVE_ROOM_TITLE "कमरा बदलें"
     IDS_PRIVATE "निजी"
     IDS_VIDEO_STREAM "वीडियो स्ट्रीम"
@@ -409,13 +417,14 @@ BEGIN
     IDS_USER_LIST_0         "User List (0)"
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
+    IDS_SCREEN_SHARE        "स्क्रीन शेयर"
 END
 
 LANGUAGE LANG_PORTUGUESE, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobby"
-    IDS_CHANGE_NAME_TITLE "Mudar Nome"
+    IDS_CHANGE_NAME_TITLE "Alterar nome de usuário..."
     IDS_MOVE_ROOM_TITLE "Mover Sala"
     IDS_PRIVATE "Privado"
     IDS_VIDEO_STREAM "Transmissão de Vídeo"
@@ -454,13 +463,14 @@ BEGIN
     IDS_USER_LIST_0         "User List (0)"
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
+    IDS_SCREEN_SHARE        "Compartilhamento de tela"
 END
 
 LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Лобби"
-    IDS_CHANGE_NAME_TITLE "Изменить имя"
+    IDS_CHANGE_NAME_TITLE "Изменить имя пользователя..."
     IDS_MOVE_ROOM_TITLE "Сменить комнату"
     IDS_PRIVATE "Приватный"
     IDS_VIDEO_STREAM "Видеотрансляция"
@@ -499,13 +509,14 @@ BEGIN
     IDS_USER_LIST_0         "Список пользователей (0)"
     IDS_NO_CONNECTION       "Нет подключения"
     IDS_USER_LIST_FMT       "Список пользователей (%d)"
+    IDS_SCREEN_SHARE        "Демонстрация экрана"
 END
 
 LANGUAGE LANG_ARABIC, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "الردهة"
-    IDS_CHANGE_NAME_TITLE "تغيير الاسم"
+    IDS_CHANGE_NAME_TITLE "تغيير اسم المستخدم..."
     IDS_MOVE_ROOM_TITLE "نقل الغرفة"
     IDS_PRIVATE "خاص"
     IDS_VIDEO_STREAM "بث الفيديو"
@@ -544,13 +555,14 @@ BEGIN
     IDS_USER_LIST_0         "User List (0)"
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
+    IDS_SCREEN_SHARE        "مشاركة الشاشة"
 END
 
 LANGUAGE LANG_BENGALI, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "লবি"
-    IDS_CHANGE_NAME_TITLE "নাম পরিবর্তন"
+    IDS_CHANGE_NAME_TITLE "ব্যবহারকারীর নাম পরিবর্তন করুন..."
     IDS_MOVE_ROOM_TITLE "রুম পরিবর্তন করুন"
     IDS_PRIVATE "ব্যক্তিগত"
     IDS_VIDEO_STREAM "ভিডিও স্ট্রিম"
@@ -589,13 +601,14 @@ BEGIN
     IDS_USER_LIST_0         "User List (0)"
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
+    IDS_SCREEN_SHARE        "স্ক্রিন শেয়ার"
 END
 
 LANGUAGE LANG_INDONESIAN, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobi"
-    IDS_CHANGE_NAME_TITLE "Ubah Nama"
+    IDS_CHANGE_NAME_TITLE "Ubah Nama Pengguna..."
     IDS_MOVE_ROOM_TITLE "Pindah Ruangan"
     IDS_PRIVATE "Pribadi"
     IDS_VIDEO_STREAM "Siaran Video"
@@ -634,13 +647,14 @@ BEGIN
     IDS_USER_LIST_0         "User List (0)"
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
+    IDS_SCREEN_SHARE        "Berbagi Layar"
 END
 
 LANGUAGE LANG_ITALIAN, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobby"
-    IDS_CHANGE_NAME_TITLE "Cambia Nome"
+    IDS_CHANGE_NAME_TITLE "Cambia nome utente..."
     IDS_MOVE_ROOM_TITLE "Cambia Stanza"
     IDS_PRIVATE "Privato"
     IDS_VIDEO_STREAM "Trasmetti Video"
@@ -679,13 +693,14 @@ BEGIN
     IDS_USER_LIST_0         "User List (0)"
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
+    IDS_SCREEN_SHARE        "Condivisione schermo"
 END
 
 LANGUAGE LANG_TURKISH, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobi"
-    IDS_CHANGE_NAME_TITLE "İsmi Değiştir"
+    IDS_CHANGE_NAME_TITLE "Kullanıcı Adını Değiştir..."
     IDS_MOVE_ROOM_TITLE "Oda Değiştir"
     IDS_PRIVATE "Özel"
     IDS_VIDEO_STREAM "Video Yayını"
@@ -724,13 +739,14 @@ BEGIN
     IDS_USER_LIST_0         "User List (0)"
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
+    IDS_SCREEN_SHARE        "Ekran Paylaşımı"
 END
 
 LANGUAGE LANG_VIETNAMESE, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Sảnh"
-    IDS_CHANGE_NAME_TITLE "Đổi tên"
+    IDS_CHANGE_NAME_TITLE "Đổi tên người dùng..."
     IDS_MOVE_ROOM_TITLE "Chuyển phòng"
     IDS_PRIVATE "Riêng tư"
     IDS_VIDEO_STREAM "Phát Video"
@@ -769,4 +785,5 @@ BEGIN
     IDS_USER_LIST_0         "User List (0)"
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
+    IDS_SCREEN_SHARE        "Chia sẻ màn hình"
 END

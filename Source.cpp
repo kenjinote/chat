@@ -5428,8 +5428,8 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                         AppendMenuW(hShareMenu, MF_STRING | ((g_isWebcamActive && g_captureSourceType == 3 && g_captureHwnd == w.hWnd) ? MF_CHECKED : MF_UNCHECKED), w.id, w.name.c_str());
                         if (++winCount >= 50) break; // Limit to 50 windows to avoid massive menus
                     }
-                    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hShareMenu, L"画面共有");
-                    
+                    AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hShareMenu, GetString(IDS_SCREEN_SHARE).c_str());
+                    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
                     AppendMenuW(hMenu, MF_STRING, 3, GetString(IDS_CHANGE_NAME_TITLE).c_str()); 
 
                     ClientToScreen(hwnd, &pt);
@@ -5549,6 +5549,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     }
                     HMENU hMenu = CreatePopupMenu();
                     AppendMenuW(hMenu, MF_STRING | (hasStreamer ? 0 : MF_GRAYED), 2, GetString(IDS_WATCH_VIDEO).c_str());
+                    AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
                     AppendMenuW(hMenu, MF_STRING | (isIgnored ? MF_CHECKED : MF_UNCHECKED), 4, GetString(IDS_IGNORE).c_str());
                     AppendMenuW(hMenu, MF_STRING, 5, GetString(IDS_REPORT).c_str());
                     ClientToScreen(hwnd, &pt);
