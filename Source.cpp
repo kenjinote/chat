@@ -823,17 +823,6 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             IMFMediaBuffer* pLockedBuffer = nullptr;
 
             if (isScreenShare) {
-                // WGC returns bottom-up data, so we must flip it to top-down for correct H.264 and JPEG encoding
-                int rowPitch = width * 4;
-                std::vector<uint8_t> rowBuffer(rowPitch);
-                for (int y = 0; y < height / 2; y++) {
-                    uint8_t* rowA = rgb32Data.data() + y * rowPitch;
-                    uint8_t* rowB = rgb32Data.data() + (height - 1 - y) * rowPitch;
-                    memcpy(rowBuffer.data(), rowA, rowPitch);
-                    memcpy(rowA, rowB, rowPitch);
-                    memcpy(rowB, rowBuffer.data(), rowPitch);
-                }
-                
                 ConvertRGB32ToNV12(rgb32Data.data(), width, height, nv12DataForEncoder, false);
                 pEncoderInput = nv12DataForEncoder.data();
                 cbEncoderInput = (DWORD)nv12DataForEncoder.size();
@@ -924,7 +913,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         g_videoSeq++;
                         LARGE_INTEGER freq;
                         QueryPerformanceFrequency(&freq);
-                        long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay for all UDP streams to prevent packet loss
+                        long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay to prevent capture thread stuttering
                         LARGE_INTEGER loop_start;
                         QueryPerformanceCounter(&loop_start);
                             
@@ -982,7 +971,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         g_videoSeq++;
                         LARGE_INTEGER freq;
                         QueryPerformanceFrequency(&freq);
-                        long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay
+                        long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay
                         LARGE_INTEGER loop_start;
                         QueryPerformanceCounter(&loop_start);
 
