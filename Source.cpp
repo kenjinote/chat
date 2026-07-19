@@ -770,6 +770,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     
                     SetStretchBltMode(hdcMemDst, HALFTONE);
                     StretchBlt(hdcMemDst, 0, 0, scaledWidth, scaledHeight, hdcMemSrc, 0, 0, width, height, SRCCOPY);
+                    GdiFlush(); // CRITICAL: Ensure StretchBlt completes before reading pBitsDst
                     
                     rgb32Data.assign((uint8_t*)pBitsDst, (uint8_t*)pBitsDst + (scaledWidth * scaledHeight * 4));
                     width = scaledWidth;
@@ -911,7 +912,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         g_videoSeq++;
                         LARGE_INTEGER freq;
                         QueryPerformanceFrequency(&freq);
-                        long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay
+                        long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay for all UDP streams to prevent packet loss
                         LARGE_INTEGER loop_start;
                         QueryPerformanceCounter(&loop_start);
                             
@@ -5874,7 +5875,9 @@ D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         localAddr.sin_addr.s_addr = INADDR_ANY;
         bind(g_sock, (sockaddr*)&localAddr, sizeof(localAddr));
         int rcvBufSize = 2097152;
+        int sndBufSize = 2097152;
         setsockopt(g_sock, SOL_SOCKET, SO_RCVBUF, (char*)&rcvBufSize, sizeof(rcvBufSize));
+        setsockopt(g_sock, SOL_SOCKET, SO_SNDBUF, (char*)&sndBufSize, sizeof(sndBufSize));
         
         #ifndef SIO_UDP_CONNRESET
         #define SIO_UDP_CONNRESET _WSAIOW(IOC_VENDOR, 12)
