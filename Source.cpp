@@ -584,6 +584,52 @@ void ConvertRGB32ToNV12(const uint8_t* rgb32Data, int width, int height, std::ve
     }
 }
 
+// --- UDP Sender Globals ---
+std::mutex g_udpSendMutex;
+std::condition_variable g_udpSendCv;
+std::queue<std::vector<uint8_t>> g_udpSendQueue;
+
+DWORD WINAPI UdpSenderThread(LPVOID) {
+    LARGE_INTEGER freq;
+    QueryPerformanceFrequency(&freq);
+    long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay
+
+    while (g_isAppRunning) {
+        std::vector<uint8_t> pkt;
+        {
+            std::unique_lock<std::mutex> lock(g_udpSendMutex);
+            g_udpSendCv.wait(lock, [] { return !g_udpSendQueue.empty() || !g_isAppRunning; });
+            if (!g_isAppRunning) break;
+            pkt = std::move(g_udpSendQueue.front());
+            g_udpSendQueue.pop();
+        }
+
+        if (g_sock != INVALID_SOCKET) {
+            sockaddr_in serverUdp = {0};
+            serverUdp.sin_family = AF_INET;
+            serverUdp.sin_port = htons(4001);
+            if (!g_isServerUdpAddrResolved) {
+                g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+            }
+            serverUdp.sin_addr = g_serverUdpAddr;
+            sendto(g_sock, (const char*)pkt.data(), (int)pkt.size(), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+            
+            LARGE_INTEGER loop_start;
+            QueryPerformanceCounter(&loop_start);
+            long long target_count = loop_start.QuadPart + delay_counts;
+            while (true) {
+                LARGE_INTEGER now;
+                QueryPerformanceCounter(&now);
+                long long remaining = target_count - now.QuadPart;
+                if (remaining <= 0) break;
+                if (remaining > (freq.QuadPart / 1000) * 2) Sleep(1);
+                SwitchToThread();
+            }
+        }
+    }
+    return 0;
+}
+
 DWORD WINAPI WebcamThread(LPVOID lpParam) {
     winrt::init_apartment();
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
@@ -916,50 +962,28 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay to prevent capture thread stuttering
                         LARGE_INTEGER loop_start;
                         QueryPerformanceCounter(&loop_start);
+
+                        
+                        for (int i = 0; i < totalFragments; i++) {
+                            int offset = i * MAX_PAYLOAD;
+                            int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
                             
-                            for (int i = 0; i < totalFragments; i++) {
-                                int offset = i * MAX_PAYLOAD;
-                                int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
-                                
-                                MediaHeader mhdr = {0};
-                                mhdr.sessionId = g_sessionId;
-                                mhdr.seqNum = g_videoSeq;
-                                mhdr.payloadType = 5; 
-                                mhdr.flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
-                                mhdr.timestamp = i; 
-                                wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
-                                
-                                sockaddr_in serverUdp = {0};
-                                serverUdp.sin_family = AF_INET;
-                                serverUdp.sin_port = htons(4001);
-                                if (!g_isServerUdpAddrResolved) {
-                                    g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
-                                }
-                                serverUdp.sin_addr = g_serverUdpAddr;
-                                
-                                WSABUF buffers[2];
-                                buffers[0].buf = (CHAR*)&mhdr;
-                                buffers[0].len = sizeof(MediaHeader);
-                                buffers[1].buf = (CHAR*)(h264.data() + offset);
-                                buffers[1].len = len;
-                                
-                                DWORD bytesSent = 0;
-                                WSASendTo(g_sock, buffers, 2, &bytesSent, 0, (sockaddr*)&serverUdp, sizeof(serverUdp), NULL, NULL);
-                                
-                                long long target_count = loop_start.QuadPart + (i + 1) * delay_counts;
-                                LARGE_INTEGER current;
-                                while (true) {
-                                    QueryPerformanceCounter(&current);
-                                    long long remaining = target_count - current.QuadPart;
-                                    if (remaining <= 0) break;
-                                    
-                                    if (remaining > (freq.QuadPart / 1000) * 2) {
-                                        Sleep(1);
-                                    }
-                                    // Otherwise spin-wait for the last <2ms for high precision pacing
-                                }
-                            }
-                            // Swap logic moved to end of frame
+                            MediaHeader mhdr = {0};
+                            mhdr.sessionId = g_sessionId;
+                            mhdr.seqNum = g_videoSeq;
+                            mhdr.payloadType = 5; 
+                            mhdr.flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
+                            mhdr.timestamp = i; 
+                            wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
+                            
+                            std::vector<uint8_t> packet(sizeof(MediaHeader) + len);
+                            memcpy(packet.data(), &mhdr, sizeof(MediaHeader));
+                            memcpy(packet.data() + sizeof(MediaHeader), h264.data() + offset, len);
+                            
+                            std::unique_lock<std::mutex> lock(g_udpSendMutex);
+                            if (g_udpSendQueue.size() > 500) g_udpSendQueue.pop(); // Prevent unlimited queue growth
+                            g_udpSendQueue.push(std::move(packet));
+                            g_udpSendCv.notify_one();
                         }
                     }
                 }
@@ -987,42 +1011,21 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             mhdr.timestamp = i; 
                             wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
                             
-                            sockaddr_in serverUdp = {0};
-                            serverUdp.sin_family = AF_INET;
-                            serverUdp.sin_port = htons(4001);
-                            if (!g_isServerUdpAddrResolved) {
-                                g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
-                            }
-                            serverUdp.sin_addr = g_serverUdpAddr;
+                            std::vector<uint8_t> packet(sizeof(MediaHeader) + len);
+                            memcpy(packet.data(), &mhdr, sizeof(MediaHeader));
+                            memcpy(packet.data() + sizeof(MediaHeader), jpegData.data() + offset, len);
                             
-                            WSABUF buffers[2];
-                            buffers[0].buf = (CHAR*)&mhdr;
-                            buffers[0].len = sizeof(MediaHeader);
-                            buffers[1].buf = (CHAR*)(jpegData.data() + offset);
-                            buffers[1].len = len;
-                            
-                            DWORD bytesSent = 0;
-                            WSASendTo(g_sock, buffers, 2, &bytesSent, 0, (sockaddr*)&serverUdp, sizeof(serverUdp), NULL, NULL);
-                            int sent = (int)bytesSent;
-                            LogToFile("UDP Sending Video Fragment, len=" + std::to_string(len) + ", sent=" + std::to_string(sent));
-
-                            long long target_count = loop_start.QuadPart + (i + 1) * delay_counts;
-                            LARGE_INTEGER current;
-                            while (true) {
-                                QueryPerformanceCounter(&current);
-                                long long remaining = target_count - current.QuadPart;
-                                if (remaining > (freq.QuadPart / 1000) * 2) {
-                                    Sleep(1);
-                                } else {
-                                    break;
-                                }
-                            }
+                            std::unique_lock<std::mutex> lock(g_udpSendMutex);
+                            if (g_udpSendQueue.size() > 500) g_udpSendQueue.pop(); // Prevent unlimited queue growth
+                            g_udpSendQueue.push(std::move(packet));
+                            g_udpSendCv.notify_one();
                         }
                         // Swap logic moved to end of frame
                     }
                 }
-                
-                {
+            } // Close if (pEncoderInput)
+            
+            {
                     std::lock_guard<std::mutex> lock(g_videoMutex);
                     g_videoPixelsMap[g_userId].swap(rgb32Data);
                     g_videoSizeMap[g_userId] = { width, height };
@@ -5836,9 +5839,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
     CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_pWICFactory));
+    
     g_hWebcamThread = CreateThread(NULL, 0, WebcamThread, NULL, 0, NULL);
+    CreateThread(NULL, 0, UdpSenderThread, NULL, 0, NULL);
 
-D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
+    D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &g_pD2DFactory);
         DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&g_pDWriteFactory));
         
         WNDCLASS d2dLogClass = { 0 };
