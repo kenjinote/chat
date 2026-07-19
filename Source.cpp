@@ -1080,6 +1080,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             std::lock_guard<std::mutex> lock(g_videoMutex);
                             DWORD now = GetTickCount();
                             for (auto& pair : g_videoViewers[g_userId]) {
+                                if (pair.first == g_userId) continue;
                                 if (now - pair.second < 5000) {
                                     hasViewers = true;
                                     break;
@@ -1158,6 +1159,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             std::lock_guard<std::mutex> lock(g_videoMutex);
                             DWORD now = GetTickCount();
                             for (auto& pair : g_videoViewers[g_userId]) {
+                                if (pair.first == g_userId) continue;
                                 if (now - pair.second < 5000) {
                                     hasViewers = true;
                                     break;

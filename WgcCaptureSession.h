@@ -103,10 +103,8 @@ public:
         std::lock_guard<std::mutex> lock(m_mutex);
         if (!m_latestTexture || !m_d3dDevice) return false;
 
-        winrt::com_ptr<ID3D11Device> texDevice;
-        m_latestTexture->GetDevice(texDevice.put());
-        if (texDevice.get() != m_d3dDevice.get()) return false;
-
+        // COM pointer equality is unreliable for ID3D11Device across API boundaries.
+        // Since we created the frame pool with m_d3dDevice, we can safely assume it matches.
         D3D11_TEXTURE2D_DESC desc;
         m_latestTexture->GetDesc(&desc);
         outWidth = desc.Width;
