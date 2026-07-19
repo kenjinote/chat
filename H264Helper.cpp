@@ -286,9 +286,10 @@ bool H264Encoder::EncodeFrame(const BYTE* pNv12Data, DWORD cbData, std::vector<u
             
             pResBuffer->Unlock();
             pResBuffer->Release();
-            encOutput.pSample->Release();
+            if (encProvides && encOutput.pSample) encOutput.pSample->Release();
+            if (pEncSample) pEncSample->Release();
         } else {
-            if (encOutput.pSample) encOutput.pSample->Release();
+            if (encProvides && encOutput.pSample) encOutput.pSample->Release();
             if (pEncSample) pEncSample->Release();
             break;
         }
@@ -348,12 +349,17 @@ bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>&
         if (hr == MF_E_TRANSFORM_STREAM_CHANGE) continue;
         
         if (SUCCEEDED(hr) && vpOutput.pSample) {
-            pNv12Sample = vpOutput.pSample;
-            pNv12Sample->AddRef();
-            vpOutput.pSample->Release();
+            if (vpProvides) {
+                pNv12Sample = vpOutput.pSample;
+                pNv12Sample->AddRef();
+                vpOutput.pSample->Release();
+            } else {
+                // pNv12Sample is already the one we allocated, refcount is 1
+            }
             break; // We got our converted sample
         } else {
-            if (vpOutput.pSample) vpOutput.pSample->Release();
+            if (vpProvides && vpOutput.pSample) vpOutput.pSample->Release();
+            if (!vpProvides && pNv12Sample) { pNv12Sample->Release(); pNv12Sample = NULL; }
             break;
         }
     }
@@ -415,9 +421,10 @@ bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>&
             
             pResBuffer->Unlock();
             pResBuffer->Release();
-            encOutput.pSample->Release();
+            if (encProvides && encOutput.pSample) encOutput.pSample->Release();
+            if (pEncSample) pEncSample->Release();
         } else {
-            if (encOutput.pSample) encOutput.pSample->Release();
+            if (encProvides && encOutput.pSample) encOutput.pSample->Release();
             if (pEncSample) pEncSample->Release();
             break;
         }
