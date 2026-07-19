@@ -592,7 +592,7 @@ std::queue<std::vector<uint8_t>> g_udpSendQueue;
 DWORD WINAPI UdpSenderThread(LPVOID) {
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
-    long long delay_counts = freq.QuadPart / 1000; // 1 ms pacing delay
+    long long delay_counts = freq.QuadPart / 5000; // 0.2 ms pacing delay to fix stutter
 
     while (g_isAppRunning) {
         std::vector<uint8_t> pkt;
