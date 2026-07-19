@@ -538,13 +538,13 @@ struct MediaHeader {
 bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<uint8_t>& outJpeg) {
     IWICImagingFactory* pLocalFactory = NULL;
     if (FAILED(CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&pLocalFactory)))) {
-        std::cerr << "[Webcam] EncodeJPEG FAILED: CoCreateInstance WICImagingFactory" << std::endl;
+        LogToFile("[Webcam] EncodeJPEG FAILED: CoCreateInstance WICImagingFactory");
         return false;
     }
     
     IWICBitmap* pWicBitmap = NULL;
     if (FAILED(pLocalFactory->CreateBitmapFromMemory(width, height, GUID_WICPixelFormat32bppBGRA, width * 4, cbData, pData, &pWicBitmap))) {
-        std::cerr << "[Webcam] EncodeJPEG FAILED: CreateBitmapFromMemory" << std::endl;
+        LogToFile("[Webcam] EncodeJPEG FAILED: CreateBitmapFromMemory");
         pLocalFactory->Release();
         return false;
     }
@@ -553,7 +553,7 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
     CreateStreamOnHGlobal(NULL, TRUE, &pStream);
     IWICBitmapEncoder* pEncoder = NULL;
     if (FAILED(pLocalFactory->CreateEncoder(GUID_ContainerFormatJpeg, NULL, &pEncoder))) {
-        std::cerr << "[Webcam] EncodeJPEG FAILED: CreateEncoder" << std::endl;
+        LogToFile("[Webcam] EncodeJPEG FAILED: CreateEncoder");
         pStream->Release();
         pWicBitmap->Release();
         pLocalFactory->Release();
@@ -920,7 +920,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     if (subtype == MFVideoFormat_NV12) {
                         DWORD expectedSize = abs(stride) * h * 3 / 2;
                         if (pData != nullptr && cbData >= expectedSize && w > 0 && h > 0) {
-                            // NV12 -> RGB32 for local preview
+                            // ... existing NV12 code ...
                             const uint8_t* yPlane = pData;
                             const uint8_t* uvPlane = pData + abs(stride) * h;
                             uint32_t* dst = (uint32_t*)rgb32Data.data();
@@ -945,7 +945,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             pEncoderInput = pData;
                             cbEncoderInput = cbData;
                         } else {
-                            std::cerr << "[Webcam] Frame dropped: Buffer size too small for NV12 conversion." << std::endl;
+                            LogToFile("[Webcam] Frame dropped: Buffer size too small for NV12 conversion. cbData=" + std::to_string(cbData) + " expected=" + std::to_string(expectedSize));
                         }
                     } else if (subtype == MFVideoFormat_YUY2) {
                         DWORD expectedSize = abs(stride) * h;
@@ -977,10 +977,11 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             pEncoderInput = nv12DataForEncoder.data();
                             cbEncoderInput = (DWORD)nv12DataForEncoder.size();
                         } else {
-                            std::cerr << "[Webcam] Frame dropped: Buffer size too small for YUY2 conversion." << std::endl;
+                            LogToFile("[Webcam] Frame dropped: Buffer size too small for YUY2 conversion. cbData=" + std::to_string(cbData) + " expected=" + std::to_string(expectedSize));
                         }
                     } else {
                         // Fallback (e.g. RGB32)
+                        LogToFile("[Webcam] Unknown format fallback. subtype Data1=" + std::to_string(subtype.Data1));
                         memcpy(rgb32Data.data(), pData, min(cbData, (DWORD)rgb32Data.size()));
                         ConvertRGB32ToNV12(rgb32Data.data(), w, h, nv12DataForEncoder);
                         pEncoderInput = nv12DataForEncoder.data();
