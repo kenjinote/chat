@@ -601,7 +601,8 @@ DWORD WINAPI UdpSenderThread(LPVOID) {
     // Token Bucket Settings
     DWORD targetBitrate = 8000000; // 8 Mbps
     double targetBytesPerSec = targetBitrate / 8.0;
-    double maxTokens = targetBytesPerSec * 0.05; // 50ms burst (~50KB)
+    // Reduce burst size to 10ms (~10KB) to prevent cheap home router buffers from overflowing and dropping I-frame fragments
+    double maxTokens = targetBytesPerSec * 0.01; 
     double currentTokens = maxTokens;
     
     LARGE_INTEGER lastTime;
@@ -885,30 +886,35 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     rgb32Data.resize(w * h * 4);
                     
                     if (subtype == MFVideoFormat_NV12) {
-                        // NV12 -> RGB32 for local preview
-                        const uint8_t* yPlane = pData;
-                        const uint8_t* uvPlane = pData + abs(stride) * h;
-                        uint32_t* dst = (uint32_t*)rgb32Data.data();
-                        for (UINT y = 0; y < h; y++) {
-                            const uint8_t* uvRow = uvPlane + (y / 2) * abs(stride);
-                            for (UINT x = 0; x < w; x++) {
-                                int yVal = yPlane[y * abs(stride) + x] - 16;
-                                int uVal = uvRow[(x & ~1)] - 128;
-                                int vVal = uvRow[(x & ~1) + 1] - 128;
-                                
-                                int r = (298 * yVal + 409 * vVal + 128) >> 8;
-                                int g = (298 * yVal - 100 * uVal - 208 * vVal + 128) >> 8;
-                                int b = (298 * yVal + 516 * uVal + 128) >> 8;
-                                
-                                r = max(0, min(255, r));
-                                g = max(0, min(255, g));
-                                b = max(0, min(255, b));
-                                
-                                dst[y * w + x] = (255 << 24) | (r << 16) | (g << 8) | b;
+                        DWORD expectedSize = abs(stride) * h * 3 / 2;
+                        if (pData != nullptr && cbData >= expectedSize && w > 0 && h > 0) {
+                            // NV12 -> RGB32 for local preview
+                            const uint8_t* yPlane = pData;
+                            const uint8_t* uvPlane = pData + abs(stride) * h;
+                            uint32_t* dst = (uint32_t*)rgb32Data.data();
+                            for (UINT y = 0; y < h; y++) {
+                                const uint8_t* uvRow = uvPlane + (y / 2) * abs(stride);
+                                for (UINT x = 0; x < w; x++) {
+                                    int yVal = yPlane[y * abs(stride) + x] - 16;
+                                    int uVal = uvRow[(x & ~1)] - 128;
+                                    int vVal = uvRow[(x & ~1) + 1] - 128;
+                                    
+                                    int r = (298 * yVal + 409 * vVal + 128) >> 8;
+                                    int g = (298 * yVal - 100 * uVal - 208 * vVal + 128) >> 8;
+                                    int b = (298 * yVal + 516 * uVal + 128) >> 8;
+                                    
+                                    r = max(0, min(255, r));
+                                    g = max(0, min(255, g));
+                                    b = max(0, min(255, b));
+                                    
+                                    dst[y * w + x] = (255 << 24) | (r << 16) | (g << 8) | b;
+                                }
                             }
+                            pEncoderInput = pData;
+                            cbEncoderInput = cbData;
+                        } else {
+                            std::cerr << "[Webcam] Frame dropped: Buffer size too small for NV12 conversion." << std::endl;
                         }
-                        pEncoderInput = pData;
-                        cbEncoderInput = cbData;
                     } else {
                         // Fallback (e.g. RGB32)
                         memcpy(rgb32Data.data(), pData, min(cbData, (DWORD)rgb32Data.size()));
