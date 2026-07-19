@@ -825,14 +825,18 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 static DWORD lastEncodeTime = 0;
                 DWORD now = GetTickCount();
 
-                if ((s_hasPendingFrame && (now - lastEncodeTime >= minDelay)) || (now - lastEncodeTime >= 1000)) {
-                    // Get the frame for local preview and JPEG fallback
-                    wgcSession.GetLatestFrame(rgb32Data, width, height);
-                    hr = S_OK;
-                    lastEncodeTime = now;
-                    s_hasPendingFrame = false;
-                } else {
-                    hr = E_FAIL; // Drop frame
+                if (isScreenShare) {
+                    if (s_hasPendingFrame || now - lastEncodeTime >= 1000) {
+                        if (wgcSession.GetLatestFrame(rgb32Data, width, height)) {
+                            hr = S_OK;
+                            lastEncodeTime = now;
+                            s_hasPendingFrame = false;
+                        } else {
+                            hr = E_FAIL;
+                        }
+                    } else {
+                        hr = E_FAIL; // Drop frame
+                    }
                 }
             }
             Sleep(10); // Short sleep to prevent busy loop
@@ -914,6 +918,38 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             cbEncoderInput = cbData;
                         } else {
                             std::cerr << "[Webcam] Frame dropped: Buffer size too small for NV12 conversion." << std::endl;
+                        }
+                    } else if (subtype == MFVideoFormat_YUY2) {
+                        DWORD expectedSize = abs(stride) * h;
+                        if (pData != nullptr && cbData >= expectedSize && w > 0 && h > 0) {
+                            uint32_t* dst = (uint32_t*)rgb32Data.data();
+                            for (UINT y = 0; y < h; y++) {
+                                const uint8_t* row = pData + y * abs(stride);
+                                for (UINT x = 0; x < w; x += 2) {
+                                    int y0 = row[x * 2 + 0] - 16;
+                                    int u  = row[x * 2 + 1] - 128;
+                                    int y1 = row[x * 2 + 2] - 16;
+                                    int v  = row[x * 2 + 3] - 128;
+
+                                    int r0 = (298 * y0 + 409 * v + 128) >> 8;
+                                    int g0 = (298 * y0 - 100 * u - 208 * v + 128) >> 8;
+                                    int b0 = (298 * y0 + 516 * u + 128) >> 8;
+                                    r0 = max(0, min(255, r0)); g0 = max(0, min(255, g0)); b0 = max(0, min(255, b0));
+
+                                    int r1 = (298 * y1 + 409 * v + 128) >> 8;
+                                    int g1 = (298 * y1 - 100 * u - 208 * v + 128) >> 8;
+                                    int b1 = (298 * y1 + 516 * u + 128) >> 8;
+                                    r1 = max(0, min(255, r1)); g1 = max(0, min(255, g1)); b1 = max(0, min(255, b1));
+
+                                    if (x < w) dst[y * w + x] = (255 << 24) | (r0 << 16) | (g0 << 8) | b0;
+                                    if (x + 1 < w) dst[y * w + x + 1] = (255 << 24) | (r1 << 16) | (g1 << 8) | b1;
+                                }
+                            }
+                            ConvertRGB32ToNV12(rgb32Data.data(), w, h, nv12DataForEncoder);
+                            pEncoderInput = nv12DataForEncoder.data();
+                            cbEncoderInput = (DWORD)nv12DataForEncoder.size();
+                        } else {
+                            std::cerr << "[Webcam] Frame dropped: Buffer size too small for YUY2 conversion." << std::endl;
                         }
                     } else {
                         // Fallback (e.g. RGB32)
@@ -1052,14 +1088,16 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             } // Close if (pEncoderInput)
             
             {
-                    std::lock_guard<std::mutex> lock(g_videoMutex);
+                std::lock_guard<std::mutex> lock(g_videoMutex);
+                if (width > 0 && height > 0 && rgb32Data.size() == width * height * 4) {
                     g_videoPixelsMap[g_userId].swap(rgb32Data);
                     g_videoSizeMap[g_userId] = { width, height };
                     g_videoIsSWMap[g_userId] = !h264Success ? true : !IsHardwareAccelerationEnabled();
                     g_videoIsH264Map[g_userId] = h264Success;
                 }
-                HWND hView = NULL;
-                auto it = g_videoWindows.find(g_userId);
+            }
+            HWND hView = NULL;
+            auto it = g_videoWindows.find(g_userId);
                 if (it != g_videoWindows.end()) hView = it->second;
                 if (hView && IsWindow(hView)) InvalidateRect(hView, NULL, FALSE);
             if (pLockedBuffer) {
