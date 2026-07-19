@@ -318,11 +318,13 @@ bool H264Encoder::EncodeFrame(const BYTE* pNv12Data, DWORD cbData, std::vector<u
         if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
             if (pEncSample) pEncSample->Release();
             IMFMediaType* pNewType = NULL;
-            if (SUCCEEDED(pEncoder->GetOutputAvailableType(0, 0, &pNewType))) {
-                pEncoder->SetOutputType(0, pNewType, 0);
+            HRESULT hrType = pEncoder->GetOutputAvailableType(0, 0, &pNewType);
+            if (SUCCEEDED(hrType)) {
+                hrType = pEncoder->SetOutputType(0, pNewType, 0);
                 pNewType->Release();
+                if (SUCCEEDED(hrType)) continue;
             }
-            continue;
+            break;
         }
         
         if (SUCCEEDED(hr) && encOutput.pSample) {
@@ -401,11 +403,13 @@ bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>&
         if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
             if (!vpProvides && pNv12Sample) { pNv12Sample->Release(); pNv12Sample = NULL; }
             IMFMediaType* pNewType = NULL;
-            if (SUCCEEDED(pColorConv->GetOutputAvailableType(0, 0, &pNewType))) {
-                pColorConv->SetOutputType(0, pNewType, 0);
+            HRESULT hrType = pColorConv->GetOutputAvailableType(0, 0, &pNewType);
+            if (SUCCEEDED(hrType)) {
+                hrType = pColorConv->SetOutputType(0, pNewType, 0);
                 pNewType->Release();
+                if (SUCCEEDED(hrType)) continue;
             }
-            continue;
+            break;
         }
         
         if (SUCCEEDED(hr) && vpOutput.pSample) {
@@ -461,11 +465,13 @@ bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>&
         if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
             if (pEncSample) pEncSample->Release();
             IMFMediaType* pNewType = NULL;
-            if (SUCCEEDED(pEncoder->GetOutputAvailableType(0, 0, &pNewType))) {
-                pEncoder->SetOutputType(0, pNewType, 0);
+            HRESULT hrType = pEncoder->GetOutputAvailableType(0, 0, &pNewType);
+            if (SUCCEEDED(hrType)) {
+                hrType = pEncoder->SetOutputType(0, pNewType, 0);
                 pNewType->Release();
+                if (SUCCEEDED(hrType)) continue;
             }
-            continue;
+            break;
         }
         
         if (SUCCEEDED(hr) && encOutput.pSample) {
