@@ -6821,6 +6821,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             0, 0, 0, 0, hWnd, (HMENU)1010, ((LPCREATESTRUCT)lParam)->hInstance, 0);
             
         InitAudio();
+        g_audioMixerRunning = true;
+        g_audioMixerThread = std::thread(AudioMixerLoop);
 
         g_oldListProc = (WNDPROC)SetWindowLongPtr(g_hUserList, GWLP_WNDPROC, (LONG_PTR)ListBoxSubclassProc);
 
