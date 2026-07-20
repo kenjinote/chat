@@ -820,7 +820,7 @@ bool g_suspectMicDead = false;
 extern ID3D11Device* g_pD3D11Device;
 extern ID3D11DeviceContext* g_pD3D11Context;
 
-const int AUDIO_BUF_SIZE = 1920; 
+const int AUDIO_BUF_SIZE = 960; 
 const int AUDIO_BUF_COUNT = 16;
 WAVEHDR g_waveInHdr[AUDIO_BUF_COUNT];
 char g_waveInBuf[AUDIO_BUF_COUNT][AUDIO_BUF_SIZE];
@@ -7772,7 +7772,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 serverUdp.sin_port = htons(4001);
                 if (g_isServerUdpAddrResolved) {
                     serverUdp.sin_addr = g_serverUdpAddr;
-                    sendto(g_sock, (char*)&hdr, sizeof(hdr), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                    int sent = sendto(g_sock, (char*)&hdr, sizeof(hdr), 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                    LogToFile("UDP KEEPALIVE SENT: sent=" + std::to_string(sent) + " to IP=" + std::string(inet_ntoa(g_serverUdpAddr)));
                 }
             }
             
