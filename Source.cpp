@@ -5272,6 +5272,8 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             volume = volume * 3;
                             if (volume > 100) volume = 100;
                             
+                            LogToFile("UDP AUDIO RECV: maxAmp=" + std::to_string(maxAmp) + " volume=" + std::to_string(volume) + " wname=" + w2a(wname.c_str()));
+                            
                             bool newlySpeaking = false;
                             {
                                 std::lock_guard<std::mutex> lock(g_voiceMutex);
