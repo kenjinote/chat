@@ -4,6 +4,9 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+
+#pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+
 #include <windowsx.h>
 #include <commctrl.h>
 #include <shlobj.h>
@@ -218,6 +221,8 @@ void ApplyThemeToMenu(HMENU hMenu) {
     }
 }
 
+extern HFONT g_hFont;
+extern inline int Scale(int x);
 bool HandleMenuMeasureItem(HWND hWnd, LPMEASUREITEMSTRUCT lpmis) {
     if (lpmis->CtlType == ODT_MENU) {
         MenuThemeData* data = (MenuThemeData*)lpmis->itemData;
@@ -226,8 +231,7 @@ bool HandleMenuMeasureItem(HWND hWnd, LPMEASUREITEMSTRUCT lpmis) {
             lpmis->itemHeight = Scale(6);
         } else if (data) {
             HDC hdc = GetDC(hWnd);
-            HFONT hFont = (HFONT)SendMessage(hWnd, WM_GETFONT, 0, 0);
-            if (!hFont) hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+            HFONT hFont = g_hFont;
             
             HFONT hBoldFont = NULL;
             // ODS_DEFAULT is not in MEASUREITEMSTRUCT by default, but we can check if it's the default item if needed.
@@ -473,8 +477,7 @@ bool HandleMenuDrawItem(HWND hWnd, LPDRAWITEMSTRUCT lpdis) {
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, textColor);
             
-            HFONT hFont = (HFONT)SendMessage(hWnd, WM_GETFONT, 0, 0);
-            if (!hFont) hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+            HFONT hFont = g_hFont;
             
             HFONT hBoldFont = NULL;
             if (lpdis->itemState & ODS_DEFAULT) {
@@ -797,6 +800,19 @@ void DecodeJPEG(const std::vector<uint8_t>& jpegData, const std::wstring& userna
 
 // --- Audio Globals ---
 HWAVEIN g_hWaveIn = NULL;
+#include <queue>
+#include <map>
+
+std::mutex g_audioMixerMutex;
+HANDLE g_hAudioEvent = NULL;
+bool g_audioMixerRunning = false;
+std::thread g_audioMixerThread;
+
+struct JitterFrame {
+    std::vector<short> samples;
+};
+std::map<std::wstring, std::queue<JitterFrame>> g_jitterBuffers;
+
 HWAVEOUT g_hWaveOut = NULL;
 bool g_isVoiceActive = false;
 bool g_suspectMicDead = false;
@@ -1738,7 +1754,8 @@ void InitAudio() {
     wfx.nBlockAlign = wfx.nChannels * wfx.wBitsPerSample / 8;
     wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
 
-    waveOutOpen(&g_hWaveOut, WAVE_MAPPER, &wfx, 0, 0, CALLBACK_NULL);
+    g_hAudioEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+    waveOutOpen(&g_hWaveOut, WAVE_MAPPER, &wfx, (DWORD_PTR)g_hAudioEvent, 0, CALLBACK_EVENT);
 
     for (int i = 0; i < AUDIO_OUT_BUF_COUNT; i++) {
         g_waveOutHdr[i].lpData = g_waveOutBuf[i];
@@ -1748,21 +1765,66 @@ void InitAudio() {
     }
 }
 
-void PlayAudioFrame(const char* data, int len) {
-    if (!g_hWaveOut) return;
-    
-    int freeIdx = -1;
+void AudioMixerLoop() {
     for (int i = 0; i < AUDIO_OUT_BUF_COUNT; i++) {
-        if ((g_waveOutHdr[i].dwFlags & WHDR_DONE) || !(g_waveOutHdr[i].dwFlags & WHDR_INQUEUE)) {
-            freeIdx = i;
-            break;
+        memset(g_waveOutBuf[i], 0, AUDIO_BUF_SIZE);
+        g_waveOutHdr[i].dwBufferLength = AUDIO_BUF_SIZE;
+        waveOutWrite(g_hWaveOut, &g_waveOutHdr[i], sizeof(WAVEHDR));
+    }
+
+    while (g_audioMixerRunning) {
+        WaitForSingleObject(g_hAudioEvent, INFINITE);
+        if (!g_audioMixerRunning) break;
+
+        int freeIdx = -1;
+        for (int i = 0; i < AUDIO_OUT_BUF_COUNT; i++) {
+            if (g_waveOutHdr[i].dwFlags & WHDR_DONE) {
+                freeIdx = i;
+                break;
+            }
+        }
+
+        if (freeIdx != -1) {
+            const int sampleCount = AUDIO_BUF_SIZE / 2;
+            std::vector<int> mixed(sampleCount, 0);
+
+            {
+                std::lock_guard<std::mutex> lock(g_audioMixerMutex);
+                for (auto it = g_jitterBuffers.begin(); it != g_jitterBuffers.end(); ++it) {
+                    if (!it->second.empty()) {
+                        const JitterFrame& frame = it->second.front();
+                        int len = (int)frame.samples.size();
+                        if (len > sampleCount) len = sampleCount;
+                        
+                        for (int i = 0; i < len; i++) {
+                            mixed[i] += frame.samples[i];
+                        }
+                        it->second.pop();
+                    }
+                }
+            }
+
+            short* outSamples = (short*)g_waveOutBuf[freeIdx];
+            for (int i = 0; i < sampleCount; i++) {
+                float x = mixed[i] / 32768.0f;
+                float abs_x = x < 0 ? -x : x;
+                float y;
+                if (abs_x < 0.5f) {
+                    y = x;
+                } else if (abs_x < 1.5f) {
+                    float val = abs_x - 0.5f;
+                    float shaped = 0.5f + val - 0.5f * val * val;
+                    y = (x > 0) ? shaped : -shaped;
+                } else {
+                    y = (x > 0) ? 1.0f : -1.0f;
+                }
+                outSamples[i] = (short)(y * 32767.0f);
+            }
+
+            g_waveOutHdr[freeIdx].dwBufferLength = AUDIO_BUF_SIZE;
+            waveOutWrite(g_hWaveOut, &g_waveOutHdr[freeIdx], sizeof(WAVEHDR));
         }
     }
-    if (freeIdx == -1) return; 
-    
-    memcpy(g_waveOutBuf[freeIdx], data, min(len, AUDIO_BUF_SIZE));
-    g_waveOutHdr[freeIdx].dwBufferLength = len;
-    waveOutWrite(g_hWaveOut, &g_waveOutHdr[freeIdx], sizeof(WAVEHDR));
 }
 
 
@@ -2054,6 +2116,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SetScrollInfo(hWnd, SB_VERT, &si, FALSE);
             SendMessage(hWnd, WM_NCPAINT, 1, 0);
 
+            pRT->SetDpi((float)g_dpi, (float)g_dpi);
             pRT->BeginDraw();
             pRT->Clear(D2D1::ColorF(D2D1::ColorF::White));
 
@@ -2635,6 +2698,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         
         if (pRT) {
+            pRT->SetDpi((float)g_dpi, (float)g_dpi);
             pRT->BeginDraw();
             pRT->Clear(D2D1::ColorF(D2D1::ColorF::White));
             
@@ -3075,18 +3139,18 @@ void ApplyClassicStyle(HWND hWnd) {
     RECT rc;
     GetWindowRect(hWnd, &rc);
     RECT rcFrame = { 0, 0, 0, 0 };
-    AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+    AdjustWindowRectExForDpi(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE), g_dpi);
     int dpiY = 96;
     HDC hdc = GetDC(hWnd);
     if (hdc) {
-        dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+        dpiY = g_dpi;
         ReleaseDC(hWnd, hdc);
     }
     int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
     int bw3 = bw1 * 3;
 
     int cxCrop = -rcFrame.left - bw3;
-    int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - bw3;
+    int cyCropTop = -rcFrame.top - GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi) - bw3;
     int cyCropBottom = rcFrame.bottom - bw3;
     if (cxCrop < 0) cxCrop = 0;
     if (cyCropTop < 0) cyCropTop = 0;
@@ -3096,7 +3160,7 @@ void ApplyClassicStyle(HWND hWnd) {
 }
 
 void DrawScaledClientEdge(HDC hdc, RECT rc) {
-    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+    int dpiY = g_dpi;
     int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
     int bw2 = bw1 * 2;
 
@@ -3119,7 +3183,7 @@ void DrawScaledClientEdge(HDC hdc, RECT rc) {
 }
 
 void DrawScaledButtonBorder(HDC hdc, RECT rc, UINT edge) {
-    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+    int dpiY = g_dpi;
     int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
     int bw2 = bw1 * 2;
 
@@ -3159,10 +3223,10 @@ LRESULT CALLBACK ClientEdgeSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
         if (wParam == TRUE && (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_CLIENTEDGE)) {
             NCCALCSIZE_PARAMS* params = (NCCALCSIZE_PARAMS*)lParam;
             HDC hdc = GetWindowDC(hWnd);
-            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            int dpiY = g_dpi;
             ReleaseDC(hWnd, hdc);
             int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
-            int offset = bw - GetSystemMetrics(SM_CXEDGE);
+            int offset = bw - GetSystemMetricsForDpi(SM_CXEDGE, g_dpi);
             if (offset > 0) {
                 params->rgrc[0].left += offset;
                 params->rgrc[0].top += offset;
@@ -3199,10 +3263,10 @@ LRESULT CALLBACK RaisedEdgeSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
         if (wParam == TRUE && (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_CLIENTEDGE)) {
             NCCALCSIZE_PARAMS* params = (NCCALCSIZE_PARAMS*)lParam;
             HDC hdc = GetWindowDC(hWnd);
-            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            int dpiY = g_dpi;
             ReleaseDC(hWnd, hdc);
             int bw = MulDiv(1, dpiY, 96); if (bw < 1) bw = 1;
-            int offset = bw - GetSystemMetrics(SM_CXEDGE);
+            int offset = bw - GetSystemMetricsForDpi(SM_CXEDGE, g_dpi);
             if (offset != 0) {
                 params->rgrc[0].left += offset;
                 params->rgrc[0].top += offset;
@@ -3218,7 +3282,7 @@ LRESULT CALLBACK RaisedEdgeSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
             RECT rcWin; GetWindowRect(hWnd, &rcWin);
             RECT rc = {0, 0, rcWin.right - rcWin.left, rcWin.bottom - rcWin.top};
             
-            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            int dpiY = g_dpi;
             int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
 
             HBRUSH hWhite = CreateSolidBrush(RGB(255, 255, 255));
@@ -3313,7 +3377,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
     }
     case WM_WINDOWPOSCHANGING: {
         WINDOWPOS* pwp = (WINDOWPOS*)lParam;
-        int primaryBtn = GetSystemMetrics(SM_SWAPBUTTON) ? VK_RBUTTON : VK_LBUTTON;
+        int primaryBtn = GetSystemMetricsForDpi(SM_SWAPBUTTON, g_dpi) ? VK_RBUTTON : VK_LBUTTON;
         if ((GetAsyncKeyState(primaryBtn) >= 0) && !(pwp->flags & SWP_NOSIZE) && !(pwp->flags & SWP_NOMOVE)) {
             RECT rcNew = { pwp->x, pwp->y, pwp->x + pwp->cx, pwp->y + pwp->cy };
             HMONITOR hMonitor = MonitorFromRect(&rcNew, MONITOR_DEFAULTTONEAREST);
@@ -3326,9 +3390,9 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
 
                 if (isLeftEdge || isRightEdge || isTopEdge || isBottomEdge) {
                     RECT rcFrame = { 0, 0, 0, 0 };
-                    AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+                    AdjustWindowRectExForDpi(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE), g_dpi);
                     int cxCrop = -rcFrame.left - 3;
-                    int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - 3;
+                    int cyCropTop = -rcFrame.top - GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi) - 3;
                     int cyCropBottom = rcFrame.bottom - 3;
                     if (cxCrop < 0) cxCrop = 0;
                     if (cyCropTop < 0) cyCropTop = 0;
@@ -3394,14 +3458,14 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                     openTime = GetMessageTime();
                     RECT rc; GetWindowRect(hWnd, &rc);
                     RECT rcFrame = { 0, 0, 0, 0 };
-                    AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+                    AdjustWindowRectExForDpi(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE), g_dpi);
                     pt.x = rc.left - rcFrame.left;
                     pt.y = rc.top - rcFrame.top;
                 }
             } else if (cmd == SC_KEYMENU) {
                 RECT rc; GetWindowRect(hWnd, &rc);
                 RECT rcFrame = { 0, 0, 0, 0 };
-                AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+                AdjustWindowRectExForDpi(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE), g_dpi);
                 pt.x = rc.left - rcFrame.left;
                 pt.y = rc.top - rcFrame.top;
             } else {
@@ -3505,16 +3569,16 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
             int dpiY = 96;
             HDC hdc = GetDC(hWnd);
             if (hdc) {
-                dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                dpiY = g_dpi;
                 ReleaseDC(hWnd, hdc);
             }
             int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
             int bw3 = bw1 * 3;
 
             RECT rcFrame = { 0, 0, 0, 0 };
-            AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+            AdjustWindowRectExForDpi(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE), g_dpi);
             int cxCrop = -rcFrame.left - bw3;
-            int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - bw3;
+            int cyCropTop = -rcFrame.top - GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi) - bw3;
             int cyCropBottom = rcFrame.bottom - bw3;
             if (cxCrop < 0) cxCrop = 0;
             if (cyCropTop < 0) cyCropTop = 0;
@@ -3551,23 +3615,23 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         int dpiY = 96;
         HDC hdc = GetDC(hWnd);
         if (hdc) {
-            dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            dpiY = g_dpi;
             ReleaseDC(hWnd, hdc);
         }
         int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
         int bw3 = bw1 * 3;
 
         RECT rcFrame = { 0, 0, 0, 0 };
-        AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+        AdjustWindowRectExForDpi(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE), g_dpi);
         int cxCrop = -rcFrame.left - bw3;
-        int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - bw3;
+        int cyCropTop = -rcFrame.top - GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi) - bw3;
         if (cxCrop < 0) cxCrop = 0;
         if (cyCropTop < 0) cyCropTop = 0;
 
         int visLeft = cxCrop;
         int visRight = (rc.right - rc.left) - cxCrop;
         int visTop = cyCropTop;
-        int captionHeight = GetSystemMetrics(SM_CYCAPTION);
+        int captionHeight = GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi);
         RECT rcCaption = { visLeft + 3, visTop + 3, visRight - 3, visTop + 3 + captionHeight };
         if (rcCaption.bottom > -rcFrame.top) rcCaption.bottom = -rcFrame.top;
 
@@ -3575,7 +3639,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         if (PtInRect(&rcCaption, wpt)) {
             int margin2 = Scale(2);
             int margin4 = Scale(4);
-            int btnHeight = GetSystemMetrics(SM_CYSIZE) - margin4;
+            int btnHeight = GetSystemMetricsForDpi(SM_CYSIZE, g_dpi) - margin4;
             if (btnHeight > captionHeight - margin4) btnHeight = captionHeight - margin4;
             int btnWidth = btnHeight + margin2;
             
@@ -3599,7 +3663,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 if (!hIcon && (GetWindowLong(hWnd, GWL_STYLE) & WS_SYSMENU)) hIcon = LoadIcon(NULL, IDI_APPLICATION);
             }
             if (hIcon) {
-                int iconWidth = GetSystemMetrics(SM_CXSMICON);
+                int iconWidth = GetSystemMetricsForDpi(SM_CXSMICON, g_dpi);
                 RECT rcIcon = { rcCaption.left, rcCaption.top, rcCaption.left + 2 + iconWidth + 4, rcCaption.bottom };
                 if (PtInRect(&rcIcon, wpt)) { *pResult = HTSYSMENU; return true; }
             }
@@ -3642,15 +3706,15 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 int height = rcWindow.bottom - rcWindow.top;
 
                 RECT rcFrame = { 0, 0, 0, 0 };
-                AdjustWindowRectEx(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+                AdjustWindowRectExForDpi(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE), g_dpi);
 
-                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int dpiY = g_dpi;
                 int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
                 int bw2 = bw1 * 2;
                 int bw3 = bw1 * 3;
 
                 int cxCrop = -rcFrame.left - bw3;
-                int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - bw3;
+                int cyCropTop = -rcFrame.top - GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi) - bw3;
                 int cyCropBottom = rcFrame.bottom - bw3;
                 if (cxCrop < 0) cxCrop = 0;
                 if (cyCropTop < 0) cyCropTop = 0;
@@ -3702,7 +3766,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 DeleteObject(hDarkGray);
                 DeleteObject(hFaceGray);
 
-                int captionHeight = GetSystemMetrics(SM_CYCAPTION);
+                int captionHeight = GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi);
                 RECT rcCaption = { visLeft + bw3, visTop + bw3, visRight - bw3, visTop + bw3 + captionHeight };
                 if (rcCaption.bottom > -rcFrame.top) rcCaption.bottom = -rcFrame.top;
                 
@@ -3723,7 +3787,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
 
                 int margin2 = Scale(2);
                 int margin4 = Scale(4);
-                int btnHeight = GetSystemMetrics(SM_CYSIZE) - margin4;
+                int btnHeight = GetSystemMetricsForDpi(SM_CYSIZE, g_dpi) - margin4;
                 captionHeight = rcCaption.bottom - rcCaption.top;
                 if (btnHeight > captionHeight - margin4) btnHeight = captionHeight - margin4;
                 int btnWidth = btnHeight + margin2;
@@ -3747,7 +3811,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 if (g_capturedWnd == hWnd && g_hoverBtn == HTMINBUTTON) minState |= DFCS_PUSHED;
 
                 auto drawCaptionBtn = [&](RECT r, int type, bool pushed) {
-                    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                    int dpiY = g_dpi;
                     int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
                     int bw2 = bw1 * 2;
 
@@ -3861,7 +3925,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 WCHAR szTitle[256];
                 GetWindowText(hWnd, szTitle, 256);
                 
-                int iconWidth = GetSystemMetrics(SM_CXSMICON);
+                int iconWidth = GetSystemMetricsForDpi(SM_CXSMICON, g_dpi);
                 RECT rcText = rcCaption;
                 
                 HICON hIcon = NULL;
@@ -3873,8 +3937,8 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 
                 if (hIcon) {
                     rcText.left += iconWidth + 6;
-                    int iconY = rcCaption.top + (rcCaption.bottom - rcCaption.top - GetSystemMetrics(SM_CYSMICON)) / 2;
-                    DrawIconEx(hdc, rcCaption.left + 2, iconY, hIcon, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), 0, NULL, DI_NORMAL);
+                    int iconY = rcCaption.top + (rcCaption.bottom - rcCaption.top - GetSystemMetricsForDpi(SM_CYSMICON, g_dpi)) / 2;
+                    DrawIconEx(hdc, rcCaption.left + 2, iconY, hIcon, GetSystemMetricsForDpi(SM_CXSMICON, g_dpi), GetSystemMetricsForDpi(SM_CYSMICON, g_dpi), 0, NULL, DI_NORMAL);
                 } else {
                     rcText.left += 2;
                 }
@@ -3967,7 +4031,7 @@ void DrawColorButton(LPDRAWITEMSTRUCT lpdis, COLORREF colorToDraw) {
     UINT edge = (lpdis->itemState & ODS_SELECTED) ? EDGE_SUNKEN : EDGE_RAISED;
     DrawScaledButtonBorder(hdc, rc, edge);
     if (lpdis->itemState & ODS_FOCUS) {
-        int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+        int dpiY = g_dpi;
         int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
         RECT rcFocus = rc; InflateRect(&rcFocus, -bw*2, -bw*2); DrawFocusRect(hdc, &rcFocus);
     }
@@ -4029,7 +4093,7 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         SetWindowSubclass(hEdit, EditSelectionColorProc, 0, 0);
         SetWindowSubclass(hEdit, EditContextMenuProc, 0, 0);
         
-        HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+        HFONT hFont = g_hFont;
         SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hBtnOK, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hBtnCancel, WM_SETFONT, (WPARAM)hFont, FALSE);
@@ -4123,7 +4187,7 @@ bool ShowChangeNameDialog(HWND hParent, std::wstring& outResult) {
     int totalHeight = margin * 3 + Scale(24) + Scale(24);
     
     RECT rcDlg = { 0, 0, totalWidth, totalHeight };
-    AdjustWindowRectEx(&rcDlg, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_DLGMODALFRAME);
+    AdjustWindowRectExForDpi(&rcDlg, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_DLGMODALFRAME, g_dpi);
     int winW = rcDlg.right - rcDlg.left;
     int winH = rcDlg.bottom - rcDlg.top;
 
@@ -4162,7 +4226,7 @@ LRESULT CALLBACK ScrollbarColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
         int width = rcWin.right - rcWin.left;
         int height = rcWin.bottom - rcWin.top;
         
-        int cxVScroll = GetSystemMetrics(SM_CXVSCROLL);
+        int cxVScroll = GetSystemMetricsForDpi(SM_CXVSCROLL, g_dpi);
         if (width <= cxVScroll) {
             ReleaseDC(hWnd, hdc);
             return res;
@@ -4188,7 +4252,7 @@ LRESULT CALLBACK ScrollbarColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                 FillRect(hdc, &rc, hFace);
                 DrawScaledButtonBorder(hdc, rc, isPressed ? EDGE_SUNKEN : EDGE_RAISED);
                 
-                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int dpiY = g_dpi;
                 int s = MulDiv(1, dpiY, 96); if (s < 1) s = 1;
 
                 int cx = rc.left + (rc.right - rc.left) / 2;
@@ -4446,7 +4510,7 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             SendMessage(hList, LB_SETITEMDATA, idx, (LPARAM)(s_roomNames.size() - 1));
         }
 
-        HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+        HFONT hFont = g_hFont;
         SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hList, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hChk, WM_SETFONT, (WPARAM)hFont, FALSE);
@@ -4603,7 +4667,7 @@ bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult, bool& outPrivate)
     int clientW = Scale(270);
     int clientH = Scale(168);
     RECT rcDlg = { 0, 0, clientW, clientH };
-    AdjustWindowRectEx(&rcDlg, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_DLGMODALFRAME);
+    AdjustWindowRectExForDpi(&rcDlg, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_DLGMODALFRAME, g_dpi);
     int winW = rcDlg.right - rcDlg.left;
     int winH = rcDlg.bottom - rcDlg.top;
 
@@ -5184,12 +5248,22 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         if (isIgnored) continue;
 
                         if (mhdr->payloadType == 1) { // Audio
-                            PlayAudioFrame(udpBuf + sizeof(MediaHeader), res - (int)sizeof(MediaHeader));
                             std::wstring wname = mhdr->userId;
-                            
                             int audioLen = res - (int)sizeof(MediaHeader);
                             short* samples = (short*)(udpBuf + sizeof(MediaHeader));
                             int sampleCount = audioLen / 2;
+                            
+                            {
+                                std::lock_guard<std::mutex> lock(g_audioMixerMutex);
+                                JitterFrame frame;
+                                frame.samples.assign(samples, samples + sampleCount);
+                                g_jitterBuffers[wname].push(frame);
+                                
+                                if (g_jitterBuffers[wname].size() > 5) {
+                                    g_jitterBuffers[wname].pop();
+                                }
+                            }
+                            
                             int maxAmp = 0;
                             for (int i = 0; i < sampleCount; i++) {
                                 int amp = abs(samples[i]);
@@ -5208,7 +5282,6 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 g_voiceUsers[wname] = GetTickCount();
                                 g_voiceVolumes[wname] = volume;
                             }
-                            if (newlySpeaking && g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
                         }
                         else if (mhdr->payloadType == 4) {
                             std::wstring wname = mhdr->userId;
@@ -5634,6 +5707,7 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         
         ID2D1HwndRenderTarget* pRT = g_videoRts[hwnd];
         if (pRT && pUser) {
+            pRT->SetDpi((float)g_dpi, (float)g_dpi);
             pRT->BeginDraw();
             pRT->Clear(D2D1::ColorF(D2D1::ColorF::Black));
             bool isSW = false;
@@ -5769,19 +5843,19 @@ RECT GetWindowMargin(HWND hwnd) {
     if (!IsWindow(hwnd)) return {0, 0, 0, 0};
     
     RECT rcFrame = { 0, 0, 0, 0 };
-    AdjustWindowRectEx(&rcFrame, GetWindowLong(hwnd, GWL_STYLE), FALSE, GetWindowLong(hwnd, GWL_EXSTYLE));
+    AdjustWindowRectExForDpi(&rcFrame, GetWindowLong(hwnd, GWL_STYLE), FALSE, GetWindowLong(hwnd, GWL_EXSTYLE), g_dpi);
     
     HDC hdc = GetDC(hwnd);
     int dpiY = 96;
     if (hdc) {
-        dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+        dpiY = g_dpi;
         ReleaseDC(hwnd, hdc);
     }
     int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
     int bw3 = bw1 * 3;
 
     int cxCrop = -rcFrame.left - bw3;
-    int cyCropTop = -rcFrame.top - GetSystemMetrics(SM_CYCAPTION) - bw3;
+    int cyCropTop = -rcFrame.top - GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi) - bw3;
     int cyCropBottom = rcFrame.bottom - bw3;
     if (cxCrop < 0) cxCrop = 0;
     if (cyCropTop < 0) cyCropTop = 0;
@@ -5848,7 +5922,7 @@ void SnapWindow(HWND hMovingWnd, LPRECT prc) {
     int dpiY = 96;
     HDC hdc = GetDC(hMovingWnd);
     if (hdc) {
-        dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+        dpiY = g_dpi;
         ReleaseDC(hMovingWnd, hdc);
     }
     const int SNAP_EDGE = MulDiv(16, dpiY, 96);
@@ -6152,7 +6226,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                                 int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
                                 CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(180), vidX, vidY);
                                 RECT rcTarget = { 0, 0, Scale(320), Scale(180) };
-                                AdjustWindowRectEx(&rcTarget, WS_OVERLAPPEDWINDOW, FALSE, 0);
+                                AdjustWindowRectExForDpi(&rcTarget, WS_OVERLAPPEDWINDOW, FALSE, 0, g_dpi);
                                 int winW = rcTarget.right - rcTarget.left;
                                 int winH = rcTarget.bottom - rcTarget.top;
                                 HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(),
@@ -6182,7 +6256,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                                         int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
                                         CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(180), vidX, vidY);
                                         RECT rcTarget = { 0, 0, Scale(320), Scale(180) };
-                                        AdjustWindowRectEx(&rcTarget, WS_OVERLAPPEDWINDOW, FALSE, 0);
+                                        AdjustWindowRectExForDpi(&rcTarget, WS_OVERLAPPEDWINDOW, FALSE, 0, g_dpi);
                                         HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(), WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, rcTarget.right - rcTarget.left, rcTarget.bottom - rcTarget.top, NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_userId.c_str());
                                         ApplyClassicStyle(hVid);
                                         g_videoWindows[g_userId] = hVid;
@@ -6215,7 +6289,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                                         int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
                                         CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(180), vidX, vidY);
                                         RECT rcTarget = { 0, 0, Scale(320), Scale(180) };
-                                        AdjustWindowRectEx(&rcTarget, WS_OVERLAPPEDWINDOW, FALSE, 0);
+                                        AdjustWindowRectExForDpi(&rcTarget, WS_OVERLAPPEDWINDOW, FALSE, 0, g_dpi);
                                         HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(), WS_OVERLAPPEDWINDOW | WS_VISIBLE, vidX, vidY, rcTarget.right - rcTarget.left, rcTarget.bottom - rcTarget.top, NULL, NULL, GetModuleHandle(NULL), (LPVOID)g_userId.c_str());
                                         ApplyClassicStyle(hVid);
                                         g_videoWindows[g_userId] = hVid;
@@ -6269,7 +6343,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                             int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;
                             CalculateVideoWindowPosition(GetParent(hwnd), Scale(320), Scale(180), vidX, vidY);
                             RECT rcTarget = { 0, 0, Scale(320), Scale(180) };
-                            AdjustWindowRectEx(&rcTarget, WS_OVERLAPPEDWINDOW, FALSE, 0);
+                            AdjustWindowRectExForDpi(&rcTarget, WS_OVERLAPPEDWINDOW, FALSE, 0, g_dpi);
                             int winW = rcTarget.right - rcTarget.left;
                             int winH = rcTarget.bottom - rcTarget.top;
                             HWND hVid = CreateWindowEx(0, L"D2DVideoViewClass", titleName.c_str(),
@@ -6389,7 +6463,7 @@ LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
         DrawScaledButtonBorder(hdc, rc, edge);
 
         if (GetFocus() == hWnd) {
-            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            int dpiY = g_dpi;
             int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
             RECT rcFocus = rc;
             InflateRect(&rcFocus, -bw * 2, -bw * 2);
@@ -6405,7 +6479,7 @@ LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lP
 
             RECT rcText = rc;
             if (isPressed || isChecked) {
-                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int dpiY = g_dpi;
                 int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
                 rcText.left += bw1 * 2;
                 rcText.top += bw1 * 2;
@@ -6454,11 +6528,11 @@ LRESULT CALLBACK ComboBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
             int width = rc.right - rc.left;
             int height = rc.bottom - rc.top;
 
-            int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+            int dpiY = g_dpi;
             int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
             int bw2 = bw1 * 2;
             
-            int btnWidth = GetSystemMetrics(SM_CXVSCROLL);
+            int btnWidth = GetSystemMetricsForDpi(SM_CXVSCROLL, g_dpi);
             RECT rcBtn = { width - btnWidth - bw2, bw2, width - bw2, height - bw2 };
             
             HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
@@ -6506,7 +6580,45 @@ LRESULT CALLBACK ComboBoxSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM
     return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
 
+
+void UpdateFonts(HWND hWnd) {
+    if (g_hFont) DeleteObject(g_hFont);
+    if (g_hFontBold) DeleteObject(g_hFontBold);
+    if (g_hFontI_btn) DeleteObject(g_hFontI_btn);
+    if (g_hFontU_btn) DeleteObject(g_hFontU_btn);
+    if (g_hFontB_btn) DeleteObject(g_hFontB_btn);
+    if (g_hFontCombo) DeleteObject(g_hFontCombo);
+
+    g_hFont = CreateFontW(Scale(12), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"MS UI Gothic");
+    g_hFontBold = CreateFontW(Scale(12), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"MS UI Gothic");
+    g_hFontI_btn = CreateFontW(Scale(15), 0, 0, 0, FW_BOLD, TRUE, FALSE, FALSE, DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Georgia");
+    g_hFontU_btn = CreateFontW(Scale(15), 0, 0, 0, FW_BOLD, FALSE, TRUE, FALSE, DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Arial");
+    g_hFontB_btn = CreateFontW(Scale(15), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Georgia");
+    g_hFontCombo = CreateFontW(Scale(15), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, SHIFTJIS_CHARSET,
+        OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Arial");
+
+    if (g_hUserList) SendMessage(g_hUserList, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+    if (g_hUserList) SendMessage(g_hUserList, LB_SETITEMHEIGHT, 0, (LPARAM)Scale(28));
+    if (g_hUserListHeader) SendMessage(g_hUserListHeader, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+    if (g_hSendBtn) SendMessage(g_hSendBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+    if (g_hBtnB) SendMessage(g_hBtnB, WM_SETFONT, (WPARAM)g_hFontB_btn, TRUE);
+    if (g_hBtnI) SendMessage(g_hBtnI, WM_SETFONT, (WPARAM)g_hFontI_btn, TRUE);
+    if (g_hBtnU) SendMessage(g_hBtnU, WM_SETFONT, (WPARAM)g_hFontU_btn, TRUE);
+    if (g_hBtnVideo) SendMessage(g_hBtnVideo, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+    if (g_hComboSize) SendMessage(g_hComboSize, WM_SETFONT, (WPARAM)g_hFontCombo, TRUE);
+    if (g_hBtnMoveRoom) SendMessage(g_hBtnMoveRoom, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+    if (g_hBtnColor) SendMessage(g_hBtnColor, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+    if (g_hBtnVoice) SendMessage(g_hBtnVoice, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+
     LRESULT classicResult = 0;
     if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult, true)) return classicResult;
 
@@ -6527,7 +6639,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int minClientHeight = Scale(300);
 
         RECT rc = { 0, 0, minClientWidth, minClientHeight };
-        AdjustWindowRectEx(&rc, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE));
+        AdjustWindowRectExForDpi(&rc, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE), g_dpi);
         pmmi->ptMinTrackSize.x = rc.right - rc.left;
         pmmi->ptMinTrackSize.y = rc.bottom - rc.top;
         return 0;
@@ -6536,8 +6648,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         SetWindowTitle(hWnd);
         return 0;
     }
+
+    case WM_DPICHANGED: {
+        g_dpi = HIWORD(wParam);
+        UpdateFonts(hWnd);
+        RECT* const prcNewWindow = (RECT*)lParam;
+        SetWindowPos(hWnd,
+                     NULL,
+                     prcNewWindow->left,
+                     prcNewWindow->top,
+                     prcNewWindow->right - prcNewWindow->left,
+                     prcNewWindow->bottom - prcNewWindow->top,
+                     SWP_NOZORDER | SWP_NOACTIVATE);
+        InvalidateRect(hWnd, NULL, TRUE);
+        return 0;
+    }
     case WM_CREATE: {
-        
+        g_dpi = GetDpiForWindow(hWnd);
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
     CoCreateInstance(CLSID_WICImagingFactory, NULL, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&g_pWICFactory));
     
@@ -6682,9 +6809,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             0, 0, 0, 0, hWnd, (HMENU)1053, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
         g_hVolumeSlider = CreateWindow(TRACKBAR_CLASS, L"",
-            WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_AUTOTICKS | TBS_TOOLTIPS,
+            WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_AUTOTICKS | TBS_TOOLTIPS | TBS_FIXEDLENGTH,
             0, 0, 0, 0, hWnd, (HMENU)1052, ((LPCREATESTRUCT)lParam)->hInstance, 0);
         SendMessage(g_hVolumeSlider, TBM_SETRANGE, TRUE, MAKELPARAM(0, 100));
+        SendMessage(g_hVolumeSlider, TBM_SETTHUMBLENGTH, (WPARAM)Scale(16), 0);
         SendMessage(g_hVolumeSlider, TBM_SETTICFREQ, 10, 0);
         SetWindowTheme(g_hVolumeSlider, L" ", L" ");
 
@@ -6847,7 +6975,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             DrawScaledButtonBorder(hdc, rc, edge);
             
             if (lpdis->itemState & ODS_FOCUS) {
-                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int dpiY = g_dpi;
                 int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
                 RECT rcFocus = rc;
                 InflateRect(&rcFocus, -bw*2, -bw*2);
@@ -6902,7 +7030,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             UINT edge = (lpdis->itemState & ODS_SELECTED) ? EDGE_SUNKEN : EDGE_RAISED;
             DrawScaledButtonBorder(hdc, rc, edge);
             if (lpdis->itemState & ODS_FOCUS) {
-                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                int dpiY = g_dpi;
                 int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
                 RECT rcFocus = rc; InflateRect(&rcFocus, -bw*2, -bw*2); DrawFocusRect(hdc, &rcFocus);
             }
@@ -6971,7 +7099,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                     DrawTextW(hdc, GetString(IDS_NO_CONNECTION).c_str(), -1, &textRc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
                     SelectObject(hdc, hOldFont);
                 } else {
-                    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
+                    int dpiY = g_dpi;
                     int bw = MulDiv(2, dpiY, 96); if (bw < 2) bw = 2;
                     
                     int maxVolWidth = rc.right - rc.left - bw * 2;
@@ -7330,23 +7458,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 SendMessage(g_hVolumeSlider, TBM_GETTHUMBRECT, 0, (LPARAM)&rcThumb);
                 ExcludeClipRect(hdc, rcThumb.left, rcThumb.top, rcThumb.right, rcThumb.bottom);
                 
-                int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
-                int s = MulDiv(1, dpiY, 96); if (s < 1) s = 1;
                 HPEN hPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
                 HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
                 
                 RECT rcChannel;
                 SendMessage(g_hVolumeSlider, TBM_GETCHANNELRECT, 0, (LPARAM)&rcChannel);
                 
-                int thumbW = 10 * s;
+                int thumbW = Scale(10);
                 int xStart = rcChannel.left + thumbW / 2;
                 int xEnd = rcChannel.right - thumbW / 2;
                 
-                int tick1_Y1 = rcChannel.bottom + 3 * s;
-                int tick1_Y2 = tick1_Y1 + 2 * s;
+                int tick1_Y1 = rcChannel.bottom + Scale(3);
+                int tick1_Y2 = tick1_Y1 + Scale(3);
                 
-                int tick2_Y2 = rcChannel.top - 3 * s;
-                int tick2_Y1 = tick2_Y2 - 2 * s;
+                int tick2_Y2 = rcChannel.top - Scale(3);
+                int tick2_Y1 = tick2_Y2 - Scale(3);
                 
                 for (int i = 0; i <= 10; i++) {
                     int x = xStart + (xEnd - xStart) * i / 10;
@@ -7364,6 +7490,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (pcd->dwItemSpec == TBCD_THUMB) {
                     HDC hdc = pcd->hdc;
                     RECT rc = pcd->rc;
+                    int cx = (rc.left + rc.right) / 2;
+                    int w = Scale(10);
+                    rc.left = cx - w / 2;
+                    rc.right = rc.left + w;
                     HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
                     FillRect(hdc, &rc, hBg);
                     DeleteObject(hBg);
@@ -7372,10 +7502,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 } else if (pcd->dwItemSpec == TBCD_CHANNEL) {
                     HDC hdc = pcd->hdc;
                     RECT rc = pcd->rc;
-                    int dpiY = GetDeviceCaps(hdc, LOGPIXELSY);
-                    int s = MulDiv(1, dpiY, 96); if (s < 1) s = 1;
-                    rc.top += (rc.bottom - rc.top) / 2 - 2*s;
-                    rc.bottom = rc.top + 4*s;
+                    rc.top += (rc.bottom - rc.top) / 2 - Scale(2);
+                    rc.bottom = rc.top + Scale(4);
                     DrawScaledButtonBorder(hdc, rc, EDGE_SUNKEN);
                     return CDRF_SKIPDEFAULT;
                 } else if (pcd->dwItemSpec == TBCD_TICS) {
@@ -7473,11 +7601,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
         EndDeferWindowPos(hdwp);
 
+        SendMessage(g_hVolumeSlider, TBM_SETTHUMBLENGTH, (WPARAM)Scale(16), 0);
+
         return 0;
     }
 
     case WM_HSCROLL: {
         if ((HWND)lParam == g_hVolumeSlider) {
+            InvalidateRect(g_hVolumeSlider, NULL, FALSE);
             if (g_pSimpleAudioVolume) {
                 int pos = (int)SendMessage(g_hVolumeSlider, TBM_GETPOS, 0, 0);
                 float volume = pos / 100.0f;
@@ -7499,6 +7630,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             int currentPos = (int)SendMessage(g_hVolumeSlider, TBM_GETPOS, 0, 0);
             if (currentPos != displayPos) {
                 SendMessage(g_hVolumeSlider, TBM_SETPOS, TRUE, displayPos);
+                InvalidateRect(g_hVolumeSlider, NULL, FALSE);
             }
             static int s_lastMuteState = -1;
             int newMuteState = (isMuted || displayPos == 0) ? 1 : 0;
@@ -7807,6 +7939,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     timeBeginPeriod(1);
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     winrt::init_apartment(winrt::apartment_type::single_threaded);
     MFStartup(MF_VERSION);
     InitHardwareAcceleration();
@@ -7815,7 +7948,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     LoadIgnoredUsers();
     
     HDC hdcDpi = GetDC(NULL);
-    g_dpi = GetDeviceCaps(hdcDpi, LOGPIXELSX);
+    g_dpi = GetDpiForSystem();
     ReleaseDC(NULL, hdcDpi);
 
     INITCOMMONCONTROLSEX icex = { sizeof(INITCOMMONCONTROLSEX), ICC_STANDARD_CLASSES | ICC_BAR_CLASSES };
@@ -7837,7 +7970,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     int minClientWidth = Scale(5) * 2 + Scale(444);
     int minClientHeight = Scale(300);
     RECT rcMin = { 0, 0, minClientWidth, minClientHeight };
-    AdjustWindowRectEx(&rcMin, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, FALSE, 0);
+    AdjustWindowRectExForDpi(&rcMin, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, FALSE, 0, g_dpi);
 
     HWND hWnd = CreateWindow(
         L"retcha", GetString(IDS_WINDOW_TITLE).c_str(),
