@@ -249,6 +249,15 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
         }
     }
 
+    Log("H264Encoder::InitializeInternal Setup D3D Manager for Encoder");
+    if (pDXGIManager && useHW) {
+        hr = pEncoder->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)pDXGIManager);
+        if (FAILED(hr)) {
+            Log("H264Encoder::InitializeInternal MFT_MESSAGE_SET_D3D_MANAGER FAILED hr=" + std::to_string(hr));
+            return false;
+        }
+    }
+
     pEncoder->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, NULL);
     pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, NULL);
     pEncoder->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, NULL);
@@ -280,6 +289,7 @@ bool H264Encoder::EncodeFrame(const BYTE* pNv12Data, DWORD cbData, std::vector<u
     HRESULT hr = pEncoder->ProcessInput(0, pSample, 0);
     pSample->Release();
     if (FAILED(hr)) {
+        Log("H264Encoder EncodeFrame ProcessInput FAILED hr=" + std::to_string(hr) + " HW=" + std::to_string(m_useHW));
         if (m_useHW) {
             Log("H264Encoder EncodeFrame HW failed, falling back to SW dynamically");
             if (InitializeInternal(m_origWidth, m_origHeight, m_isScreenShare, false, nullptr)) {
@@ -350,7 +360,7 @@ bool H264Encoder::EncodeFrame(const BYTE* pNv12Data, DWORD cbData, std::vector<u
         if (encOutput.pEvents) encOutput.pEvents->Release();
     }
     
-    return !outH264.empty();
+    return true; // Successfully processed, output might be buffered (empty)
 }
 
 bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>& outH264) {
@@ -497,7 +507,7 @@ bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>&
         if (encOutput.pEvents) encOutput.pEvents->Release();
     }
     
-    return !outH264.empty();
+    return true; // Successfully processed, output might be buffered (empty)
 }
 
 H264Decoder::H264Decoder() {}
@@ -777,6 +787,5 @@ bool H264Decoder::DecodeFrame(const std::vector<uint8_t>& inH264, std::vector<ui
         if (outputDataBuffer.pEvents) outputDataBuffer.pEvents->Release();
     }
     
-    if (outRgb32.empty()) Log("DecodeFrame END EMPTY");
-    return !outRgb32.empty();
+    return true; // Output might be buffered (empty), but processing succeeded
 }

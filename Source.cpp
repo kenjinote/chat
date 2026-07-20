@@ -164,6 +164,361 @@ std::wstring g_username;
 int g_dpi = 96;
 inline int Scale(int x) { return MulDiv(x, g_dpi, 96); }
 
+struct MenuThemeData {
+    std::wstring text;
+    UINT id;
+    bool isSeparator;
+};
+std::vector<std::unique_ptr<MenuThemeData>> g_menuThemeData;
+
+void ApplyThemeToMenu(HMENU hMenu) {
+    static HBRUSH hBgBrush = CreateSolidBrush(RGB(192, 192, 192));
+    MENUINFO mi = { sizeof(MENUINFO) };
+    mi.fMask = MIM_BACKGROUND | MIM_APPLYTOSUBMENUS;
+    mi.hbrBack = hBgBrush;
+    SetMenuInfo(hMenu, &mi);
+    
+    int count = GetMenuItemCount(hMenu);
+    for (int i = 0; i < count; i++) {
+        MENUITEMINFOW mii = { sizeof(MENUITEMINFOW) };
+        mii.fMask = MIIM_FTYPE | MIIM_STATE | MIIM_SUBMENU | MIIM_ID;
+        GetMenuItemInfoW(hMenu, i, TRUE, &mii);
+        
+        wchar_t buf[256] = {0};
+        int len = GetMenuStringW(hMenu, i, buf, 256, MF_BYPOSITION);
+        
+        if (len > 0) {
+            auto data = std::make_unique<MenuThemeData>();
+            data->text = buf;
+            data->id = mii.wID;
+            data->isSeparator = false;
+            
+            mii.fMask = MIIM_FTYPE | MIIM_DATA;
+            mii.fType |= MFT_OWNERDRAW;
+            mii.dwItemData = (ULONG_PTR)data.get();
+            SetMenuItemInfoW(hMenu, i, TRUE, &mii);
+            
+            g_menuThemeData.push_back(std::move(data));
+        } else if (mii.fType & MFT_SEPARATOR) {
+            auto data = std::make_unique<MenuThemeData>();
+            data->isSeparator = true;
+            data->id = 0;
+            
+            mii.fMask = MIIM_FTYPE | MIIM_DATA;
+            mii.fType |= MFT_OWNERDRAW;
+            mii.dwItemData = (ULONG_PTR)data.get();
+            SetMenuItemInfoW(hMenu, i, TRUE, &mii);
+            
+            g_menuThemeData.push_back(std::move(data));
+        }
+        
+        if (mii.hSubMenu) {
+            ApplyThemeToMenu(mii.hSubMenu);
+        }
+    }
+}
+
+bool HandleMenuMeasureItem(HWND hWnd, LPMEASUREITEMSTRUCT lpmis) {
+    if (lpmis->CtlType == ODT_MENU) {
+        MenuThemeData* data = (MenuThemeData*)lpmis->itemData;
+        if (data && data->isSeparator) {
+            lpmis->itemWidth = 10;
+            lpmis->itemHeight = Scale(6);
+        } else if (data) {
+            HDC hdc = GetDC(hWnd);
+            HFONT hFont = (HFONT)SendMessage(hWnd, WM_GETFONT, 0, 0);
+            if (!hFont) hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+            
+            HFONT hBoldFont = NULL;
+            // ODS_DEFAULT is not in MEASUREITEMSTRUCT by default, but we can check if it's the default item if needed.
+            // Actually, we can just use the bold font to measure if it happens to be default.
+            // But lpmis doesn't have itemState. We'll just add a little extra padding for potential bold.
+            
+            HFONT hOld = (HFONT)SelectObject(hdc, hFont);
+            SIZE size1 = {0}, size2 = {0};
+            
+            size_t tabPos = data->text.find(L'\t');
+            if (tabPos != std::wstring::npos) {
+                std::wstring leftText = data->text.substr(0, tabPos);
+                std::wstring rightText = data->text.substr(tabPos + 1);
+                GetTextExtentPoint32W(hdc, leftText.c_str(), (int)leftText.length(), &size1);
+                GetTextExtentPoint32W(hdc, rightText.c_str(), (int)rightText.length(), &size2);
+            } else {
+                GetTextExtentPoint32W(hdc, data->text.c_str(), (int)data->text.length(), &size1);
+            }
+            SelectObject(hdc, hOld);
+            ReleaseDC(hWnd, hdc);
+            
+            lpmis->itemWidth = size1.cx + size2.cx + Scale(60); // 45 base + 15 for gap/bold expansion
+            lpmis->itemHeight = size1.cy + Scale(10);
+        }
+        return true;
+    }
+    return false;
+}
+
+void DrawWin95Edge(HDC hdc, RECT* rc) {
+    HBRUSH hWhite = CreateSolidBrush(RGB(255, 255, 255));
+    HBRUSH hSilver = CreateSolidBrush(RGB(192, 192, 192));
+    HBRUSH hDarkGray = CreateSolidBrush(RGB(128, 128, 128));
+    HBRUSH hBlack = CreateSolidBrush(RGB(0, 0, 0));
+    
+    RECT r;
+    // Outer Top
+    r = *rc; r.bottom = r.top + 1;
+    FillRect(hdc, &r, hWhite);
+    // Outer Left
+    r = *rc; r.right = r.left + 1;
+    FillRect(hdc, &r, hWhite);
+    
+    // Outer Bottom
+    r = *rc; r.top = r.bottom - 1;
+    FillRect(hdc, &r, hBlack);
+    // Outer Right
+    r = *rc; r.left = r.right - 1;
+    FillRect(hdc, &r, hBlack);
+    
+    // Inner Top
+    r = *rc; r.top += 1; r.bottom = r.top + 1; r.left += 1; r.right -= 1;
+    FillRect(hdc, &r, hSilver);
+    // Inner Left
+    r = *rc; r.left += 1; r.right = r.left + 1; r.top += 1; r.bottom -= 1;
+    FillRect(hdc, &r, hSilver);
+    
+    // Inner Bottom
+    r = *rc; r.bottom -= 1; r.top = r.bottom - 1; r.left += 1; r.right -= 1;
+    FillRect(hdc, &r, hDarkGray);
+    // Inner Right
+    r = *rc; r.right -= 1; r.left = r.right - 1; r.top += 1; r.bottom -= 1;
+    FillRect(hdc, &r, hDarkGray);
+    
+    DeleteObject(hWhite);
+    DeleteObject(hSilver);
+    DeleteObject(hDarkGray);
+    DeleteObject(hBlack);
+}
+
+void PaintMenuPadding(HWND hWnd, HDC hdc, RECT* rcWin) {
+    HMENU hMenu = (HMENU)SendMessage(hWnd, 0x01E1, 0, 0); // MN_GETHMENU
+    if (!hMenu) return;
+    
+    HRGN hRgn = CreateRectRgn(rcWin->left, rcWin->top, rcWin->right, rcWin->bottom);
+    
+    RECT rcWindow;
+    GetWindowRect(hWnd, &rcWindow);
+    
+    int count = GetMenuItemCount(hMenu);
+    for (int i = 0; i < count; i++) {
+        RECT rcItem;
+        if (GetMenuItemRect(hWnd, hMenu, i, &rcItem)) {
+            // Map screen coordinates exactly to Window DC coordinates
+            rcItem.left -= rcWindow.left;
+            rcItem.right -= rcWindow.left;
+            rcItem.top -= rcWindow.top;
+            rcItem.bottom -= rcWindow.top;
+            
+            HRGN hItemRgn = CreateRectRgnIndirect(&rcItem);
+            CombineRgn(hRgn, hRgn, hItemRgn, RGN_DIFF);
+            DeleteObject(hItemRgn);
+        }
+    }
+    
+    HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
+    FillRgn(hdc, hRgn, hBg);
+    DeleteObject(hBg);
+    DeleteObject(hRgn);
+}
+
+LRESULT CALLBACK MenuWndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (msg == WM_NCCALCSIZE) {
+        if (wParam == TRUE) {
+            NCCALCSIZE_PARAMS* params = (NCCALCSIZE_PARAMS*)lParam;
+            params->rgrc[0].left += 2;
+            params->rgrc[0].top += 2;
+            params->rgrc[0].right -= 2;
+            params->rgrc[0].bottom -= 2;
+            return 0;
+        } else {
+            RECT* rc = (RECT*)lParam;
+            rc->left += 2;
+            rc->top += 2;
+            rc->right -= 2;
+            rc->bottom -= 2;
+            return 0;
+        }
+    }
+    
+    if (msg == WM_NCPAINT) {
+        HDC hdc = GetWindowDC(hWnd);
+        if (hdc) {
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
+            OffsetRect(&rc, -rc.left, -rc.top);
+            DrawWin95Edge(hdc, &rc);
+            ReleaseDC(hWnd, hdc);
+        }
+        return 0; // Prevent OS from drawing its border
+    }
+
+    if (msg == WM_WINDOWPOSCHANGED) {
+        if (GetPropW(hWnd, L"ShadowRemoved") == NULL) {
+            SetClassLongPtr(hWnd, GCL_STYLE, GetClassLongPtr(hWnd, GCL_STYLE) & ~CS_DROPSHADOW);
+            SetPropW(hWnd, L"ShadowRemoved", (HANDLE)1);
+        }
+        WINDOWPOS* wp = (WINDOWPOS*)lParam;
+        if (!(wp->flags & SWP_NOSIZE)) {
+            HRGN hRgn = CreateRectRgn(0, 0, wp->cx, wp->cy);
+            SetWindowRgn(hWnd, hRgn, TRUE);
+        }
+        return DefSubclassProc(hWnd, msg, wParam, lParam);
+    }
+    
+    if (msg == WM_PRINT || msg == WM_PRINTCLIENT) {
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        HDC hdc = (HDC)wParam;
+        RECT rc;
+        GetWindowRect(hWnd, &rc);
+        OffsetRect(&rc, -rc.left, -rc.top);
+        PaintMenuPadding(hWnd, hdc, &rc);
+        if (msg == WM_PRINT) {
+            DrawWin95Edge(hdc, &rc);
+        }
+        return res;
+    }
+    
+    if (msg == WM_PAINT) {
+        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
+        HDC hdc = GetWindowDC(hWnd);
+        if (hdc) {
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
+            OffsetRect(&rc, -rc.left, -rc.top);
+            PaintMenuPadding(hWnd, hdc, &rc);
+            ReleaseDC(hWnd, hdc);
+        }
+        return res;
+    }
+    
+    if (msg == WM_NCDESTROY) {
+        RemovePropW(hWnd, L"ShadowRemoved");
+        RemovePropW(hWnd, L"SubclassedMenu");
+        RemoveWindowSubclass(hWnd, MenuWndProc, 0);
+    }
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
+}
+
+thread_local HHOOK g_hMenuHook = NULL;
+LRESULT CALLBACK MenuCBTHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode == HCBT_CREATEWND) {
+        HWND hwnd = (HWND)wParam;
+        wchar_t className[256];
+        if (GetClassNameW(hwnd, className, 256)) {
+            if (wcscmp(className, L"#32768") == 0) {
+                CBT_CREATEWNDW* create = (CBT_CREATEWNDW*)lParam;
+                create->lpcs->style &= ~WS_BORDER;
+                create->lpcs->dwExStyle &= ~(WS_EX_WINDOWEDGE | WS_EX_CLIENTEDGE | WS_EX_DLGMODALFRAME | WS_EX_STATICEDGE);
+                
+                SetPropW(hwnd, L"SubclassedMenu", (HANDLE)1);
+                SetWindowSubclass(hwnd, MenuWndProc, 0, 0);
+            }
+        }
+    }
+    return CallNextHookEx(g_hMenuHook, nCode, wParam, lParam);
+}
+int TrackPopupMenu3D(HMENU hMenu, UINT uFlags, int x, int y, int nReserved, HWND hWnd, const RECT *prcRect) {
+    g_hMenuHook = SetWindowsHookExW(WH_CBT, MenuCBTHookProc, NULL, GetCurrentThreadId());
+    int res = TrackPopupMenu(hMenu, uFlags, x, y, nReserved, hWnd, prcRect);
+    if (g_hMenuHook) {
+        UnhookWindowsHookEx(g_hMenuHook);
+        g_hMenuHook = NULL;
+    }
+    return res;
+}
+
+bool HandleMenuDrawItem(HWND hWnd, LPDRAWITEMSTRUCT lpdis) {
+    if (lpdis->CtlType == ODT_MENU) {
+        MenuThemeData* data = (MenuThemeData*)lpdis->itemData;
+        if (!data) return true;
+        
+        HDC hdc = lpdis->hDC;
+        RECT rc = lpdis->rcItem;
+        
+        bool isSelected = (lpdis->itemState & ODS_SELECTED) != 0;
+        bool isGrayed = (lpdis->itemState & ODS_GRAYED) != 0 || (lpdis->itemState & ODS_DISABLED) != 0;
+        bool isChecked = (lpdis->itemState & ODS_CHECKED) != 0;
+        
+        COLORREF bgColor = isSelected && !isGrayed ? RGB(0, 0, 128) : RGB(192, 192, 192);
+        COLORREF textColor = isSelected && !isGrayed ? RGB(255, 255, 255) : (isGrayed ? RGB(128, 128, 128) : RGB(0, 0, 0));
+        
+        HBRUSH hBg = CreateSolidBrush(bgColor);
+        FillRect(hdc, &rc, hBg);
+        DeleteObject(hBg);
+        
+        if (data->isSeparator) {
+            RECT rcLine = rc;
+            rcLine.top += (rc.bottom - rc.top) / 2;
+            rcLine.bottom = rcLine.top + Scale(1);
+            rcLine.left += Scale(2);
+            rcLine.right -= Scale(2);
+            HBRUSH hSep = CreateSolidBrush(RGB(128, 128, 128));
+            FillRect(hdc, &rcLine, hSep);
+            DeleteObject(hSep);
+            
+            rcLine.top += Scale(1);
+            rcLine.bottom += Scale(1);
+            HBRUSH hSepHl = CreateSolidBrush(RGB(255, 255, 255));
+            FillRect(hdc, &rcLine, hSepHl);
+            DeleteObject(hSepHl);
+        } else {
+            SetBkMode(hdc, TRANSPARENT);
+            SetTextColor(hdc, textColor);
+            
+            HFONT hFont = (HFONT)SendMessage(hWnd, WM_GETFONT, 0, 0);
+            if (!hFont) hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+            
+            HFONT hBoldFont = NULL;
+            if (lpdis->itemState & ODS_DEFAULT) {
+                LOGFONTW lf;
+                if (GetObjectW(hFont, sizeof(LOGFONTW), &lf)) {
+                    lf.lfWeight = FW_BOLD;
+                    hBoldFont = CreateFontIndirectW(&lf);
+                    if (hBoldFont) hFont = hBoldFont;
+                }
+            }
+            
+            HFONT hOld = (HFONT)SelectObject(hdc, hFont);
+            
+            if (isChecked) {
+                RECT rcCheck = rc;
+                rcCheck.left += Scale(5);
+                rcCheck.right = rcCheck.left + Scale(15);
+                DrawTextW(hdc, L"✔", -1, &rcCheck, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            }
+            
+            RECT rcText = rc;
+            rcText.left += Scale(25);
+            
+            size_t tabPos = data->text.find(L'\t');
+            if (tabPos != std::wstring::npos) {
+                std::wstring leftText = data->text.substr(0, tabPos);
+                std::wstring rightText = data->text.substr(tabPos + 1);
+                DrawTextW(hdc, leftText.c_str(), -1, &rcText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+                
+                RECT rcRight = rc;
+                rcRight.right -= Scale(15); // Right padding
+                DrawTextW(hdc, rightText.c_str(), -1, &rcRight, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+            } else {
+                DrawTextW(hdc, data->text.c_str(), -1, &rcText, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+            }
+            
+            SelectObject(hdc, hOld);
+            if (hBoldFont) DeleteObject(hBoldFont);
+        }
+        return true;
+    }
+    return false;
+}
+
 HFONT g_hFont;
 HFONT g_hFontBold;
 HFONT g_hFontI_btn;
@@ -797,7 +1152,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
         HRESULT hr = E_FAIL;
         std::vector<uint8_t> rgb32Data;
         UINT32 width = 0, height = 0;
-        ID3D11Texture2D* pWgcTexture = nullptr;
+        // isScreenShare already evaluated above
         // isScreenShare already evaluated above
         
         if (!isScreenShare) {
@@ -818,9 +1173,9 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 lastCaptureHwnd = g_captureHwnd;
 
                 if (g_captureSourceType == 2 && g_captureMonitor) {
-                    wgcSession.StartForMonitor(g_captureMonitor, g_pD3D11Device, g_pD3D11Context);
+                    wgcSession.StartForMonitor(g_captureMonitor);
                 } else if (g_captureSourceType == 3 && g_captureHwnd) {
-                    wgcSession.StartForWindow(g_captureHwnd, g_pD3D11Device, g_pD3D11Context);
+                    wgcSession.StartForWindow(g_captureHwnd);
                 }
             }
             
@@ -835,13 +1190,10 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             }
             
             bool isNewFrame = false;
-            if (wgcSession.GetLatestTexture(&pWgcTexture, width, height, &isNewFrame)) {
+            if (wgcSession.CheckNewFrame(width, height, &isNewFrame)) {
                 static bool s_hasPendingFrame = false;
                 if (isNewFrame) s_hasPendingFrame = true;
                 
-                // If the encoder hasn't produced its first output yet (e.g. at startup or after a drop),
-                // we MUST force rapid encoding to fill the MFT's internal buffer.
-                // Otherwise, a static screen at 1 FPS would take several seconds to appear.
                 if (!s_firstFrameEncoded || g_pH264Encoder == nullptr) {
                     s_hasPendingFrame = true;
                 }
@@ -864,13 +1216,18 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         hr = E_FAIL; // Drop frame
                     }
                 }
+            } else {
+                hr = E_FAIL;
             }
-            Sleep(10); // Short sleep to prevent busy loop
+            if (FAILED(hr)) {
+                Sleep(10); // Short sleep to prevent busy loop
+                continue;
+            }
         }
 
         bool shouldSendStatus = false;
         if (!isScreenShare && SUCCEEDED(hr) && pSample) shouldSendStatus = true;
-        if (isScreenShare && (pWgcTexture != nullptr || SUCCEEDED(hr))) shouldSendStatus = true;
+        if (isScreenShare && SUCCEEDED(hr)) shouldSendStatus = true;
 
         if (shouldSendStatus) {
             static DWORD lastStreamStatusTime = 0;
@@ -1025,13 +1382,13 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 droppedFrameCount = 0;
             }
 
-            if (pEncoderInput || pWgcTexture) {
+            if (pEncoderInput) {
                 static UINT32 s_lastEncWidth = 0;
                 static UINT32 s_lastEncHeight = 0;
                 static ID3D11Device* s_lastDevice = nullptr;
 
                 if (g_useH264) {
-                    ID3D11Device* currentDevice = pWgcTexture ? wgcSession.GetDevice() : nullptr;
+                    ID3D11Device* currentDevice = nullptr;
                     bool isSharingScreen = (g_captureSourceType == 2 || g_captureSourceType == 3);
                     static bool s_lastIsScreenShare = false;
                     
@@ -1055,12 +1412,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 if (g_pH264Encoder) {
                     h264Success = true; // Never fallback to JPEG if H.264 is active
                     std::vector<uint8_t> h264;
-                    bool encSuccess = false;
-                    if (pWgcTexture) {
-                        encSuccess = g_pH264Encoder->EncodeTexture(pWgcTexture, h264);
-                    } else {
-                        encSuccess = g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264);
-                    }
+                    bool encSuccess = g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264);
                     if (encSuccess) {
                         s_firstFrameEncoded = true;
                         std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
@@ -1216,7 +1568,6 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 pLockedBuffer->Release();
             }
             if (pSample) pSample->Release();
-            if (pWgcTexture) pWgcTexture->Release();
             
             if (isScreenShare) {
                 Sleep(33);
@@ -1441,7 +1792,6 @@ float g_logTotalHeight = 0.0f;
 bool g_autoScroll = true;
 
 std::wstring g_inputText;
-
 bool g_isRoomJoined = false;
 void UpdateSendBtnState() {
     if (g_hSendBtn && IsWindow(g_hSendBtn)) {
@@ -1454,6 +1804,7 @@ void UpdateSendBtnState() {
 }
 int g_caretPos = 0;
 int g_anchorPos = 0;
+float g_inputScrollY = 0.0f;
 bool g_caretVisible = true;
 bool g_isIMEComposing = false;
 UINT_PTR g_caretTimer = 0;
@@ -1568,6 +1919,13 @@ void CopySelectedText(HWND hWnd) {
 bool g_logIsDraggingScrollbar = false;
 
 LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_MEASUREITEM) {
+        if (HandleMenuMeasureItem(hWnd, (LPMEASUREITEMSTRUCT)lParam)) return TRUE;
+    }
+    if (msg == WM_DRAWITEM) {
+        if (HandleMenuDrawItem(hWnd, (LPDRAWITEMSTRUCT)lParam)) return TRUE;
+    }
+    
     static ID2D1HwndRenderTarget* pRT = nullptr;
     switch (msg) {
     case WM_PAINT: {
@@ -1989,8 +2347,10 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             xPos = pt.x;
             yPos = pt.y;
         }
-        TrackPopupMenu(hMenu, TPM_RIGHTBUTTON, xPos, yPos, 0, hWnd, NULL);
+        ApplyThemeToMenu(hMenu);
+        TrackPopupMenu3D(hMenu, TPM_RIGHTBUTTON, xPos, yPos, 0, hWnd, NULL);
         DestroyMenu(hMenu);
+        g_menuThemeData.clear();
         return 0;
     }
     case WM_COMMAND: {
@@ -2066,6 +2426,10 @@ void UpdateImeWindowPos(HWND hWnd) {
             hm.height = (float)tsize * 1.5f;
         } else if (g_caretPos >= (int)g_inputText.length()) {
             pLayout->HitTestTextPosition((UINT32)g_inputText.length() - 1, TRUE, &cx, &cy, &hm);
+            if (g_inputText.back() == L'\n') {
+                cx = 0;
+                cy += hm.height;
+            }
             cx += 5; cy += 5;
         } else {
             pLayout->HitTestTextPosition((UINT32)g_caretPos, FALSE, &cx, &cy, &hm);
@@ -2089,6 +2453,13 @@ void UpdateImeWindowPos(HWND hWnd) {
 }
 
 LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_MEASUREITEM) {
+        if (HandleMenuMeasureItem(hWnd, (LPMEASUREITEMSTRUCT)lParam)) return TRUE;
+    }
+    if (msg == WM_DRAWITEM) {
+        if (HandleMenuDrawItem(hWnd, (LPDRAWITEMSTRUCT)lParam)) return TRUE;
+    }
+    
     static ID2D1HwndRenderTarget* pRT = nullptr;
     switch (msg) {
     case WM_CREATE:
@@ -2104,7 +2475,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         g_isDragging = true;
         
         int x = GET_X_LPARAM(lParam) - 5;
-        int y = GET_Y_LPARAM(lParam) - 5;
+        int y = GET_Y_LPARAM(lParam) - 5 + (int)g_inputScrollY;
         
         IDWriteTextLayout* pLayout = CreateInputLayout(hWnd);
         if (pLayout) {
@@ -2128,7 +2499,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_MOUSEMOVE: {
         if (g_isDragging) {
             int x = GET_X_LPARAM(lParam) - 5;
-            int y = GET_Y_LPARAM(lParam) - 5;
+            int y = GET_Y_LPARAM(lParam) - 5 + (int)g_inputScrollY;
             
             IDWriteTextLayout* pLayout = CreateInputLayout(hWnd);
             if (pLayout) {
@@ -2156,7 +2527,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     case WM_LBUTTONDBLCLK: {
         int x = GET_X_LPARAM(lParam) - 5;
-        int y = GET_Y_LPARAM(lParam) - 5;
+        int y = GET_Y_LPARAM(lParam) - 5 + (int)g_inputScrollY;
         
         IDWriteTextLayout* pLayout = CreateInputLayout(hWnd);
         if (pLayout) {
@@ -2269,6 +2640,37 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             
             IDWriteTextLayout* pLayout = CreateInputLayout(hWnd);
             if (pLayout) {
+                float caretY = 0;
+                float caretHeight = 0;
+                float cx = 0, cy = 0;
+                DWRITE_HIT_TEST_METRICS hm = {0};
+                if (g_inputText.length() == 0) {
+                    int sizeIndex = (int)SendMessage(g_hComboSize, CB_GETCURSEL, 0, 0);
+                    int tsize = 12;
+                    if (sizeIndex != CB_ERR) {
+                        WCHAR szText[32]; SendMessage(g_hComboSize, CB_GETLBTEXT, sizeIndex, (LPARAM)szText); tsize = _wtoi(szText);
+                    }
+                    caretHeight = (float)tsize * 1.5f;
+                } else if (g_caretPos >= (int)g_inputText.length()) {
+                    pLayout->HitTestTextPosition((UINT32)g_inputText.length() - 1, TRUE, &cx, &cy, &hm);
+                    if (g_inputText.back() == L'\n') { cx = 0; cy += hm.height; }
+                    caretY = cy; caretHeight = hm.height;
+                } else {
+                    pLayout->HitTestTextPosition((UINT32)g_caretPos, FALSE, &cx, &cy, &hm);
+                    caretY = cy; caretHeight = hm.height;
+                }
+                
+                RECT rc; GetClientRect(hWnd, &rc);
+                float clientHeight = (float)(rc.bottom - rc.top) - 10.0f;
+                if (caretY + caretHeight - g_inputScrollY > clientHeight) {
+                    g_inputScrollY = caretY + caretHeight - clientHeight;
+                }
+                if (caretY - g_inputScrollY < 0) {
+                    g_inputScrollY = caretY;
+                }
+                
+                pRT->SetTransform(D2D1::Matrix3x2F::Translation(5.0f, 5.0f - g_inputScrollY));
+
                 bool u = SendMessage(g_hBtnU, BM_GETCHECK, 0, 0) == BST_CHECKED;
                 if (u && g_inputText.length() > 0) {
                     DWRITE_TEXT_RANGE range = {0, (UINT32)g_inputText.length()};
@@ -2281,11 +2683,11 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     if (selLen > 0) {
                         UINT32 actualHitTestCount = 0;
                         DWRITE_HIT_TEST_METRICS* hitTestMetrics = new DWRITE_HIT_TEST_METRICS[10];
-                        HRESULT hrHit = pLayout->HitTestTextRange(selStart, selLen, 5, 5, hitTestMetrics, 10, &actualHitTestCount);
+                        HRESULT hrHit = pLayout->HitTestTextRange(selStart, selLen, 0, 0, hitTestMetrics, 10, &actualHitTestCount);
                         if (hrHit == E_NOT_SUFFICIENT_BUFFER) {
                             delete[] hitTestMetrics;
                             hitTestMetrics = new DWRITE_HIT_TEST_METRICS[actualHitTestCount];
-                            pLayout->HitTestTextRange(selStart, selLen, 5, 5, hitTestMetrics, actualHitTestCount, &actualHitTestCount);
+                            pLayout->HitTestTextRange(selStart, selLen, 0, 0, hitTestMetrics, actualHitTestCount, &actualHitTestCount);
                         }
                         
                         DWORD hlColor = RGB(0, 0, 128);
@@ -2322,35 +2724,16 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 
                 ID2D1SolidColorBrush* pBrush = nullptr;
                 if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(GetRValue(g_currentColor)/255.0f, GetGValue(g_currentColor)/255.0f, GetBValue(g_currentColor)/255.0f), &pBrush)) && pBrush) {
-                    pRT->DrawTextLayout(D2D1::Point2F(5, 5), pLayout, pBrush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                    pRT->DrawTextLayout(D2D1::Point2F(0, 0), pLayout, pBrush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
                     
                     if (g_caretVisible && GetFocus() == hWnd && !g_isIMEComposing) {
-                        float cx = 5, cy = 5;
-                        DWRITE_HIT_TEST_METRICS hm = {0};
-                        if (g_inputText.length() == 0) {
-                            int sizeIndex = (int)SendMessage(g_hComboSize, CB_GETCURSEL, 0, 0);
-                            int tsize = 12;
-                            if (sizeIndex != CB_ERR) {
-                                WCHAR szText[32];
-                                SendMessage(g_hComboSize, CB_GETLBTEXT, sizeIndex, (LPARAM)szText);
-                                tsize = _wtoi(szText);
-                            }
-                            cx = 5; cy = 5; hm.height = (float)tsize * 1.5f;
-                        } else if (g_caretPos >= (int)g_inputText.length()) {
-                            pLayout->HitTestTextPosition((UINT32)g_inputText.length() - 1, TRUE, &cx, &cy, &hm);
-                            cx += 5; cy += 5;
-                        } else {
-                            pLayout->HitTestTextPosition((UINT32)g_caretPos, FALSE, &cx, &cy, &hm);
-                            cx += 5; cy += 5;
-                        }
-                        
                         ID2D1SolidColorBrush* pCaretBrush = nullptr;
                         if (SUCCEEDED(pRT->CreateSolidColorBrush(D2D1::ColorF(D2D1::ColorF::Black), &pCaretBrush)) && pCaretBrush) {
                             D2D1_ANTIALIAS_MODE oldMode = pRT->GetAntialiasMode();
                             bool isItalic = SendMessage(g_hBtnI, BM_GETCHECK, 0, 0) == BST_CHECKED;
                             if (!isItalic) pRT->SetAntialiasMode(D2D1_ANTIALIAS_MODE_ALIASED);
-                            float slant = isItalic ? (hm.height * 0.25f) : 0.0f;
-                            pRT->DrawLine(D2D1::Point2F(cx + slant, cy), D2D1::Point2F(cx, cy + hm.height), pCaretBrush, 2.0f * 96.0f / g_dpi);
+                            float slant = isItalic ? (caretHeight * 0.25f) : 0.0f;
+                            pRT->DrawLine(D2D1::Point2F(cx + slant, cy), D2D1::Point2F(cx, cy + caretHeight), pCaretBrush, 2.0f * 96.0f / g_dpi);
                             pRT->SetAntialiasMode(oldMode);
                             pCaretBrush->Release();
                         }
@@ -2359,6 +2742,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     }
                     pBrush->Release();
                 }
+                pRT->SetTransform(D2D1::Matrix3x2F::Identity());
                 pLayout->Release();
             }
             
@@ -2431,11 +2815,65 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 }
                 if (!shift) g_anchorPos = g_caretPos;
             }
+        } else if (wParam == VK_UP) {
+            if (pLayout && g_inputText.length() > 0) {
+                float cx, cy; DWRITE_HIT_TEST_METRICS hm = {0};
+                if (g_caretPos >= (int)g_inputText.length()) {
+                    pLayout->HitTestTextPosition((UINT32)g_inputText.length() - 1, TRUE, &cx, &cy, &hm);
+                    if (g_inputText.back() == L'\n') { cx = 0; cy += hm.height; }
+                } else {
+                    pLayout->HitTestTextPosition((UINT32)g_caretPos, FALSE, &cx, &cy, &hm);
+                }
+                
+                BOOL isTrailingHit, isInside;
+                DWRITE_HIT_TEST_METRICS hmTarget = {0};
+                if (cy - hm.height * 0.5f >= 0) {
+                    pLayout->HitTestPoint(cx, cy - hm.height * 0.5f, &isTrailingHit, &isInside, &hmTarget);
+                    g_caretPos = hmTarget.textPosition + (isTrailingHit ? hmTarget.length : 0);
+                } else {
+                    g_caretPos = 0;
+                }
+                if (!shift) g_anchorPos = g_caretPos;
+            }
+        } else if (wParam == VK_DOWN) {
+            if (pLayout && g_inputText.length() > 0) {
+                float cx, cy; DWRITE_HIT_TEST_METRICS hm = {0};
+                if (g_caretPos >= (int)g_inputText.length()) {
+                    pLayout->HitTestTextPosition((UINT32)g_inputText.length() - 1, TRUE, &cx, &cy, &hm);
+                    if (g_inputText.back() == L'\n') { cx = 0; cy += hm.height; }
+                } else {
+                    pLayout->HitTestTextPosition((UINT32)g_caretPos, FALSE, &cx, &cy, &hm);
+                }
+                
+                BOOL isTrailingHit, isInside;
+                DWRITE_HIT_TEST_METRICS hmTarget = {0};
+                pLayout->HitTestPoint(cx, cy + hm.height * 1.5f, &isTrailingHit, &isInside, &hmTarget);
+                if (hmTarget.top > cy + hm.height * 0.1f) {
+                    g_caretPos = hmTarget.textPosition + (isTrailingHit ? hmTarget.length : 0);
+                } else {
+                    g_caretPos = (int)g_inputText.length();
+                }
+                if (!shift) g_anchorPos = g_caretPos;
+            }
         } else if (wParam == VK_HOME) {
-            g_caretPos = 0;
+            bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            if (ctrl) {
+                g_caretPos = 0;
+            } else if (g_caretPos > 0) {
+                size_t pos = g_inputText.find_last_of(L'\n', g_caretPos - 1);
+                if (pos != std::wstring::npos) g_caretPos = (int)pos + 1;
+                else g_caretPos = 0;
+            }
             if (!shift) g_anchorPos = g_caretPos;
         } else if (wParam == VK_END) {
-            g_caretPos = (int)g_inputText.length();
+            bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            if (ctrl) {
+                g_caretPos = (int)g_inputText.length();
+            } else {
+                size_t pos = g_inputText.find(L'\n', g_caretPos);
+                if (pos != std::wstring::npos) g_caretPos = (int)pos;
+                else g_caretPos = (int)g_inputText.length();
+            }
             if (!shift) g_anchorPos = g_caretPos;
         } else if (wParam == VK_BACK) {
             if (hasSelection) {
@@ -2474,8 +2912,28 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 }
             }
         } else if (wParam == VK_RETURN) {
-            if (IsWindowEnabled(g_hSendBtn)) {
-                SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(1001, BN_CLICKED), 0);
+            bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+            if (ctrl) {
+                if (hasSelection) {
+                    int start = min(g_caretPos, g_anchorPos);
+                    int end = max(g_caretPos, g_anchorPos);
+                    g_inputText.erase(start, end - start);
+                    g_caretPos = start;
+                    g_anchorPos = start;
+                }
+                if (g_inputText.length() < 1024) {
+                    g_inputText.insert(g_caretPos, L"\n");
+                    g_caretPos++;
+                    g_anchorPos = g_caretPos;
+                    g_caretVisible = true;
+                    InvalidateRect(hWnd, NULL, FALSE);
+                } else {
+                    MessageBeep(MB_OK);
+                }
+            } else {
+                if (IsWindowEnabled(g_hSendBtn)) {
+                    SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(1001, BN_CLICKED), 0);
+                }
             }
         } else if (wParam == 'V' && (GetKeyState(VK_CONTROL) & 0x8000)) {
             SendMessage(hWnd, WM_PASTE, 0, 0);
@@ -2518,8 +2976,10 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         pt.x = GET_X_LPARAM(lParam);
         pt.y = GET_Y_LPARAM(lParam);
         
-        int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hWnd, NULL);
+        ApplyThemeToMenu(hMenu);
+        int cmd = TrackPopupMenu3D(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hWnd, NULL);
         DestroyMenu(hMenu);
+        g_menuThemeData.clear();
         
         if (cmd == 1) SendMessage(hWnd, WM_CUT, 0, 0);
         else if (cmd == 2) SendMessage(hWnd, WM_COPY, 0, 0);
@@ -2548,7 +3008,6 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     }
                     std::wstring pasteText = pszText;
                     pasteText.erase(std::remove(pasteText.begin(), pasteText.end(), L'\r'), pasteText.end());
-                    pasteText.erase(std::remove(pasteText.begin(), pasteText.end(), L'\n'), pasteText.end());
                     
                     if (g_inputText.length() + pasteText.length() > 1024) {
                         pasteText = pasteText.substr(0, 1024 - g_inputText.length());
@@ -2778,7 +3237,7 @@ LRESULT CALLBACK RaisedEdgeSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
     return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
 
-bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult, bool enableAlwaysOnTopMenu = false);
+bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult, bool enableAlwaysOnTopMenu = false, bool bHandlePaint = true);
 extern LRESULT CALLBACK ClassicButtonProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
 
 BOOL CALLBACK EnumChildProcColorDlg(HWND hwndChild, LPARAM lParam) {
@@ -2795,7 +3254,7 @@ BOOL CALLBACK EnumChildProcColorDlg(HWND hwndChild, LPARAM lParam) {
 
 LRESULT CALLBACK ColorDlgSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     LRESULT classicResult = 0;
-    if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult)) {
+    if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult, false, false)) {
         return classicResult;
     }
     return DefSubclassProc(hWnd, msg, wParam, lParam);
@@ -2811,7 +3270,29 @@ UINT_PTR CALLBACK ColorHookProc(HWND hdlg, UINT uiMsg, WPARAM wParam, LPARAM lPa
     return 0;
 }
 
-bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult, bool enableAlwaysOnTopMenu) {
+bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESULT* pResult, bool enableAlwaysOnTopMenu, bool bHandlePaint) {
+    if (msg == WM_MEASUREITEM) {
+        if (HandleMenuMeasureItem(hWnd, (LPMEASUREITEMSTRUCT)lParam)) {
+            *pResult = TRUE;
+            return true;
+        }
+    }
+    if (msg == WM_DRAWITEM) {
+        if (HandleMenuDrawItem(hWnd, (LPDRAWITEMSTRUCT)lParam)) {
+            *pResult = TRUE;
+            return true;
+        }
+    }
+    if (msg == WM_PAINT && bHandlePaint) {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hWnd, &ps);
+        HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
+        FillRect(hdc, &ps.rcPaint, hBg);
+        DeleteObject(hBg);
+        EndPaint(hWnd, &ps);
+        *pResult = 0;
+        return true;
+    }
     switch (msg) {
     case WM_CTLCOLORDLG:
     case WM_CTLCOLORMSGBOX:
@@ -2886,7 +3367,6 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         return false;
     }
     case WM_INITMENUPOPUP: {
-        if (!enableAlwaysOnTopMenu) return false;
         BOOL isSystemMenu = (BOOL)HIWORD(lParam);
         if (isSystemMenu) {
             // Only used as fallback for taskbar right-click
@@ -2901,7 +3381,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
     }
     case WM_SYSCOMMAND: {
         int cmd = wParam & 0xFFF0;
-        if (enableAlwaysOnTopMenu && (cmd == SC_MOUSEMENU || cmd == SC_KEYMENU || cmd == 0x1230)) {
+        if (cmd == SC_MOUSEMENU || cmd == SC_KEYMENU || cmd == 0x1230) {
             POINT pt;
             bool isSysMenuClick = false;
             DWORD openTime = 0;
@@ -2930,23 +3410,33 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
             }
             
             HMENU hMenu = CreatePopupMenu();
+            DWORD style = GetWindowLong(hWnd, GWL_STYLE);
+            bool hasSizeBox = (style & WS_THICKFRAME) != 0;
+            bool hasMinimize = (style & WS_MINIMIZEBOX) != 0;
+            bool hasMaximize = (style & WS_MAXIMIZEBOX) != 0;
+            
             bool canRestore = IsZoomed(hWnd) || IsIconic(hWnd);
             AppendMenuW(hMenu, MF_STRING | (canRestore ? 0 : MF_GRAYED), SC_RESTORE, GetString(IDS_RESTORE).c_str());
             AppendMenuW(hMenu, MF_STRING | (IsZoomed(hWnd) ? MF_GRAYED : 0), SC_MOVE, GetString(IDS_MOVE).c_str());
-            AppendMenuW(hMenu, MF_STRING | (IsZoomed(hWnd) ? MF_GRAYED : 0), SC_SIZE, GetString(IDS_SIZE).c_str());
-            AppendMenuW(hMenu, MF_STRING | (IsIconic(hWnd) ? MF_GRAYED : 0), SC_MINIMIZE, GetString(IDS_MINIMIZE).c_str());
-            AppendMenuW(hMenu, MF_STRING | (IsZoomed(hWnd) ? MF_GRAYED : 0), SC_MAXIMIZE, GetString(IDS_MAXIMIZE).c_str());
+            AppendMenuW(hMenu, MF_STRING | (hasSizeBox && !IsZoomed(hWnd) && !IsIconic(hWnd) ? 0 : MF_GRAYED), SC_SIZE, GetString(IDS_SIZE).c_str());
+            AppendMenuW(hMenu, MF_STRING | (hasMinimize && !IsIconic(hWnd) ? 0 : MF_GRAYED), SC_MINIMIZE, GetString(IDS_MINIMIZE).c_str());
+            AppendMenuW(hMenu, MF_STRING | (hasMaximize && !IsZoomed(hWnd) ? 0 : MF_GRAYED), SC_MAXIMIZE, GetString(IDS_MAXIMIZE).c_str());
             AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
             AppendMenuW(hMenu, MF_STRING, SC_CLOSE, GetString(IDS_CLOSE).c_str());
-            AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
-            DWORD exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
-            AppendMenuW(hMenu, MF_STRING | ((exStyle & WS_EX_TOPMOST) ? MF_CHECKED : MF_UNCHECKED), 0x0100, GetString(IDS_ALWAYS_ON_TOP).c_str());
+            
+            if (enableAlwaysOnTopMenu) {
+                AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
+                DWORD exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+                AppendMenuW(hMenu, MF_STRING | ((exStyle & WS_EX_TOPMOST) ? MF_CHECKED : MF_UNCHECKED), 0x0100, GetString(IDS_ALWAYS_ON_TOP).c_str());
+            }
 
             SetMenuDefaultItem(hMenu, SC_CLOSE, FALSE);
 
             SetForegroundWindow(hWnd);
-            int retCmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_LEFTBUTTON, pt.x, pt.y, 0, hWnd, NULL);
+            ApplyThemeToMenu(hMenu);
+            int retCmd = TrackPopupMenu3D(hMenu, TPM_RETURNCMD | TPM_LEFTBUTTON, pt.x, pt.y, 0, hWnd, NULL);
             DestroyMenu(hMenu);
+            g_menuThemeData.clear();
             if (retCmd > 0) {
                 SendMessage(hWnd, WM_SYSCOMMAND, retCmd, 0);
             } else if (isSysMenuClick) {
@@ -3415,6 +3905,59 @@ LRESULT CALLBACK EditSelectionColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPAR
 std::wstring g_changeNameResult;
 bool g_changeNameOK = false;
 
+LRESULT CALLBACK EditContextMenuProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (msg == WM_CONTEXTMENU) {
+        HMENU hMenu = CreatePopupMenu();
+        AppendMenu(hMenu, MF_STRING, 1, GetString(IDS_UNDO).c_str());
+        AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
+        AppendMenu(hMenu, MF_STRING, 2, GetString(IDS_CUT).c_str());
+        AppendMenu(hMenu, MF_STRING, 3, GetString(IDS_COPY).c_str());
+        AppendMenu(hMenu, MF_STRING, 4, GetString(IDS_PASTE).c_str());
+        AppendMenu(hMenu, MF_STRING, 5, GetString(IDS_DELETE).c_str());
+        AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
+        AppendMenu(hMenu, MF_STRING, 6, GetString(IDS_SELECT_ALL).c_str());
+        
+        DWORD sel = (DWORD)SendMessage(hWnd, EM_GETSEL, 0, 0);
+        bool hasSel = LOWORD(sel) != HIWORD(sel);
+        if (!SendMessage(hWnd, EM_CANUNDO, 0, 0)) EnableMenuItem(hMenu, 1, MF_BYCOMMAND | MF_GRAYED);
+        if (!hasSel) EnableMenuItem(hMenu, 2, MF_BYCOMMAND | MF_GRAYED);
+        if (!hasSel) EnableMenuItem(hMenu, 3, MF_BYCOMMAND | MF_GRAYED);
+        if (!IsClipboardFormatAvailable(CF_TEXT) && !IsClipboardFormatAvailable(CF_UNICODETEXT)) EnableMenuItem(hMenu, 4, MF_BYCOMMAND | MF_GRAYED);
+        if (!hasSel) EnableMenuItem(hMenu, 5, MF_BYCOMMAND | MF_GRAYED);
+        
+        ApplyThemeToMenu(hMenu);
+        
+        POINT pt;
+        if (lParam == -1) {
+            RECT rc; GetWindowRect(hWnd, &rc);
+            pt.x = rc.left; pt.y = rc.top;
+        } else {
+            pt.x = GET_X_LPARAM(lParam);
+            pt.y = GET_Y_LPARAM(lParam);
+        }
+        
+        int cmd = TrackPopupMenu3D(hMenu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_RIGHTBUTTON, pt.x, pt.y, 0, hWnd, NULL);
+        DestroyMenu(hMenu);
+        
+        if (cmd == 1) SendMessage(hWnd, WM_UNDO, 0, 0);
+        else if (cmd == 2) SendMessage(hWnd, WM_CUT, 0, 0);
+        else if (cmd == 3) SendMessage(hWnd, WM_COPY, 0, 0);
+        else if (cmd == 4) SendMessage(hWnd, WM_PASTE, 0, 0);
+        else if (cmd == 5) SendMessage(hWnd, WM_CLEAR, 0, 0);
+        else if (cmd == 6) SendMessage(hWnd, EM_SETSEL, 0, -1);
+        
+        
+        return 0;
+    } else if (msg == WM_MEASUREITEM) {
+        if (HandleMenuMeasureItem(hWnd, (LPMEASUREITEMSTRUCT)lParam)) return TRUE;
+    } else if (msg == WM_DRAWITEM) {
+        if (HandleMenuDrawItem(hWnd, (LPDRAWITEMSTRUCT)lParam)) return TRUE;
+    } else if (msg == WM_NCDESTROY) {
+        RemoveWindowSubclass(hWnd, EditContextMenuProc, 0);
+    }
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
+}
+
 void DrawColorButton(LPDRAWITEMSTRUCT lpdis, COLORREF colorToDraw) {
     HDC hdc = lpdis->hDC;
     RECT rc = lpdis->rcItem;
@@ -3484,9 +4027,7 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         SetWindowSubclass(hBtnOK, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hBtnCancel, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hEdit, EditSelectionColorProc, 0, 0);
-        SetWindowSubclass(hEdit, ClientEdgeSubclassProc, 0, 0);
-        SetWindowTheme(hEdit, L" ", L" ");
-        SetWindowPos(hEdit, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+        SetWindowSubclass(hEdit, EditContextMenuProc, 0, 0);
         
         HFONT hFont = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
         SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, FALSE);
@@ -3871,7 +4412,7 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             margin, y, totalWidth - margin * 2, inputHeight, hWnd, (HMENU)101, GetModuleHandle(0), 0);
         y += inputHeight + margin;
         
-        hList = CreateWindowEx(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | LBS_NOTIFY | LBS_HASSTRINGS | LBS_OWNERDRAWFIXED,
+        hList = CreateWindowEx(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | LBS_NOTIFY | LBS_HASSTRINGS | LBS_OWNERDRAWFIXED | LBS_NOINTEGRALHEIGHT,
             margin, y, totalWidth - margin * 2, listHeight, hWnd, (HMENU)102, GetModuleHandle(0), 0);
         y += listHeight + margin;
 
@@ -3891,13 +4432,9 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         SetWindowSubclass(hBtnOK, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hBtnCancel, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hEdit, EditSelectionColorProc, 0, 0);
-        SetWindowSubclass(hEdit, ClientEdgeSubclassProc, 0, 0);
+        SetWindowSubclass(hEdit, EditContextMenuProc, 0, 0);
         SetWindowSubclass(hList, ScrollbarColorProc, 0, 0);
-        SetWindowSubclass(hList, ClientEdgeSubclassProc, 0, 0);
-        SetWindowTheme(hEdit, L" ", L" ");
-        SetWindowTheme(hList, L" ", L" ");
-        SetWindowPos(hEdit, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
-        SetWindowPos(hList, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+        
         SendMessage(hList, LB_SETITEMHEIGHT, 0, Scale(16));
         
         s_roomNames.clear();
@@ -4259,7 +4796,7 @@ DWORD WINAPI DecodeTaskProc(LPVOID lpParam) {
             decodeSuccess = pUserDec->pDecoder->DecodeFrame(data->mediaData, rgbOut);
         }
         
-        if (decodeSuccess) {
+        if (decodeSuccess && !rgbOut.empty()) {
             int w = (int)pUserDec->pDecoder->GetWidth();
             int h = (int)pUserDec->pDecoder->GetHeight();
             // The decoder outputs top-down when stride is positive.
@@ -4469,13 +5006,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     MsgData* pData = new MsgData();
                                     pData->user = L"";
                                     std::wstring dispMyName = g_username.substr(0, g_username.find(L'#'));
-                                    if (PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_JAPANESE) {
-                                        pData->msg = dispMyName + L"が" + g_currentRoom + L"に入室しました。";
-                                    } else {
-                                        std::wstring msg = GetString(IDS_ENTERED);
-                                        if (!msg.empty() && (msg.back() == L'.' || msg.back() == 0x3002 || msg.back() == 0x0964)) msg.pop_back();
-                                        pData->msg = dispMyName + msg + L" [" + g_currentRoom + L"]";
-                                    }
+                                    wchar_t msgBuf[1024];
+                                    swprintf_s(msgBuf, GetString(IDS_ROOM_ENTER_FMT).c_str(), dispMyName.c_str(), g_currentRoom.c_str());
+                                    pData->msg = msgBuf;
                                     pData->b = false; pData->i = false; pData->u = false;
                                     pData->size = 9;
                                     pData->color = RGB(128, 128, 128);
@@ -4533,13 +5066,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         MsgData* pData = new MsgData();
                                         pData->user = L"";
                                         std::wstring dispWname = wname.substr(0, wname.find(L'#'));
-                                        if (PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_JAPANESE) {
-                                            pData->msg = dispWname + L"が" + g_currentRoom + L"に入室しました。";
-                                        } else {
-                                            std::wstring msg = GetString(IDS_ENTERED);
-                                            if (!msg.empty() && (msg.back() == L'.' || msg.back() == 0x3002 || msg.back() == 0x0964)) msg.pop_back();
-                                            pData->msg = dispWname + msg + L" [" + g_currentRoom + L"]";
-                                        }
+                                        wchar_t msgBuf[1024];
+                                        swprintf_s(msgBuf, GetString(IDS_ROOM_ENTER_FMT).c_str(), dispWname.c_str(), g_currentRoom.c_str());
+                                        pData->msg = msgBuf;
                                         pData->b = false; pData->i = false; pData->u = false;
                                         pData->size = 9;
                                         pData->color = RGB(128, 128, 128);
@@ -4599,13 +5128,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         MsgData* pData = new MsgData();
                                         pData->user = L"";
                                         std::wstring dispLeaveName = g_userNames[wuid].substr(0, g_userNames[wuid].find(L'#'));
-                                        if (PRIMARYLANGID(GetUserDefaultUILanguage()) == LANG_JAPANESE) {
-                                            pData->msg = dispLeaveName + L"が" + g_currentRoom + L"から退室しました。";
-                                        } else {
-                                            std::wstring msg = GetString(IDS_LEFT);
-                                            if (!msg.empty() && (msg.back() == L'.' || msg.back() == 0x3002 || msg.back() == 0x0964)) msg.pop_back();
-                                            pData->msg = dispLeaveName + msg + L" [" + g_currentRoom + L"]";
-                                        }
+                                        wchar_t msgBuf[1024];
+                                        swprintf_s(msgBuf, GetString(IDS_ROOM_LEAVE_FMT).c_str(), dispLeaveName.c_str(), g_currentRoom.c_str());
+                                        pData->msg = msgBuf;
                                         pData->b = false; pData->i = false; pData->u = false;
                                         pData->size = 9;
                                         pData->color = RGB(128, 128, 128);
@@ -4964,7 +5489,7 @@ std::map<HWND, std::pair<int, int>> g_videoBitmapSizes;
 
 LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     LRESULT classicResult = 0;
-    if (HandleClassicStyle(hwnd, message, wParam, lParam, &classicResult, true)) return classicResult;
+    if (HandleClassicStyle(hwnd, message, wParam, lParam, &classicResult, true, false)) return classicResult;
 
     std::wstring* pUser = (std::wstring*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
     switch (message) {
@@ -5531,7 +6056,7 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMoni
         int h = mi.rcMonitor.bottom - mi.rcMonitor.top;
         
         wchar_t buf[256];
-        swprintf_s(buf, L"ディスプレイ全体(%s,%dx%d)", friendlyName.c_str(), w, h);
+        swprintf_s(buf, GetString(IDS_DISPLAY_ALL_FMT).c_str(), friendlyName.c_str(), w, h);
 
         ShareTarget st;
         st.hMonitor = hMonitor;
@@ -5569,6 +6094,13 @@ BOOL CALLBACK WindowEnumProc(HWND hwnd, LPARAM lParam) {
 
 WNDPROC g_oldListProc = NULL;
 LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_MEASUREITEM) {
+        if (HandleMenuMeasureItem(hwnd, (LPMEASUREITEMSTRUCT)lParam)) return TRUE;
+    }
+    if (msg == WM_DRAWITEM) {
+        if (HandleMenuDrawItem(hwnd, (LPDRAWITEMSTRUCT)lParam)) return TRUE;
+    }
+    
     if (msg == WM_RBUTTONDOWN) {
         POINT pt = { LOWORD(lParam), HIWORD(lParam) };
         LRESULT res = SendMessage(hwnd, LB_ITEMFROMPOINT, 0, MAKELPARAM(pt.x, pt.y));
@@ -5603,8 +6135,10 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     AppendMenuW(hMenu, MF_STRING, 3, GetString(IDS_CHANGE_NAME_TITLE).c_str()); 
 
                     ClientToScreen(hwnd, &pt);
-                    int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
+                    ApplyThemeToMenu(hMenu);
+                    int cmd = TrackPopupMenu3D(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
                     DestroyMenu(hMenu);
+                    g_menuThemeData.clear();
                     if (cmd == 1) {
                         if (g_isWebcamActive && g_captureSourceType == 1) {
                             g_isWebcamActive = false;
@@ -5723,8 +6257,10 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     AppendMenuW(hMenu, MF_STRING | (isIgnored ? MF_CHECKED : MF_UNCHECKED), 4, GetString(IDS_IGNORE).c_str());
                     AppendMenuW(hMenu, MF_STRING, 5, GetString(IDS_REPORT).c_str());
                     ClientToScreen(hwnd, &pt);
-                    int cmd = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
+                    ApplyThemeToMenu(hMenu);
+                    int cmd = TrackPopupMenu3D(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
                     DestroyMenu(hMenu);
+                    g_menuThemeData.clear();
                     if (cmd == 2 && hasStreamer) {
                         if (!g_videoWindows[clickedUser] || !IsWindow(g_videoWindows[clickedUser])) {
                             std::wstring titleName = clickedUser;
@@ -6232,13 +6768,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (pos != std::wstring::npos) dispName = dispName.substr(0, pos);
             sysMsg.msg = GetString(IDS_JOINED_NETWORK) + L" (" + dispName + L")";
             sysMsg.color = RGB(128,128,128);
+            sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
+            sysMsg.size = 9;
+            AppendLog(sysMsg);
+            
+            wchar_t moveBuf[1024];
+            swprintf_s(moveBuf, GetString(IDS_MOVED_TO).c_str(), g_currentRoom.c_str());
+            sysMsg.msg = moveBuf;
+            AppendLog(sysMsg);
         } else {
             sysMsg.msg = GetString(IDS_SERVER_NOT_FOUND);
             sysMsg.color = RGB(255,0,0);
+            sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
+            sysMsg.size = 9;
+            AppendLog(sysMsg);
         }
-        sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
-        sysMsg.size = 9;
-        AppendLog(sysMsg);
 
         // Send initial join after all UI controls are fully created
         EnableWindow(g_hSendBtn, FALSE);
@@ -6270,6 +6814,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_MEASUREITEM: {
+        if (HandleMenuMeasureItem(hWnd, (LPMEASUREITEMSTRUCT)lParam)) return TRUE;
         LPMEASUREITEMSTRUCT lpmis = (LPMEASUREITEMSTRUCT)lParam;
         if (lpmis->CtlID == 1050) {
             lpmis->itemHeight = Scale(28);
@@ -6279,6 +6824,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_DRAWITEM: {
+        if (HandleMenuDrawItem(hWnd, (LPDRAWITEMSTRUCT)lParam)) return TRUE;
         LPDRAWITEMSTRUCT lpdis = (LPDRAWITEMSTRUCT)lParam;
         
         if (lpdis->CtlID == 1009) {

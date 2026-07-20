@@ -39,8 +39,9 @@ public:
     H264Encoder();
     ~H264Encoder();
     bool Initialize(UINT32 width, UINT32 height, bool isScreenShare, ID3D11Device* pD3DDevice = nullptr);
-    bool EncodeFrame(const BYTE* pNv12Data, DWORD cbData, std::vector<uint8_t>& outH264);
     bool EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>& outH264);
+    bool EncodeFrame(const BYTE* pNv12Data, DWORD cbData, std::vector<uint8_t>& outH264);
+    bool IsHardware() const { return m_useHW; }
 private:
     bool InitializeInternal(UINT32 width, UINT32 height, bool isScreenShare, bool useHW, ID3D11Device* pD3DDevice);
 };

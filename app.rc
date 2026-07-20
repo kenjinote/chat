@@ -10,7 +10,7 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobby"
-    IDS_CHANGE_NAME_TITLE "Change Username..."
+    IDS_CHANGE_NAME_TITLE "Username Change..."
     IDS_MOVE_ROOM_TITLE "Move Room"
     IDS_PRIVATE "Private"
     IDS_VIDEO_STREAM "Video Stream"
@@ -20,7 +20,7 @@ BEGIN
     IDS_SEND "Send"
     IDS_JOINED_NETWORK "Joined network"
     IDS_SERVER_NOT_FOUND "Server not found. May be under maintenance."
-    IDS_MOVED_TO "Moved to %s"
+    IDS_MOVED_TO "Moving to %s..."
     IDS_RETURNED_TO_LOBBY "Returned to Lobby"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "Move Room"
@@ -50,13 +50,17 @@ BEGIN
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Screen Share"
+    IDS_UNDO                "Undo(&U)"
+    IDS_ROOM_ENTER_FMT      "%s entered %s."
+    IDS_ROOM_LEAVE_FMT      "%s left %s."
+    IDS_DISPLAY_ALL_FMT     "Entire Display(%s,%dx%d)"
 END
 
 LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "ロビー"
-    IDS_CHANGE_NAME_TITLE "ユーザ名を変更..."
+    IDS_CHANGE_NAME_TITLE "ユーザ名の変更..."
     IDS_MOVE_ROOM_TITLE "部屋移動"
     IDS_PRIVATE "非公開"
     IDS_VIDEO_STREAM "ビデオ配信"
@@ -66,7 +70,7 @@ BEGIN
     IDS_SEND "送信"
     IDS_JOINED_NETWORK "ネットワークに参加しました"
     IDS_SERVER_NOT_FOUND "サーバーが見つかりません。メンテナンスの可能性があります。"
-    IDS_MOVED_TO "%s に移動しました"
+    IDS_MOVED_TO "%s に移動しています..."
     IDS_RETURNED_TO_LOBBY "ロビーに戻りました"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "部屋移動"
@@ -86,23 +90,27 @@ BEGIN
     IDS_MINIMIZE            "最小化(&N)"
     IDS_MAXIMIZE            "最大化(&X)"
     IDS_CLOSE               "閉じる(&C)\tAlt+F4"
-    IDS_COPY                "コピー(C)"
-    IDS_CUT                 "切り取り(T)"
-    IDS_PASTE               "貼り付け(P)"
-    IDS_SELECT_ALL          "すべて選択(A)"
-    IDS_DELETE              "削除(D)"
+    IDS_COPY                "コピー(&C)"
+    IDS_CUT                 "切り取り(&T)"
+    IDS_PASTE               "貼り付け(&P)"
+    IDS_SELECT_ALL          "すべて選択(&A)"
+    IDS_DELETE              "削除(&D)"
     IDS_CANCEL              "キャンセル"
     IDS_USER_LIST_0         "ユーザ一覧 (0)"
     IDS_NO_CONNECTION       "接続なし"
     IDS_USER_LIST_FMT       "ユーザ一覧 (%d)"
     IDS_SCREEN_SHARE        "画面共有"
+    IDS_UNDO                "元に戻す(&U)"
+    IDS_ROOM_ENTER_FMT      "%sが%sに入室しました。"
+    IDS_ROOM_LEAVE_FMT      "%sが%sから退室しました。"
+    IDS_DISPLAY_ALL_FMT     "ディスプレイ全体(%s,%dx%d)"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
 STRINGTABLE
 BEGIN
     IDS_LOBBY "大厅"
-    IDS_CHANGE_NAME_TITLE "更改用户名..."
+    IDS_CHANGE_NAME_TITLE "用户名更改..."
     IDS_MOVE_ROOM_TITLE "移动房间"
     IDS_PRIVATE "私密"
     IDS_VIDEO_STREAM "视频推流"
@@ -112,7 +120,7 @@ BEGIN
     IDS_SEND "发送"
     IDS_JOINED_NETWORK "已加入网络"
     IDS_SERVER_NOT_FOUND "找不到服务器。可能在维护中。"
-    IDS_MOVED_TO "已移动到 %s"
+    IDS_MOVED_TO "正在移动到 %s..."
     IDS_RETURNED_TO_LOBBY "已返回大厅"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "移动房间"
@@ -142,6 +150,10 @@ BEGIN
     IDS_NO_CONNECTION       "未连接"
     IDS_USER_LIST_FMT       "用户列表 (%d)"
     IDS_SCREEN_SHARE        "屏幕共享"
+    IDS_UNDO                "撤销(&U)"
+    IDS_ROOM_ENTER_FMT      "%s 进入了 %s。"
+    IDS_ROOM_LEAVE_FMT      "%s 离开了 %s。"
+    IDS_DISPLAY_ALL_FMT     "整个显示器(%s,%dx%d)"
 END
 
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
@@ -158,7 +170,7 @@ BEGIN
     IDS_SEND "보내기"
     IDS_JOINED_NETWORK "네트워크에 참여했습니다"
     IDS_SERVER_NOT_FOUND "서버를 찾을 수 없습니다. 유지보수 중일 수 있습니다."
-    IDS_MOVED_TO "%s(으)로 이동했습니다"
+    IDS_MOVED_TO "%s(으)로 이동 중입니다..."
     IDS_RETURNED_TO_LOBBY "로비로 돌아왔습니다"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "방 이동"
@@ -188,13 +200,17 @@ BEGIN
     IDS_NO_CONNECTION       "연결 없음"
     IDS_USER_LIST_FMT       "사용자 목록 (%d)"
     IDS_SCREEN_SHARE        "화면 공유"
+    IDS_UNDO                "실행 취소(&U)"
+    IDS_ROOM_ENTER_FMT      "%s(이)가 %s에 입장했습니다."
+    IDS_ROOM_LEAVE_FMT      "%s(이)가 %s에서 퇴장했습니다."
+    IDS_DISPLAY_ALL_FMT     "전체 디스플레이(%s,%dx%d)"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL
 STRINGTABLE
 BEGIN
     IDS_LOBBY "大廳"
-    IDS_CHANGE_NAME_TITLE "更改使用者名稱..."
+    IDS_CHANGE_NAME_TITLE "使用者名稱更改..."
     IDS_MOVE_ROOM_TITLE "移動房間"
     IDS_PRIVATE "私密"
     IDS_VIDEO_STREAM "視訊串流"
@@ -204,7 +220,7 @@ BEGIN
     IDS_SEND "發送"
     IDS_JOINED_NETWORK "已加入網路"
     IDS_SERVER_NOT_FOUND "找不到伺服器。可能在維護中。"
-    IDS_MOVED_TO "已移動到 %s"
+    IDS_MOVED_TO "正在移動到 %s..."
     IDS_RETURNED_TO_LOBBY "已返回大廳"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "移動房間"
@@ -234,13 +250,17 @@ BEGIN
     IDS_NO_CONNECTION       "未連接"
     IDS_USER_LIST_FMT       "使用者清單 (%d)"
     IDS_SCREEN_SHARE        "螢幕分享"
+    IDS_UNDO                "復原(&U)"
+    IDS_ROOM_ENTER_FMT      "%s 進入了 %s。"
+    IDS_ROOM_LEAVE_FMT      "%s 離開了 %s。"
+    IDS_DISPLAY_ALL_FMT     "整個顯示器(%s,%dx%d)"
 END
 
 LANGUAGE LANG_FRENCH, SUBLANG_FRENCH
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Accueil"
-    IDS_CHANGE_NAME_TITLE "Changer le nom d'utilisateur..."
+    IDS_CHANGE_NAME_TITLE "Modification du nom d'utilisateur..."
     IDS_MOVE_ROOM_TITLE "Changer de salon"
     IDS_PRIVATE "Prive"
     IDS_VIDEO_STREAM "Diffuser la video"
@@ -250,7 +270,7 @@ BEGIN
     IDS_SEND "Envoyer"
     IDS_JOINED_NETWORK "A rejoint le reseau"
     IDS_SERVER_NOT_FOUND "Serveur introuvable. Peut-etre en maintenance."
-    IDS_MOVED_TO "Deplace vers %s"
+    IDS_MOVED_TO "Deplacement vers %s..."
     IDS_RETURNED_TO_LOBBY "De retour a l'accueil"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "Changer de salon"
@@ -280,13 +300,17 @@ BEGIN
     IDS_NO_CONNECTION       "Pas de connexion"
     IDS_USER_LIST_FMT       "Liste des utilisateurs (%d)"
     IDS_SCREEN_SHARE        "Partage d'écran"
+    IDS_UNDO                "Annuler(&U)"
+    IDS_ROOM_ENTER_FMT      "%s est entré(e) dans %s."
+    IDS_ROOM_LEAVE_FMT      "%s a quitté %s."
+    IDS_DISPLAY_ALL_FMT     "Écran entier(%s,%dx%d)"
 END
 
 LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobby"
-    IDS_CHANGE_NAME_TITLE "Benutzername ändern..."
+    IDS_CHANGE_NAME_TITLE "Änderung des Benutzernamens..."
     IDS_MOVE_ROOM_TITLE "Raum wechseln"
     IDS_PRIVATE "Privat"
     IDS_VIDEO_STREAM "Video-Stream"
@@ -296,7 +320,7 @@ BEGIN
     IDS_SEND "Senden"
     IDS_JOINED_NETWORK "Dem Netzwerk beigetreten"
     IDS_SERVER_NOT_FOUND "Server nicht gefunden. Moglicherweise unter Wartung."
-    IDS_MOVED_TO "Verschoben nach %s"
+    IDS_MOVED_TO "Verschiebe nach %s..."
     IDS_RETURNED_TO_LOBBY "Zuruck in der Lobby"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "Raum wechseln"
@@ -326,13 +350,17 @@ BEGIN
     IDS_NO_CONNECTION       "Keine Verbindung"
     IDS_USER_LIST_FMT       "Benutzerliste (%d)"
     IDS_SCREEN_SHARE        "Bildschirmfreigabe"
+    IDS_UNDO                "Rückgängig(&U)"
+    IDS_ROOM_ENTER_FMT      "%s hat den Raum %s betreten."
+    IDS_ROOM_LEAVE_FMT      "%s hat den Raum %s verlassen."
+    IDS_DISPLAY_ALL_FMT     "Gesamter Bildschirm(%s,%dx%d)"
 END
 
 LANGUAGE LANG_SPANISH, SUBLANG_SPANISH_MODERN
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Sala principal"
-    IDS_CHANGE_NAME_TITLE "Cambiar nombre de usuario..."
+    IDS_CHANGE_NAME_TITLE "Cambio de nombre de usuario..."
     IDS_MOVE_ROOM_TITLE "Mover Sala"
     IDS_PRIVATE "Privado"
     IDS_VIDEO_STREAM "Transmitir video"
@@ -342,7 +370,7 @@ BEGIN
     IDS_SEND "Enviar"
     IDS_JOINED_NETWORK "Se unio a la red"
     IDS_SERVER_NOT_FOUND "Servidor no encontrado. Puede estar en mantenimiento."
-    IDS_MOVED_TO "Movido a %s"
+    IDS_MOVED_TO "Moviendo a %s..."
     IDS_RETURNED_TO_LOBBY "Regreso a la Sala principal"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "Cambiar de sala"
@@ -372,13 +400,17 @@ BEGIN
     IDS_NO_CONNECTION       "Sin conexión"
     IDS_USER_LIST_FMT       "Lista de usuarios (%d)"
     IDS_SCREEN_SHARE        "Compartir pantalla"
+    IDS_UNDO                "Deshacer(&U)"
+    IDS_ROOM_ENTER_FMT      "%s ha entrado en %s."
+    IDS_ROOM_LEAVE_FMT      "%s ha salido de %s."
+    IDS_DISPLAY_ALL_FMT     "Pantalla completa(%s,%dx%d)"
 END
 
 LANGUAGE LANG_HINDI, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "लॉबी"
-    IDS_CHANGE_NAME_TITLE "उपयोगकर्ता नाम बदलें..."
+    IDS_CHANGE_NAME_TITLE "उपयोगकर्ता नाम परिवर्तन..."
     IDS_MOVE_ROOM_TITLE "कमरा बदलें"
     IDS_PRIVATE "निजी"
     IDS_VIDEO_STREAM "वीडियो स्ट्रीम"
@@ -388,7 +420,7 @@ BEGIN
     IDS_SEND "भेजें"
     IDS_JOINED_NETWORK "नेटवर्क से जुड़ गए"
     IDS_SERVER_NOT_FOUND "सर्वर नहीं मिला। शायद रखरखाव चल रहा है।"
-    IDS_MOVED_TO "कमरे में चले गए: %s"
+    IDS_MOVED_TO "%s में जा रहे हैं..."
     IDS_RETURNED_TO_LOBBY "लॉबी में वापस लौट आए"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "कमरा बदलें"
@@ -418,13 +450,17 @@ BEGIN
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "स्क्रीन शेयर"
+    IDS_UNDO                "पूर्ववत करें(&U)"
+    IDS_ROOM_ENTER_FMT      "%s ने %s में प्रवेश किया।"
+    IDS_ROOM_LEAVE_FMT      "%s ने %s छोड़ दिया।"
+    IDS_DISPLAY_ALL_FMT     "संपूर्ण प्रदर्शन(%s,%dx%d)"
 END
 
 LANGUAGE LANG_PORTUGUESE, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobby"
-    IDS_CHANGE_NAME_TITLE "Alterar nome de usuário..."
+    IDS_CHANGE_NAME_TITLE "Alteração de nome de usuário..."
     IDS_MOVE_ROOM_TITLE "Mover Sala"
     IDS_PRIVATE "Privado"
     IDS_VIDEO_STREAM "Transmissão de Vídeo"
@@ -434,7 +470,7 @@ BEGIN
     IDS_SEND "Enviar"
     IDS_JOINED_NETWORK "Entrou na rede"
     IDS_SERVER_NOT_FOUND "Servidor não encontrado. Pode estar em manutenção."
-    IDS_MOVED_TO "Movido para %s"
+    IDS_MOVED_TO "Movendo para %s..."
     IDS_RETURNED_TO_LOBBY "Retornou ao Lobby"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "Mudar Sala"
@@ -464,13 +500,17 @@ BEGIN
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Compartilhamento de tela"
+    IDS_UNDO                "Desfazer(&U)"
+    IDS_ROOM_ENTER_FMT      "%s entrou em %s."
+    IDS_ROOM_LEAVE_FMT      "%s saiu de %s."
+    IDS_DISPLAY_ALL_FMT     "Tela inteira(%s,%dx%d)"
 END
 
 LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Лобби"
-    IDS_CHANGE_NAME_TITLE "Изменить имя пользователя..."
+    IDS_CHANGE_NAME_TITLE "Изменение имени пользователя..."
     IDS_MOVE_ROOM_TITLE "Сменить комнату"
     IDS_PRIVATE "Приватный"
     IDS_VIDEO_STREAM "Видеотрансляция"
@@ -480,7 +520,7 @@ BEGIN
     IDS_SEND "Отправить"
     IDS_JOINED_NETWORK "Присоединился к сети"
     IDS_SERVER_NOT_FOUND "Сервер не найден. Возможно, идет обслуживание."
-    IDS_MOVED_TO "Перемещен в %s"
+    IDS_MOVED_TO "Перемещение в %s..."
     IDS_RETURNED_TO_LOBBY "Вернулся в Лобби"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "Сменить комнату"
@@ -510,6 +550,10 @@ BEGIN
     IDS_NO_CONNECTION       "Нет подключения"
     IDS_USER_LIST_FMT       "Список пользователей (%d)"
     IDS_SCREEN_SHARE        "Демонстрация экрана"
+    IDS_UNDO                "Отменить(&U)"
+    IDS_ROOM_ENTER_FMT      "%s вошел(ла) в %s."
+    IDS_ROOM_LEAVE_FMT      "%s покинул(а) %s."
+    IDS_DISPLAY_ALL_FMT     "Весь экран(%s,%dx%d)"
 END
 
 LANGUAGE LANG_ARABIC, SUBLANG_DEFAULT
@@ -526,7 +570,7 @@ BEGIN
     IDS_SEND "إرسال"
     IDS_JOINED_NETWORK "انضم إلى الشبكة"
     IDS_SERVER_NOT_FOUND "الخادم غير موجود. قد يكون تحت الصيانة."
-    IDS_MOVED_TO "انتقل إلى %s"
+    IDS_MOVED_TO "جاري الانتقال إلى %s..."
     IDS_RETURNED_TO_LOBBY "عاد إلى الردهة"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "تغيير الغرفة"
@@ -556,13 +600,17 @@ BEGIN
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "مشاركة الشاشة"
+    IDS_UNDO                "تراجع(&U)"
+    IDS_ROOM_ENTER_FMT      "دخل %s إلى %s."
+    IDS_ROOM_LEAVE_FMT      "غادر %s %s."
+    IDS_DISPLAY_ALL_FMT     "الشاشة بأكملها(%s,%dx%d)"
 END
 
 LANGUAGE LANG_BENGALI, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "লবি"
-    IDS_CHANGE_NAME_TITLE "ব্যবহারকারীর নাম পরিবর্তন করুন..."
+    IDS_CHANGE_NAME_TITLE "ব্যবহারকারীর নাম পরিবর্তন..."
     IDS_MOVE_ROOM_TITLE "রুম পরিবর্তন করুন"
     IDS_PRIVATE "ব্যক্তিগত"
     IDS_VIDEO_STREAM "ভিডিও স্ট্রিম"
@@ -572,7 +620,7 @@ BEGIN
     IDS_SEND "পাঠান"
     IDS_JOINED_NETWORK "নেটওয়ার্কে যোগ দিয়েছেন"
     IDS_SERVER_NOT_FOUND "সার্ভার পাওয়া যায়নি। সম্ভবত রক্ষণাবেক্ষণ চলছে।"
-    IDS_MOVED_TO "%s-এ স্থানান্তরিত"
+    IDS_MOVED_TO "%s-এ স্থানান্তরিত হচ্ছে..."
     IDS_RETURNED_TO_LOBBY "লবিতে ফিরে এসেছে"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "রুম পরিবর্তন করুন"
@@ -602,13 +650,17 @@ BEGIN
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "স্ক্রিন শেয়ার"
+    IDS_UNDO                "আনডু(&U)"
+    IDS_ROOM_ENTER_FMT      "%s %s-এ প্রবেশ করেছে।"
+    IDS_ROOM_LEAVE_FMT      "%s %s ছেড়ে গেছে।"
+    IDS_DISPLAY_ALL_FMT     "পুরো ডিসপ্লে(%s,%dx%d)"
 END
 
 LANGUAGE LANG_INDONESIAN, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobi"
-    IDS_CHANGE_NAME_TITLE "Ubah Nama Pengguna..."
+    IDS_CHANGE_NAME_TITLE "Perubahan Nama Pengguna..."
     IDS_MOVE_ROOM_TITLE "Pindah Ruangan"
     IDS_PRIVATE "Pribadi"
     IDS_VIDEO_STREAM "Siaran Video"
@@ -618,7 +670,7 @@ BEGIN
     IDS_SEND "Kirim"
     IDS_JOINED_NETWORK "Bergabung dengan jaringan"
     IDS_SERVER_NOT_FOUND "Server tidak ditemukan. Mungkin sedang dalam perbaikan."
-    IDS_MOVED_TO "Pindah ke %s"
+    IDS_MOVED_TO "Berpindah ke %s..."
     IDS_RETURNED_TO_LOBBY "Kembali ke Lobi"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "Pindah Ruangan"
@@ -648,13 +700,17 @@ BEGIN
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Berbagi Layar"
+    IDS_UNDO                "Batal(&U)"
+    IDS_ROOM_ENTER_FMT      "%s memasuki %s."
+    IDS_ROOM_LEAVE_FMT      "%s meninggalkan %s."
+    IDS_DISPLAY_ALL_FMT     "Seluruh Tampilan(%s,%dx%d)"
 END
 
 LANGUAGE LANG_ITALIAN, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobby"
-    IDS_CHANGE_NAME_TITLE "Cambia nome utente..."
+    IDS_CHANGE_NAME_TITLE "Cambio nome utente..."
     IDS_MOVE_ROOM_TITLE "Cambia Stanza"
     IDS_PRIVATE "Privato"
     IDS_VIDEO_STREAM "Trasmetti Video"
@@ -664,7 +720,7 @@ BEGIN
     IDS_SEND "Invia"
     IDS_JOINED_NETWORK "Unito alla rete"
     IDS_SERVER_NOT_FOUND "Server non trovato. Potrebbe essere in manutenzione."
-    IDS_MOVED_TO "Spostato in %s"
+    IDS_MOVED_TO "Spostamento in %s..."
     IDS_RETURNED_TO_LOBBY "Tornato nella Lobby"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "Cambia Stanza"
@@ -694,13 +750,17 @@ BEGIN
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Condivisione schermo"
+    IDS_UNDO                "Annulla(&U)"
+    IDS_ROOM_ENTER_FMT      "%s è entrato/a in %s."
+    IDS_ROOM_LEAVE_FMT      "%s ha lasciato %s."
+    IDS_DISPLAY_ALL_FMT     "Intero schermo(%s,%dx%d)"
 END
 
 LANGUAGE LANG_TURKISH, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Lobi"
-    IDS_CHANGE_NAME_TITLE "Kullanıcı Adını Değiştir..."
+    IDS_CHANGE_NAME_TITLE "Kullanıcı Adı Değişikliği..."
     IDS_MOVE_ROOM_TITLE "Oda Değiştir"
     IDS_PRIVATE "Özel"
     IDS_VIDEO_STREAM "Video Yayını"
@@ -710,7 +770,7 @@ BEGIN
     IDS_SEND "Gönder"
     IDS_JOINED_NETWORK "Ağa katıldı"
     IDS_SERVER_NOT_FOUND "Sunucu bulunamadı. Bakımda olabilir."
-    IDS_MOVED_TO "%s odasına taşındı"
+    IDS_MOVED_TO "%s odasına taşınılıyor..."
     IDS_RETURNED_TO_LOBBY "Lobiye döndü"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "Oda Değiştir"
@@ -740,13 +800,17 @@ BEGIN
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Ekran Paylaşımı"
+    IDS_UNDO                "Geri Al(&U)"
+    IDS_ROOM_ENTER_FMT      "%s %s odasına girdi."
+    IDS_ROOM_LEAVE_FMT      "%s %s odasından ayrıldı."
+    IDS_DISPLAY_ALL_FMT     "Tüm Ekran(%s,%dx%d)"
 END
 
 LANGUAGE LANG_VIETNAMESE, SUBLANG_DEFAULT
 STRINGTABLE
 BEGIN
     IDS_LOBBY "Sảnh"
-    IDS_CHANGE_NAME_TITLE "Đổi tên người dùng..."
+    IDS_CHANGE_NAME_TITLE "Thay đổi tên người dùng..."
     IDS_MOVE_ROOM_TITLE "Chuyển phòng"
     IDS_PRIVATE "Riêng tư"
     IDS_VIDEO_STREAM "Phát Video"
@@ -756,7 +820,7 @@ BEGIN
     IDS_SEND "Gửi"
     IDS_JOINED_NETWORK "Đã tham gia mạng"
     IDS_SERVER_NOT_FOUND "Không tìm thấy máy chủ. Có thể đang bảo trì."
-    IDS_MOVED_TO "Đã chuyển đến %s"
+    IDS_MOVED_TO "Đang chuyển đến %s..."
     IDS_RETURNED_TO_LOBBY "Đã quay lại Sảnh"
     IDS_WINDOW_TITLE "retcha"
     IDS_MOVE_ROOM_BTN "Chuyển phòng"
@@ -786,4 +850,8 @@ BEGIN
     IDS_NO_CONNECTION       "No Connection"
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Chia sẻ màn hình"
+    IDS_UNDO                "Hoàn tác(&U)"
+    IDS_ROOM_ENTER_FMT      "%s đã vào %s."
+    IDS_ROOM_LEAVE_FMT      "%s đã rời khỏi %s."
+    IDS_DISPLAY_ALL_FMT     "Toàn bộ màn hình(%s,%dx%d)"
 END
