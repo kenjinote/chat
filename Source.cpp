@@ -91,6 +91,8 @@ HWND g_hLog, g_hInput, g_hSendBtn, g_hUserList, g_hUserListHeader;
 HWND g_hBtnB, g_hBtnI, g_hBtnU, g_hComboSize, g_hBtnColor;
 HWND g_hBtnMoveRoom;
 HWND g_hBtnVoice, g_hBtnVideo, g_hVolumeIndicator, g_hSpeakerIcon, g_hVolumeSlider;
+HWND g_hMaintenanceText;
+std::wstring g_maintenanceMsg = L"";
 IAudioClient* g_pAudioClient = nullptr;
 ISimpleAudioVolume* g_pSimpleAudioVolume = nullptr;
 IAudioSessionControl* g_pAudioSessionControl = nullptr;
@@ -131,6 +133,7 @@ public:
 CAudioSessionEvents* g_pAudioEvents = nullptr;
 
 #define WM_APP_VOLUME_CHANGED (WM_APP + 1)
+#define WM_APP_MAINTENANCE_MSG (WM_APP + 5)
 
 HRESULT STDMETHODCALLTYPE CAudioSessionEvents::OnSimpleVolumeChanged(float NewVolume, BOOL NewMute, LPCGUID EventContext) {
     if (g_hVolumeSlider) {
@@ -154,6 +157,64 @@ bool ResolveIP(const std::string& host, IN_ADDR& outAddr) {
         return true;
     }
     return false;
+}
+
+void SetMaintenanceMessage(const std::wstring& msg) {
+    g_maintenanceMsg = msg;
+    if (g_hMaintenanceText) {
+        SetWindowTextW(g_hMaintenanceText, msg.c_str());
+        RECT rc;
+        GetClientRect(GetParent(g_hMaintenanceText), &rc);
+        SendMessage(GetParent(g_hMaintenanceText), WM_SIZE, 0, MAKELPARAM(rc.right, rc.bottom));
+        InvalidateRect(GetParent(g_hMaintenanceText), NULL, TRUE);
+    }
+}
+
+#include <wininet.h>
+#pragma comment(lib, "wininet.lib")
+
+void FetchMaintenanceMessageThread(HWND hWnd) {
+    HINTERNET hInternet = InternetOpenW(L"ChatApp", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+    if (!hInternet) return;
+    
+    DWORD timeout = 5000;
+    InternetSetOptionW(hInternet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeout, sizeof(timeout));
+    InternetSetOptionW(hInternet, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
+    InternetSetOptionW(hInternet, INTERNET_OPTION_SEND_TIMEOUT, &timeout, sizeof(timeout));
+    
+    HINTERNET hUrl = InternetOpenUrlW(hInternet, L"https://chatannounce2026b9x.blob.core.windows.net/public/announce.json", NULL, 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_SECURE, 0);
+    if (hUrl) {
+        std::string jsonStr;
+        char buf[1024];
+        DWORD bytesRead = 0;
+        while (InternetReadFile(hUrl, buf, sizeof(buf), &bytesRead) && bytesRead > 0) {
+            jsonStr.append(buf, bytesRead);
+        }
+        InternetCloseHandle(hUrl);
+        
+        std::string err;
+        auto json = json11::Json::parse(jsonStr, err);
+        if (err.empty() && json.is_object()) {
+            LANGID langId = GetUserDefaultUILanguage();
+            std::string langKey = (PRIMARYLANGID(langId) == LANG_JAPANESE) ? "ja" : "en";
+            
+            std::string msgUtf8 = json[langKey].string_value();
+            if (msgUtf8.empty()) {
+                msgUtf8 = json["en"].string_value();
+            }
+            if (msgUtf8.empty()) {
+                msgUtf8 = json["ja"].string_value();
+            }
+            
+            int wlen = MultiByteToWideChar(CP_UTF8, 0, msgUtf8.c_str(), -1, NULL, 0);
+            std::wstring* wmsg = new std::wstring(wlen, 0);
+            MultiByteToWideChar(CP_UTF8, 0, msgUtf8.c_str(), -1, &(*wmsg)[0], wlen);
+            if (!wmsg->empty() && wmsg->back() == L'\0') wmsg->pop_back();
+            
+            PostMessage(hWnd, WM_APP_MAINTENANCE_MSG, 0, (LPARAM)wmsg);
+        }
+    }
+    InternetCloseHandle(hInternet);
 }
 
 std::string g_serverIp = "chat-lb-2026.japaneast.cloudapp.azure.com";
@@ -5890,14 +5951,23 @@ void SnapWindow(HWND hMovingWnd, LPRECT prc) {
         s_rcUnsnapped = *prc;
         g_isNewDrag = false;
     } else {
-        RECT rcCurrent;
-        GetWindowRect(hMovingWnd, &rcCurrent);
-        int dx = prc->left - rcCurrent.left;
-        int dy = prc->top - rcCurrent.top;
-        s_rcUnsnapped.left += dx;
-        s_rcUnsnapped.top += dy;
-        s_rcUnsnapped.right = s_rcUnsnapped.left + (prc->right - prc->left);
-        s_rcUnsnapped.bottom = s_rcUnsnapped.top + (prc->bottom - prc->top);
+        int prcWidth = prc->right - prc->left;
+        int prcHeight = prc->bottom - prc->top;
+        int unsnappedWidth = s_rcUnsnapped.right - s_rcUnsnapped.left;
+        int unsnappedHeight = s_rcUnsnapped.bottom - s_rcUnsnapped.top;
+
+        if (prcWidth != unsnappedWidth || prcHeight != unsnappedHeight) {
+            s_rcUnsnapped = *prc;
+        } else {
+            RECT rcCurrent;
+            GetWindowRect(hMovingWnd, &rcCurrent);
+            int dx = prc->left - rcCurrent.left;
+            int dy = prc->top - rcCurrent.top;
+            s_rcUnsnapped.left += dx;
+            s_rcUnsnapped.top += dy;
+            s_rcUnsnapped.right = s_rcUnsnapped.left + prcWidth;
+            s_rcUnsnapped.bottom = s_rcUnsnapped.top + prcHeight;
+        }
     }
 
     RECT margin = GetWindowMargin(hMovingWnd);
@@ -5938,6 +6008,20 @@ void SnapWindow(HWND hMovingWnd, LPRECT prc) {
     HMONITOR hMonitor = MonitorFromWindow(hMovingWnd, MONITOR_DEFAULTTONEAREST);
     MONITORINFO mi = { sizeof(mi) };
     GetMonitorInfo(hMonitor, &mi);
+    
+    POINT ptCursor;
+    GetCursorPos(&ptCursor);
+    int aeroSnapZone = MulDiv(20, dpiY, 96);
+    if (ptCursor.x <= mi.rcMonitor.left + aeroSnapZone ||
+        ptCursor.x >= mi.rcMonitor.right - aeroSnapZone ||
+        ptCursor.y <= mi.rcMonitor.top + aeroSnapZone ||
+        ptCursor.y >= mi.rcMonitor.bottom - aeroSnapZone) {
+        prc->left = s_rcUnsnapped.left;
+        prc->top = s_rcUnsnapped.top;
+        prc->right = s_rcUnsnapped.right;
+        prc->bottom = s_rcUnsnapped.bottom;
+        return;
+    }
     
     int scr_x_cands[] = { mi.rcWork.left - rcVis.left, mi.rcWork.right - rcVis.right };
     int scr_y_cands[] = { mi.rcWork.top - rcVis.top, mi.rcWork.bottom - rcVis.bottom };
@@ -6616,7 +6700,147 @@ void UpdateFonts(HWND hWnd) {
     if (g_hBtnMoveRoom) SendMessage(g_hBtnMoveRoom, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     if (g_hBtnColor) SendMessage(g_hBtnColor, WM_SETFONT, (WPARAM)g_hFont, TRUE);
     if (g_hBtnVoice) SendMessage(g_hBtnVoice, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+    if (g_hMaintenanceText) SendMessage(g_hMaintenanceText, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
 
+}
+
+LRESULT CALLBACK VolumeSliderSubclassProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    static bool isDragging = false;
+    static HWND hToolTip = NULL;
+    static TOOLINFOW ti = { 0 };
+
+    if (!hToolTip && (msg == WM_MOUSEMOVE || msg == WM_LBUTTONDOWN)) {
+        hToolTip = CreateWindowEx(WS_EX_TOPMOST, TOOLTIPS_CLASS, NULL,
+            WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP,
+            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+            hWnd, NULL, GetModuleHandle(NULL), NULL);
+        ti.cbSize = sizeof(TOOLINFOW);
+        ti.uFlags = TTF_TRACK | TTF_ABSOLUTE;
+        ti.hwnd = hWnd;
+        ti.uId = 1;
+        ti.lpszText = (LPWSTR)L"";
+        SendMessage(hToolTip, TTM_ADDTOOL, 0, (LPARAM)&ti);
+        
+        SendMessage(hWnd, TBM_SETTOOLTIPS, 0, 0); // Disable native tooltip
+    }
+
+    if (msg == WM_LBUTTONDOWN) {
+        isDragging = true;
+        SetCapture(hWnd);
+        if (hToolTip) SendMessage(hToolTip, TTM_TRACKACTIVATE, TRUE, (LPARAM)&ti);
+    } else if (msg == WM_LBUTTONUP) {
+        if (isDragging) {
+            isDragging = false;
+            ReleaseCapture();
+            if (hToolTip) SendMessage(hToolTip, TTM_TRACKACTIVATE, FALSE, (LPARAM)&ti);
+            return 0;
+        }
+    }
+
+    if (isDragging && (msg == WM_MOUSEMOVE || msg == WM_LBUTTONDOWN)) {
+        RECT clientRc;
+        GetClientRect(hWnd, &clientRc);
+        int thumbW = Scale(10);
+        int xStart = clientRc.left + thumbW / 2 + Scale(2);
+        int xEnd = clientRc.right - thumbW / 2 - Scale(2);
+        int x = (short)LOWORD(lParam);
+        
+        int minPos = (int)SendMessage(hWnd, TBM_GETRANGEMIN, 0, 0);
+        int maxPos = (int)SendMessage(hWnd, TBM_GETRANGEMAX, 0, 0);
+        if (maxPos <= minPos) maxPos = minPos + 1;
+        
+        int newPos = minPos;
+        if (x <= xStart) newPos = minPos;
+        else if (x >= xEnd) newPos = maxPos;
+        else {
+            newPos = minPos + (x - xStart) * (maxPos - minPos) / (xEnd - xStart);
+        }
+        
+        if (newPos != SendMessage(hWnd, TBM_GETPOS, 0, 0) || msg == WM_LBUTTONDOWN) {
+            SendMessage(hWnd, TBM_SETPOS, TRUE, newPos);
+            InvalidateRect(hWnd, NULL, FALSE);
+            SendMessage(GetParent(hWnd), WM_HSCROLL, MAKEWPARAM(TB_THUMBTRACK, newPos), (LPARAM)hWnd);
+            
+            if (hToolTip) {
+                static wchar_t buf[16];
+                swprintf_s(buf, 16, L"%d", newPos);
+                ti.lpszText = buf;
+                SendMessage(hToolTip, TTM_UPDATETIPTEXT, 0, (LPARAM)&ti);
+                
+                int cx = xStart + (xEnd - xStart) * (newPos - minPos) / (maxPos - minPos);
+                POINT pt = { cx, clientRc.top };
+                ClientToScreen(hWnd, &pt);
+                SendMessage(hToolTip, TTM_TRACKPOSITION, 0, MAKELPARAM(pt.x, pt.y - Scale(20)));
+            }
+        }
+        return 0;
+    }
+
+    if (msg == WM_ERASEBKGND) {
+        return 1;
+    }
+    if (msg == WM_PAINT) {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hWnd, &ps);
+        
+        RECT clientRc;
+        GetClientRect(hWnd, &clientRc);
+        
+        // Background
+        HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
+        FillRect(hdc, &clientRc, hBg);
+        DeleteObject(hBg);
+        
+        int cy = (clientRc.top + clientRc.bottom) / 2;
+        int thumbW = Scale(10);
+        int thumbH = Scale(16);
+        
+        // Channel range
+        int xStart = clientRc.left + thumbW / 2 + Scale(2);
+        int xEnd = clientRc.right - thumbW / 2 - Scale(2);
+        
+        // Draw Ticks
+        HPEN hPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
+        HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+        
+        int tick1_Y1 = cy + Scale(4);
+        int tick1_Y2 = tick1_Y1 + Scale(3);
+        int tick2_Y2 = cy - Scale(4);
+        int tick2_Y1 = tick2_Y2 - Scale(3);
+        
+        for (int i = 0; i <= 10; i++) {
+            int x = xStart + (xEnd - xStart) * i / 10;
+            MoveToEx(hdc, x, tick1_Y1, NULL);
+            LineTo(hdc, x, tick1_Y2);
+            MoveToEx(hdc, x, tick2_Y1, NULL);
+            LineTo(hdc, x, tick2_Y2);
+        }
+        SelectObject(hdc, hOldPen);
+        DeleteObject(hPen);
+        
+        // Draw Channel
+        RECT rcChannel = { xStart, cy - Scale(2), xEnd, cy + Scale(2) };
+        DrawScaledButtonBorder(hdc, rcChannel, EDGE_SUNKEN);
+        
+        // Calculate Thumb X
+        int pos = (int)SendMessage(hWnd, TBM_GETPOS, 0, 0);
+        int minPos = (int)SendMessage(hWnd, TBM_GETRANGEMIN, 0, 0);
+        int maxPos = (int)SendMessage(hWnd, TBM_GETRANGEMAX, 0, 0);
+        if (maxPos <= minPos) maxPos = minPos + 1; // Prevent div by 0
+        
+        int cx = xStart + (xEnd - xStart) * (pos - minPos) / (maxPos - minPos);
+        
+        // Draw Thumb
+        RECT rcThumb = { cx - thumbW / 2, cy - thumbH / 2, cx + thumbW / 2, cy + thumbH / 2 };
+        hBg = CreateSolidBrush(RGB(192, 192, 192));
+        FillRect(hdc, &rcThumb, hBg);
+        DeleteObject(hBg);
+        DrawScaledButtonBorder(hdc, rcThumb, EDGE_RAISED);
+        
+        EndPaint(hWnd, &ps);
+        return 0; // Handled
+    }
+    return DefSubclassProc(hWnd, msg, wParam, lParam);
 }
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -6811,17 +7035,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             0, 0, 0, 0, hWnd, (HMENU)1053, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
         g_hVolumeSlider = CreateWindow(TRACKBAR_CLASS, L"",
-            WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_AUTOTICKS | TBS_TOOLTIPS | TBS_FIXEDLENGTH,
+            WS_CHILD | WS_VISIBLE | TBS_HORZ | TBS_AUTOTICKS | TBS_BOTH | TBS_TOOLTIPS | TBS_FIXEDLENGTH,
             0, 0, 0, 0, hWnd, (HMENU)1052, ((LPCREATESTRUCT)lParam)->hInstance, 0);
         SendMessage(g_hVolumeSlider, TBM_SETRANGE, TRUE, MAKELPARAM(0, 100));
         SendMessage(g_hVolumeSlider, TBM_SETTHUMBLENGTH, (WPARAM)Scale(16), 0);
         SendMessage(g_hVolumeSlider, TBM_SETTICFREQ, 10, 0);
         SetWindowTheme(g_hVolumeSlider, L" ", L" ");
+        SetWindowSubclass(g_hVolumeSlider, VolumeSliderSubclassProc, 0, 0);
 
         g_hBtnVideo = CreateWindow(L"BUTTON", L"Video: OFF", 
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
             0, 0, 0, 0, hWnd, (HMENU)1010, ((LPCREATESTRUCT)lParam)->hInstance, 0);
             
+        g_hMaintenanceText = CreateWindowEx(0, L"SysLink", g_maintenanceMsg.c_str(), 
+            WS_CHILD | LWS_TRANSPARENT, 0, 0, 0, 0, hWnd, (HMENU)1060, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+        if (g_hMaintenanceText) {
+            SendMessage(g_hMaintenanceText, WM_SETFONT, (WPARAM)g_hFontBold, TRUE);
+        }
+            
+        std::thread(FetchMaintenanceMessageThread, hWnd).detach();
+        SetTimer(hWnd, 1002, 60 * 60 * 1000, NULL); // 1 hour timer
+        
         InitAudio();
         g_audioMixerRunning = true;
         g_audioMixerThread = std::thread(AudioMixerLoop);
@@ -7448,71 +7682,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_NOTIFY: {
         NMHDR* nmhdr = (NMHDR*)lParam;
-        if (nmhdr->hwndFrom == g_hVolumeSlider && nmhdr->code == NM_CUSTOMDRAW) {
-            NMCUSTOMDRAW* pcd = (NMCUSTOMDRAW*)lParam;
-            if (pcd->dwDrawStage == CDDS_PREPAINT) {
-                HDC hdc = pcd->hdc;
-                RECT rcBg = pcd->rc;
-                HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
-                FillRect(hdc, &rcBg, hBg);
-                DeleteObject(hBg);
-                
-                int savedDC = SaveDC(hdc);
-                RECT rcThumb;
-                SendMessage(g_hVolumeSlider, TBM_GETTHUMBRECT, 0, (LPARAM)&rcThumb);
-                ExcludeClipRect(hdc, rcThumb.left, rcThumb.top, rcThumb.right, rcThumb.bottom);
-                
-                HPEN hPen = CreatePen(PS_SOLID, 1, RGB(100, 100, 100));
-                HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
-                
-                RECT rcChannel;
-                SendMessage(g_hVolumeSlider, TBM_GETCHANNELRECT, 0, (LPARAM)&rcChannel);
-                
-                int thumbW = Scale(10);
-                int xStart = rcChannel.left + thumbW / 2;
-                int xEnd = rcChannel.right - thumbW / 2;
-                
-                int tick1_Y1 = rcChannel.bottom + Scale(3);
-                int tick1_Y2 = tick1_Y1 + Scale(3);
-                
-                int tick2_Y2 = rcChannel.top - Scale(3);
-                int tick2_Y1 = tick2_Y2 - Scale(3);
-                
-                for (int i = 0; i <= 10; i++) {
-                    int x = xStart + (xEnd - xStart) * i / 10;
-                    MoveToEx(hdc, x, tick1_Y1, NULL);
-                    LineTo(hdc, x, tick1_Y2);
-                    MoveToEx(hdc, x, tick2_Y1, NULL);
-                    LineTo(hdc, x, tick2_Y2);
-                }
-                SelectObject(hdc, hOldPen);
-                DeleteObject(hPen);
-                RestoreDC(hdc, savedDC);
-                
-                return CDRF_NOTIFYITEMDRAW;
-            } else if (pcd->dwDrawStage == CDDS_ITEMPREPAINT) {
-                if (pcd->dwItemSpec == TBCD_THUMB) {
-                    HDC hdc = pcd->hdc;
-                    RECT rc = pcd->rc;
-                    int cx = (rc.left + rc.right) / 2;
-                    int w = Scale(10);
-                    rc.left = cx - w / 2;
-                    rc.right = rc.left + w;
-                    HBRUSH hBg = CreateSolidBrush(RGB(192, 192, 192));
-                    FillRect(hdc, &rc, hBg);
-                    DeleteObject(hBg);
-                    DrawScaledButtonBorder(hdc, rc, EDGE_RAISED);
-                    return CDRF_SKIPDEFAULT;
-                } else if (pcd->dwItemSpec == TBCD_CHANNEL) {
-                    HDC hdc = pcd->hdc;
-                    RECT rc = pcd->rc;
-                    rc.top += (rc.bottom - rc.top) / 2 - Scale(2);
-                    rc.bottom = rc.top + Scale(4);
-                    DrawScaledButtonBorder(hdc, rc, EDGE_SUNKEN);
-                    return CDRF_SKIPDEFAULT;
-                } else if (pcd->dwItemSpec == TBCD_TICS) {
-                    return CDRF_SKIPDEFAULT;
-                }
+        if (nmhdr->hwndFrom == g_hMaintenanceText) {
+            if (nmhdr->code == NM_CLICK || nmhdr->code == NM_RETURN) {
+                PNMLINK pNMLink = (PNMLINK)lParam;
+                ShellExecuteW(NULL, L"open", pNMLink->item.szUrl, NULL, NULL, SW_SHOWNORMAL);
+                return 1;
             }
         }
         break;
@@ -7529,7 +7703,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int toolHeight = Scale(24);
         int roomBtnHeight = Scale(30);
 
-        int topHeight = height - inputHeight - toolHeight - margin * 4;
+        int maintenanceHeight = g_maintenanceMsg.empty() ? 0 : Scale(16);
+        int maintenanceMargin = g_maintenanceMsg.empty() ? 0 : Scale(2);
+        int bottomMargin = g_maintenanceMsg.empty() ? margin : (margin - Scale(2));
+
+        int topHeight = height - inputHeight - toolHeight - maintenanceHeight - maintenanceMargin - margin * 3 - bottomMargin;
         int logWidth = width - listWidth - margin * 3;
         
         HDWP hdwp = BeginDeferWindowPos(15);
@@ -7602,6 +7780,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int bottomY = margin * 3 + topHeight + toolHeight;
         hdwp = DeferWindowPos(hdwp, g_hInput, NULL, margin, bottomY, width - btnWidth - margin * 3, inputHeight, SWP_NOZORDER);
         hdwp = DeferWindowPos(hdwp, g_hSendBtn, NULL, width - btnWidth - margin, bottomY, btnWidth, inputHeight, SWP_NOZORDER);
+        
+        int maintenanceY = bottomY + inputHeight + maintenanceMargin + Scale(1);
+        if (!g_maintenanceMsg.empty() && g_hMaintenanceText) {
+            ShowWindow(g_hMaintenanceText, SW_SHOW);
+            hdwp = DeferWindowPos(hdwp, g_hMaintenanceText, NULL, margin, maintenanceY, width - margin * 2, maintenanceHeight, SWP_NOZORDER);
+        } else if (g_hMaintenanceText) {
+            ShowWindow(g_hMaintenanceText, SW_HIDE);
+        }
 
         EndDeferWindowPos(hdwp);
 
@@ -7642,6 +7828,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 InvalidateRect(g_hSpeakerIcon, NULL, FALSE);
                 s_lastMuteState = newMuteState;
             }
+        }
+        return 0;
+    }
+    
+    case WM_APP_MAINTENANCE_MSG: {
+        std::wstring* pMsg = (std::wstring*)lParam;
+        if (pMsg) {
+            SetMaintenanceMessage(*pMsg);
+            delete pMsg;
         }
         return 0;
     }
@@ -7761,6 +7956,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_TIMER: {
+        if (wParam == 1002) {
+            std::thread(FetchMaintenanceMessageThread, hWnd).detach();
+            return 0;
+        }
         if (wParam == 1) {
             // Keep UDP NAT mapping alive with heartbeat
             if (g_sessionId != 0 && g_sock != INVALID_SOCKET) {
@@ -7899,6 +8098,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     case WM_DESTROY:
         g_isAppRunning = false;
         g_isWebcamActive = false;
+        
+        g_audioMixerRunning = false;
+        if (g_hAudioEvent) {
+            SetEvent(g_hAudioEvent);
+        }
+        if (g_audioMixerThread.joinable()) {
+            g_audioMixerThread.join();
+        }
+        
         SendLeaveRequest(g_currentRoom);
         
         if (g_hWebcamThread) {

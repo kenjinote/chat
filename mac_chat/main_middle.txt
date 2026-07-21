@@ -1,0 +1,331 @@
+   550	    if (it != g_videoWindows.end()) {
+   551	        g_videoWindows.erase(it);
+   552	@implementation AppDelegate
+   553	
+   554	- (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
+   555	    // Initialize engines
+   556	    chatNetwork = std::make_unique<ChatNetwork>();
+   557	    audioEngine = std::make_unique<MacAudioEngine>();
+   558	    videoEngine = std::make_unique<MacVideoEngine>();
+   559	- (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
+   560	    // Initialize audio and set callback
+   561	    audioEngine->Initialize();
+   562	    audioEngine->StartPlayback();
+   563	    videoEngine->InitializeDecoder();
+   564	    
+   565	    audioEngine->Initialize();
+   566	    audioEngine->StartPlayback();
+   567	    videoEngine->InitializeDecoder();
+   568	
+   569	    audioEngine->SetAudioCallback([self](const uint8_t* data, size_t size) {
+   570	        self->chatNetwork->SendAudioData(data, size);
+   571	    });
+   572	
+   573	    __weak typeof(self) weakSelf = self;
+   574	    audioEngine->SetVolumeCallback([weakSelf](int volume) {
+   575	        dispatch_async(dispatch_get_main_queue(), ^{
+   576	            AppDelegate *strongSelf = weakSelf;
+   577	            if (strongSelf) {
+   578	                strongSelf.micVolumeIndicator.doubleValue = volume;
+   579	            }
+   580	        });
+   581	    });
+   582	
+   583	    videoEngine->SetVideoCallback([self](const uint8_t* data, size_t size, bool isH264) {
+   584	        self->chatNetwork->SendVideoData(data, size, isH264);
+   585	        
+   586	        NSData *videoData = [NSData dataWithBytes:data length:size];
+   587	        dispatch_async(dispatch_get_main_queue(), ^{
+   588	            auto it = g_videoWindows.find(g_userId);
+   589	            if (it != g_videoWindows.end()) {
+   590	                [it->second processVideoData:(const uint8_t*)videoData.bytes size:videoData.length isH264:isH264];
+   591	            }
+   592	        });
+   593	    });
+   594	
+   595	    chatNetwork->SetAudioReceiveCallback([self](const std::u16string& userId, const uint8_t* data, size_t size) {
+   596	        NSString *nsId = [NSString stringWithCharacters:(const unichar*)userId.c_str() length:userId.length()];
+   597	        if (g_ignoredUsers.find([nsId UTF8String]) != g_ignoredUsers.end()) return;
+   598	        self->audioEngine->ProcessIncomingAudio(data, size);
+   599	        std::string uid = [nsId UTF8String];
+   600	        if (g_ignoredUsers.find(uid) != g_ignoredUsers.end()) return;
+   601	        
+   602	        dispatch_async(dispatch_get_main_queue(), ^{
+   603	            VideoWindowController *controller = nullptr;
+   604	            auto it = g_videoWindows.find(uid);
+   605	            if (it == g_videoWindows.end()) {
+   606	                NSString *uName = nsId;
+   607	                for (const auto& u : g_userList) {
+   608	                    if (u.userId == uid) {
+   609	                        uName = [NSString stringWithUTF8String:u.userName.c_str()];
+   610	                        break;
+   611	                    }
+   612	                }
+   613	                controller = [[VideoWindowController alloc] initWithUserId:nsId userName:uName];
+   614	                g_videoWindows[uid] = controller;
+   615	                [controller showWindow:nil];
+   616	            } else {
+   617	                controller = it->second;
+   618	            }
+   619	            
+   620	            [controller processVideoData:data size:size isH264:isH264];
+   621	        });
+   622	    });
+   623	
+   624	            }
+   625	        });
+   626	    });
+   627	
+   628	    chatNetwork->SetMessageCallback([weakSelf](const std::string& data) {
+   629	        std::string dataCopy = data;
+   630	        CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
+   631	            AppDelegate *strongSelf = weakSelf;
+   632	            if (!strongSelf) return;
+   633	            std::stringstream ss(dataCopy);
+   634	            std::string line;
+   635	            while (std::getline(ss, line)) {
+   636	                while (!line.empty() && (line.back() == '\r' || line.back() == '\n' || line.back() == ' ' || line.back() == '\t')) {
+   637	                    line.pop_back();
+   638	                }
+   639	                if (line.empty()) continue;
+   640	                NSData *jsonData = [NSData dataWithBytes:line.data() length:line.length()];
+   641	                NSError *error = nil;
+   642	                NSDictionary *dict = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&error];
+   643	                if (!error && dict) {
+   644	                    NSString *type = dict[@"type"];
+   645	                    if ([type isEqualToString:@"users"]) {
+   646	                        g_userList.clear();
+   647	                NSData *jsonData = [NSData dataWithBytes:line.data() length:line.length()];
+   648	                NSError *error = nil;
+   649	                NSDictionary *dict = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&error];
+   650	                if (error) {
+   651	                    std::cout << "[DEBUG] JSON parse error: " << [[error localizedDescription] UTF8String] << " on line: " << line << std::endl;
+   652	                }
+   653	                if (!error && dict) {
+   654	                    NSString *type = dict[@"type"];
+   655	                    std::cout << "[DEBUG] SetMessageCallback received type: " << (type ? [type UTF8String] : "null") << std::endl;
+   656	                    if ([type isEqualToString:@"users"]) {
+   657	                        g_userList.clear();
+   658	                        NSArray *users = dict[@"users"];
+   659	                            currentUsers.insert(info.userId);
+   660	                        }
+   661	                        [strongSelf updateUserListUI];
+   662	                        
+   663	                        NSMutableArray *windowsToClose = [NSMutableArray array];
+   664	                        for (auto const& [uid, controller] : g_videoWindows) {
+   665	                            if (currentUsers.find(uid) == currentUsers.end()) {
+   666	                                [windowsToClose addObject:controller];
+   667	                            }
+   668	                        }
+   669	                        for (VideoWindowController *controller in windowsToClose) {
+   670	                            [controller close];
+   671	                        }
+   672	                    } else if ([type isEqualToString:@"join"]) {
+   673	                        UserInfo info;
+   674	                        info.userId = [dict[@"userId"] UTF8String];
+   675	                        info.userName = [dict[@"userName"] UTF8String];
+   676	                        info.color = [dict[@"nclr"] intValue];
+   677	                        
+   678	                        bool found = false;
+   679	                        for (VideoWindowController *controller in windowsToClose) {
+   680	                            [controller close];
+   681	                        }
+   682	                        
+   683	                        NSString *rawName = [NSString stringWithUTF8String:g_localUserName.c_str()];
+   684	                        NSRange hashRange = [rawName rangeOfString:@"#"];
+   685	                        NSString *dispName = (hashRange.location != NSNotFound) ? [rawName substringToIndex:hashRange.location] : rawName;
+   686	                        NSString *roomName = strongSelf.currentRoomName ? strongSelf.currentRoomName : NSLocalizedString(@"IDS_LOBBY", nil);
+   687	                        [strongSelf appendSystemLogMessage:[NSString stringWithFormat:NSLocalizedString(@"IDS_ROOM_ENTER_FMT", nil), dispName, roomName]];
+   688	                        
+   689	                    } else if ([type isEqualToString:@"join"]) {
+   690	                        UserInfo info;
+   691	                        info.userId = [dict[@"userId"] UTF8String];
+   692	                            }
+   693	                        }
+   694	                        if (!found) g_userList.push_back(info);
+   695	                        [strongSelf updateUserListUI];
+   696	                    } else if ([type isEqualToString:@"leave"]) {
+   697	                        std::string uid = [dict[@"userId"] UTF8String];
+   698	                        g_userList.erase(std::remove_if(g_userList.begin(), g_userList.end(), [&](const UserInfo& u) { return u.userId == uid; }), g_userList.end());
+   699	                        [strongSelf updateUserListUI];
+   700	                    } else if ([type isEqualToString:@"rename"]) {
+   701	                        std::string uid = [dict[@"target"] UTF8String];
+   702	                        std::string newName = [dict[@"name"] UTF8String];
+   703	                        for (auto& u : g_userList) {
+   704	                            if (u.userId == uid) {
+   705	                                u.userName = newName;
+   706	                                break;
+   707	                            }
+   708	                        }
+   709	                        }
+   710	                        if (!found) g_userList.push_back(info);
+   711	                        [strongSelf updateUserListUI];
+   712	                        
+   713	                        NSString *rawName = dict[@"userName"];
+   714	                        NSRange hashRange = [rawName rangeOfString:@"#"];
+   715	                        NSString *dispName = (hashRange.location != NSNotFound) ? [rawName substringToIndex:hashRange.location] : rawName;
+   716	                        NSString *roomName = strongSelf.currentRoomName ? strongSelf.currentRoomName : NSLocalizedString(@"IDS_LOBBY", nil);
+   717	                        [strongSelf appendSystemLogMessage:[NSString stringWithFormat:NSLocalizedString(@"IDS_ROOM_ENTER_FMT", nil), dispName, roomName]];
+   718	                        
+   719	                    } else if ([type isEqualToString:@"leave"]) {
+   720	                        std::string uid = [dict[@"userId"] UTF8String];
+   721	                        
+   722	                        NSString *dispName = @"Unknown";
+   723	                        for (const auto& u : g_userList) {
+   724	                            if (u.userId == uid) {
+   725	                                NSString *rawName = [NSString stringWithUTF8String:u.userName.c_str()];
+   726	                                NSRange hashRange = [rawName rangeOfString:@"#"];
+   727	                                dispName = (hashRange.location != NSNotFound) ? [rawName substringToIndex:hashRange.location] : rawName;
+   728	                                break;
+   729	                            }
+   730	                        }
+   731	                        
+   732	                        g_userList.erase(std::remove_if(g_userList.begin(), g_userList.end(), [&](const UserInfo& u) { return u.userId == uid; }), g_userList.end());
+   733	                        [strongSelf updateUserListUI];
+   734	                        
+   735	                        NSString *roomName = strongSelf.currentRoomName ? strongSelf.currentRoomName : NSLocalizedString(@"IDS_LOBBY", nil);
+   736	                        [strongSelf appendSystemLogMessage:[NSString stringWithFormat:NSLocalizedString(@"IDS_ROOM_LEAVE_FMT", nil), dispName, roomName]];
+   737	                        
+   738	                    } else if ([type isEqualToString:@"rename"]) {
+   739	                        std::string uid = [dict[@"target"] UTF8String];
+   740	                        std::string newName = [dict[@"name"] UTF8String];
+   741	                            if (strongSelf->chatNetwork) {
+   742	                                strongSelf->chatNetwork->Connect(newIp, port, 4001);
+   743	                                NSString *room = strongSelf.currentRoomName ? strongSelf.currentRoomName : NSLocalizedString(@"IDS_LOBBY", nil);
+   744	                                NSString *rejoinMsg = [NSString stringWithFormat:@"{\"type\":\"join\", \"secretId\":\"%s\", \"userName\":\"%s\", \"roomName\":\"%@\", \"pub\":true, \"nclr\":0}\n",
+   745	                                                       g_secretId.c_str(), g_localUserName.c_str(), room];
+   746	                                strongSelf->chatNetwork->SendMessage([rejoinMsg UTF8String]);
+   747	                            }
+   748	                        }
+   749	                    } else if ([type isEqualToString:@"rooms"]) {
+   750	                        NSArray *rooms = dict[@"rooms"];
+   751	                        if (rooms) {
+   752	                            g_lastPublicRooms = rooms;
+   753	                            if (g_activeMoveRoomDlg) [g_activeMoveRoomDlg updatePublicRooms:rooms];
+   754	                        }
+   755	                    } else if ([type isEqualToString:@"chat"]) {
+   756	                        NSString *user = dict[@"user"];
+   757	                        std::string senderName = user ? [user UTF8String] : "";
+   758	                        bool isIgnored = false;
+   759	                        for (const auto& u : g_userList) {
+   760	                            if (u.userName == senderName && g_ignoredUsers.find(u.userId) != g_ignoredUsers.end()) {
+   761	                                isIgnored = true;
+   762	                                break;
+   763	                            }
+   764	                        }
+   765	                        if (isIgnored) continue;
+   766	                        NSString *msg = dict[@"msg"];
+   767	                        BOOL b = [dict[@"b"] boolValue];
+   768	                        [strongSelf updateUserListUI];
+   769	                    } else if ([type isEqualToString:@"join_resp"] || [type isEqualToString:@"welcome"]) {
+   770	                        NSString *uid = dict[@"userId"];
+   771	                        if (uid) {
+   772	                            g_userId = [uid UTF8String];
+   773	                        }
+   774	                        if (strongSelf->chatNetwork) {
+   775	                            strongSelf->chatNetwork->SendMessage("{\"type\":\"get_rooms\"}\n");
+   776	                        }
+   777	                    } else if ([type isEqualToString:@"redirect"]) {
+   778	                        NSString *ip = dict[@"ip"];
+   779	                        int port = [dict[@"port"] intValue];
+   780	                        if (sz <= 0) sz = 12;
+   781	                        NSFontTraitMask traits = 0;
+   782	                        if (b) traits |= NSBoldFontMask;
+   783	                        if (i) traits |= NSItalicFontMask;
+   784	                            std::string newIp = [ip UTF8String];
+   785	                            std::cout << "Redirecting to server: " << newIp << ":" << port << std::endl;
+   786	                            if (strongSelf->chatNetwork) {
+   787	                                strongSelf->chatNetwork->Connect(newIp, port, 4001);
+   788	                                
+   789	                                NSString *room = strongSelf.currentRoomName ? strongSelf.currentRoomName : NSLocalizedString(@"IDS_LOBBY", nil);
+   790	                                [strongSelf appendSystemLogMessage:[NSString stringWithFormat:NSLocalizedString(@"IDS_MOVED_TO", nil), room]];
+   791	                                
+   792	                                NSString *rejoinMsg = [NSString stringWithFormat:@"{\"type\":\"join\", \"secretId\":\"%s\", \"userName\":\"%s\", \"roomName\":\"%@\", \"pub\":true, \"nclr\":0}\n",
+   793	                                                       g_secretId.c_str(), g_localUserName.c_str(), room];
+   794	                                strongSelf->chatNetwork->SendMessage([rejoinMsg UTF8String]);
+   795	                                strongSelf->chatNetwork->SendMessage("{\"type\":\"get_rooms\"}\n");
+   796	                            }
+   797	                        }
+   798	                    } else if ([type isEqualToString:@"room_list"] || [type isEqualToString:@"rooms"]) {
+   799	                        NSArray *rooms = dict[@"rooms"];
+   800	                        if (rooms) {
+   801	                            g_lastPublicRooms = rooms;
+   802	                            if (g_activeMoveRoomDlg) {
+   803	                                [g_activeMoveRoomDlg updatePublicRooms:rooms];
+   804	                            }
+   805	                        }
+   806	                    } else if ([type isEqualToString:@"chat"]) {
+   807	                        NSString *user = dict[@"user"];
+   808	                        NSMutableAttributedString *finalStr = [[NSMutableAttributedString alloc] init];
+   809	                        NSDictionary *nameAttrs = @{ NSFontAttributeName: [NSFont systemFontOfSize:12], NSForegroundColorAttributeName: nameColor };
+   810	                        [finalStr appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%@: ", dispName] attributes:nameAttrs]];
+   811	                        [finalStr appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%@\n", msg ? msg : @""] attributes:attrs]];
+   812	                        [[strongSelf.logTextView textStorage] appendAttributedString:finalStr];
+   813	                        [strongSelf.logTextView scrollRangeToVisible:NSMakeRange(strongSelf.logTextView.string.length, 0)];
+   814	                    }
+   815	                        
+   816	                        bool isIgnored = false;
+   817	                        for (const auto& u : g_userList) {
+   818	                            if (u.userName == senderName && g_ignoredUsers.find(u.userId) != g_ignoredUsers.end()) {
+   819	        CFRunLoopWakeUp(CFRunLoopGetMain());
+   820	    });
+   821	                            }
+   822	                        }
+   823	                        if (isIgnored) continue;
+   824	
+   825	                        NSString *msg = dict[@"msg"];
+   826	                        BOOL b = [dict[@"b"] boolValue];
+   827	                        BOOL i = [dict[@"i"] boolValue];
+   828	    NSRect frame = NSMakeRect(0, 0, 800, 600);
+   829	                        int sz = [dict[@"sz"] intValue];
+   830	                        int clr = [dict[@"clr"] intValue];
+   831	                        
+   832	                        CGFloat red = (clr & 0xFF) / 255.0;
+   833	                        CGFloat green = ((clr >> 8) & 0xFF) / 255.0;
+   834	                        CGFloat blue = ((clr >> 16) & 0xFF) / 255.0;
+   835	    
+   836	                        
+   837	                        if (sz <= 0) sz = 12;
+   838	                        
+   839	                        NSFontTraitMask traits = 0;
+   840	                        if (b) traits |= NSBoldFontMask;
+   841	                        if (i) traits |= NSItalicFontMask;
+   842	                        
+   843	                        NSFont *font = [[NSFontManager sharedFontManager] fontWithFamily:@"Helvetica" traits:traits weight:5 size:sz];
+   844	                        if (!font) font = [NSFont systemFontOfSize:sz];
+   845	                        
+   846	                        NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
+   847	                        attrs[NSFontAttributeName] = font;
+   848	                        attrs[NSForegroundColorAttributeName] = textColor;
+   849	                        if (u) {
+   850	                            attrs[NSUnderlineStyleAttributeName] = @(NSUnderlineStyleSingle);
+   851	                        }
+   852	                        
+   853	                        NSString *rawName = dict[@"userName"] ? dict[@"userName"] : (dict[@"user"] ? dict[@"user"] : @"Unknown");
+   854	                        NSRange hashRange = [rawName rangeOfString:@"#"];
+   855	                        NSString *dispName = (hashRange.location != NSNotFound) ? [rawName substringToIndex:hashRange.location] : rawName;
+   856	                        
+   857	                        int nclr = [dict[@"nclr"] intValue];
+   858	                        NSColor *nameColor = [NSColor blackColor];
+   859	                        if (nclr != -1 && nclr != 0xFFFFFFFF) {
+   860	
+   861	    self.userListHeader = [[NSTextField alloc] initWithFrame:NSZeroRect];
+   862	    self.userListHeader.editable = NO;
+   863	    self.userListHeader.bordered = NO;
+   864	    self.userListHeader.drawsBackground = NO;
+   865	    self.userListHeader.alignment = NSTextAlignmentCenter;
+   866	    [self.window.contentView addSubview:self.userListHeader];
+   867	    
+   868	    self.userScroll = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+   869	                            CGFloat nblue = ((nclr >> 16) & 0xFF) / 255.0;
+   870	                            nameColor = [NSColor colorWithCalibratedRed:nred green:ngreen blue:nblue alpha:1.0];
+   871	                        }
+   872	                        
+   873	                        NSMutableAttributedString *finalStr = [[NSMutableAttributedString alloc] init];
+   874	                        NSDictionary *nameAttrs = @{ NSFontAttributeName: [NSFont systemFontOfSize:12], NSForegroundColorAttributeName: nameColor };
+   875	                        [finalStr appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%@: ", dispName] attributes:nameAttrs]];
+   876	    self.userListView.dataSource = self;
+   877	                        
+   878	                        [[strongSelf.logTextView textStorage] appendAttributedString:finalStr];
+   879	                        [strongSelf.logTextView scrollRangeToVisible:NSMakeRange(strongSelf.logTextView.string.length, 0)];
+   880	                    }

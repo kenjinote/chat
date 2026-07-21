@@ -1,0 +1,574 @@
+     1	                    if (layer.intValue == 0 && owner.length > 0 && title.length > 0) {
+     2	                        if ([owner isEqualToString:@"MacChat"] || [owner isEqualToString:@"Terminal"]) continue;
+     3	                        
+     4	                        NSString *menuTitle = [NSString stringWithFormat:@"[%@] %@", owner, title];
+     5	static std::string g_userId = "";
+     6	                        NSAttributedString *attrStr = [[NSAttributedString alloc] initWithHTML:htmlData documentAttributes:nil];
+     7	@class VideoWindowController;
+     8	static std::map<std::string, VideoWindowController*> g_videoWindows;
+     9	
+    10	    extern ChatNetwork *g_chatNetworkInstance;
+    11	    // We will trigger room list refresh
+    12	            std::cout << "[DEBUG] updatePublicRooms adding room: " << [name UTF8String] << " count: " << count << std::endl;
+    13	        }
+    14	    }
+    15	    std::cout << "[DEBUG] updatePublicRooms total rooms updated: " << self.allRooms.count << std::endl;
+    16	    std::cout << "[DEBUG] filterRooms filtered count: " << self.filteredRooms.count << std::endl;
+    17	
+    18	
+    19	    // Initialize engines
+    20	    // Initialize audio and set callback
+    21	        dispatch_async(dispatch_get_main_queue(), ^{
+    22	            VideoWindowController *controller = nullptr;
+    23	            if (it == g_videoWindows.end()) {
+    24	                NSString *uName = nsId;
+    25	                for (const auto& u : g_userList) {
+    26	                    if (u.userId == uid) {
+    27	                        uName = [NSString stringWithUTF8String:u.userName.c_str()];
+    28	                        break;
+    29	                    }
+    30	                }
+    31	                controller = [[VideoWindowController alloc] initWithUserId:nsId userName:uName];
+    32	                g_videoWindows[uid] = controller;
+    33	                [controller showWindow:nil];
+    34	            } else {
+    35	                controller = it->second;
+    36	            }
+    37	            
+    38	            [controller processVideoData:data size:size isH264:isH264];
+    39	                if (error) {
+    40	                    std::cout << "[DEBUG] JSON parse error: " << [[error localizedDescription] UTF8String] << " on line: " << line << std::endl;
+    41	                }
+    42	                    std::cout << "[DEBUG] SetMessageCallback received type: " << (type ? [type UTF8String] : "null") << std::endl;
+    43	                        
+    44	                        NSString *rawName = [NSString stringWithUTF8String:g_localUserName.c_str()];
+    45	                        NSRange hashRange = [rawName rangeOfString:@"#"];
+    46	                        NSString *dispName = (hashRange.location != NSNotFound) ? [rawName substringToIndex:hashRange.location] : rawName;
+    47	                        NSString *roomName = strongSelf.currentRoomName ? strongSelf.currentRoomName : NSLocalizedString(@"IDS_LOBBY", nil);
+    48	                        [strongSelf appendSystemLogMessage:[NSString stringWithFormat:NSLocalizedString(@"IDS_ROOM_ENTER_FMT", nil), dispName, roomName]];
+    49	                        
+    50	                        
+    51	                        NSString *rawName = dict[@"userName"];
+    52	                        NSRange hashRange = [rawName rangeOfString:@"#"];
+    53	                        NSString *dispName = (hashRange.location != NSNotFound) ? [rawName substringToIndex:hashRange.location] : rawName;
+    54	                        NSString *roomName = strongSelf.currentRoomName ? strongSelf.currentRoomName : NSLocalizedString(@"IDS_LOBBY", nil);
+    55	                        [strongSelf appendSystemLogMessage:[NSString stringWithFormat:NSLocalizedString(@"IDS_ROOM_ENTER_FMT", nil), dispName, roomName]];
+    56	                        
+    57	                        
+    58	                        NSString *dispName = @"Unknown";
+    59	                        for (const auto& u : g_userList) {
+    60	                            if (u.userId == uid) {
+    61	                                NSString *rawName = [NSString stringWithUTF8String:u.userName.c_str()];
+    62	                                NSRange hashRange = [rawName rangeOfString:@"#"];
+    63	                                dispName = (hashRange.location != NSNotFound) ? [rawName substringToIndex:hashRange.location] : rawName;
+    64	                                break;
+    65	                            }
+    66	                        }
+    67	                        
+    68	                        
+    69	                        NSString *roomName = strongSelf.currentRoomName ? strongSelf.currentRoomName : NSLocalizedString(@"IDS_LOBBY", nil);
+    70	                        [strongSelf appendSystemLogMessage:[NSString stringWithFormat:NSLocalizedString(@"IDS_ROOM_LEAVE_FMT", nil), dispName, roomName]];
+    71	                        
+    72	                        if (uid) {
+    73	                            g_userId = [uid UTF8String];
+    74	                        }
+    75	                        if (strongSelf->chatNetwork) {
+    76	                            strongSelf->chatNetwork->SendMessage("{\"type\":\"get_rooms\"}\n");
+    77	                        }
+    78	                            std::cout << "Redirecting to server: " << newIp << ":" << port << std::endl;
+    79	                                
+    80	                                [strongSelf appendSystemLogMessage:[NSString stringWithFormat:NSLocalizedString(@"IDS_MOVED_TO", nil), room]];
+    81	                                
+    82	                                strongSelf->chatNetwork->SendMessage("{\"type\":\"get_rooms\"}\n");
+    83	                            }
+    84	                        }
+    85	                    } else if ([type isEqualToString:@"room_list"] || [type isEqualToString:@"rooms"]) {
+    86	                            if (g_activeMoveRoomDlg) {
+    87	                                [g_activeMoveRoomDlg updatePublicRooms:rooms];
+    88	                            }
+    89	                        
+    90	
+    91	                        
+    92	                        
+    93	                        
+    94	                        
+    95	                        
+    96	                        if (u) {
+    97	                            attrs[NSUnderlineStyleAttributeName] = @(NSUnderlineStyleSingle);
+    98	                        }
+    99	                        
+   100	                        
+   101	                        
+   102	                        
+   103	        if (strongSelf && strongSelf->chatNetwork) {
+   104	            std::cout << "[DEBUG] RequestRoomListNotification: Sending get_rooms" << std::endl;
+   105	            strongSelf->chatNetwork->SendMessage("{\"type\":\"get_rooms\"}\n");
+   106	        }
+   107	    }];
+   108	    
+   109	    // Create the main window
+   110	    self.window = [[SnappableWindow alloc] initWithContentRect:frame
+   111	                                                     styleMask:styleMask
+   112	                                                       backing:NSBackingStoreBuffered
+   113	                                                         defer:NO];
+   114	    self.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+   115	    // 1. Chat Log View (NSTextView inside NSScrollView)
+   116	    
+   117	    self.logTextView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+   118	
+   119	    // Move Room Button
+   120	    // User List Header & View
+   121	    self.userListHeader.stringValue = NSLocalizedString(@"IDS_USER_LIST_0", nil);
+   122	    self.userListHeader.font = [NSFont boldSystemFontOfSize:12];
+   123	
+   124	    
+   125	    
+   126	    NSMenu *contextMenu = [[NSMenu alloc] initWithTitle:@"Context"];
+   127	    contextMenu.delegate = self;
+   128	    self.userListView.menu = contextMenu;
+   129	    
+   130	    // Formatting Tools
+   131	    [self.sizeCombo selectItemAtIndex:5]; // Default to 12
+   132	    self.colorWell.color = [NSColor blackColor];
+   133	
+   134	    // Voice & Media Controls
+   135	    self.voiceButton.bezelStyle = NSBezelStyleRounded;
+   136	    self.micVolumeIndicator.minValue = 0;
+   137	    self.micVolumeIndicator.maxValue = 100;
+   138	    self.micVolumeIndicator.doubleValue = 0;
+   139	    self.micVolumeIndicator.warningValue = 80;
+   140	    self.micVolumeIndicator.criticalValue = 95;
+   141	
+   142	    self.volumeSlider.minValue = 0.0;
+   143	    self.volumeSlider.maxValue = 1.0;
+   144	    self.videoButton.bezelStyle = NSBezelStyleRounded;
+   145	
+   146	    // Maintenance View
+   147	    self.maintenanceView.editable = NO;
+   148	    self.maintenanceView.selectable = YES;
+   149	    self.maintenanceView.drawsBackground = NO;
+   150	    self.maintenanceView.linkTextAttributes = @{
+   151	        NSForegroundColorAttributeName: [NSColor systemBlueColor],
+   152	        NSUnderlineStyleAttributeName: @(NSUnderlineStyleSingle),
+   153	        NSCursorAttributeName: [NSCursor pointingHandCursor]
+   154	    };
+   155	
+   156	    // Multiline Input TextView
+   157	    self.inputScroll.hasVerticalScroller = YES;
+   158	    self.inputTextView.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+   159	    self.inputTextView.richText = NO;
+   160	    // Send Button
+   161	    self.sendButton.bezelStyle = NSBezelStyleRegularSquare;
+   162	    // Connect to signaling/chat server
+   163	    std::string serverHost = "chat-lb-2026.japaneast.cloudapp.azure.com";
+   164	    int tcpPort = 4000;
+   165	    int udpPort = 4001;
+   166	
+   167	    if (g_secretId.empty()) {
+   168	        g_secretId = "mac_" + std::to_string(arc4random());
+   169	    }
+   170	    if (g_localUserName.empty()) {
+   171	        g_localUserName = "MacUser#" + std::to_string(1000 + arc4random() % 9000);
+   172	    }
+   173	
+   174	    if (chatNetwork->Connect(serverHost, tcpPort, udpPort)) {
+   175	        std::cout << "Connected to chat server: " << serverHost << std::endl;
+   176	    } else {
+   177	        std::cout << "Failed to connect to primary server " << serverHost << ", trying fallback 127.0.0.1..." << std::endl;
+   178	        if (chatNetwork->Connect("127.0.0.1", tcpPort, udpPort)) {
+   179	            NSString *joinMsg = [NSString stringWithFormat:@"{\"type\":\"join\", \"secretId\":\"%s\", \"userName\":\"%s\", \"roomName\":\"Lobby\", \"pub\":true, \"nclr\":0}\n",
+   180	                                 g_secretId.c_str(), g_localUserName.c_str()];
+   181	            chatNetwork->SendMessage([joinMsg UTF8String]);
+   182	            chatNetwork->SendMessage("{\"type\":\"get_rooms\"}\n");
+   183	        }
+   184	    }
+   185	
+   186	    // Auto-reconnect timer
+   187	    [NSTimer scheduledTimerWithTimeInterval:3.0 repeats:YES block:^(NSTimer * _Nonnull timer) {
+   188	        AppDelegate *strongSelf = weakSelf;
+   189	        if (strongSelf && strongSelf->chatNetwork && !strongSelf->chatNetwork->IsConnected()) {
+   190	            if (strongSelf->chatNetwork->Connect(serverHost, tcpPort, udpPort) || strongSelf->chatNetwork->Connect("127.0.0.1", tcpPort, udpPort)) {
+   191	                NSString *room = strongSelf.currentRoomName ? strongSelf.currentRoomName : NSLocalizedString(@"IDS_LOBBY", nil);
+   192	                NSString *rejoinMsg = [NSString stringWithFormat:@"{\"type\":\"join\", \"secretId\":\"%s\", \"userName\":\"%s\", \"roomName\":\"%@\", \"pub\":true, \"nclr\":0}\n",
+   193	                                       g_secretId.c_str(), g_localUserName.c_str(), room];
+   194	                strongSelf->chatNetwork->SendMessage([rejoinMsg UTF8String]);
+   195	                strongSelf->chatNetwork->SendMessage("{\"type\":\"get_rooms\"}\n");
+   196	            }
+   197	        }
+   198	    }];
+   199	
+   200	    [self fetchMaintenanceMessage];
+   201	    [NSTimer scheduledTimerWithTimeInterval:3600 repeats:YES block:^(NSTimer * _Nonnull timer) {
+   202	        [self fetchMaintenanceMessage];
+   203	    }];
+   204	    std::cout << "Application launched!" << std::endl;
+   205	    NSString *rawName = [NSString stringWithUTF8String:g_localUserName.c_str()];
+   206	    NSRange hashRange = [rawName rangeOfString:@"#"];
+   207	    NSString *dispName = (hashRange.location != NSNotFound) ? [rawName substringToIndex:hashRange.location] : rawName;
+   208	    NSString *joinedMsg = [NSString stringWithFormat:@"%@ (%@)", NSLocalizedString(@"IDS_JOINED_NETWORK", nil), dispName];
+   209	    [self appendSystemLogMessage:joinedMsg];
+   210	    NSURLRequest *request = [NSURLRequest requestWithURL:url cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:10.0];
+   211	    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+   212	            NSError *jsonError = nil;
+   213	            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+   214	            if (!jsonError && [json isKindOfClass:[NSDictionary class]]) {
+   215	                NSString *lang = [[[NSLocale currentLocale] languageCode] isEqualToString:@"ja"] ? @"ja" : @"en";
+   216	                NSString *msg = json[lang];
+   217	                if (!msg || msg.length == 0) msg = json[@"en"];
+   218	                if (!msg || msg.length == 0) msg = json[@"ja"];
+   219	                
+   220	                dispatch_async(dispatch_get_main_queue(), ^{
+   221	                    if (msg && msg.length > 0) {
+   222	                        NSData *htmlData = [msg dataUsingEncoding:NSUTF8StringEncoding];
+   223	                        NSDictionary *options = @{
+   224	                            NSDocumentTypeDocumentAttribute: NSHTMLTextDocumentType,
+   225	                            NSCharacterEncodingDocumentOption: @(NSUTF8StringEncoding)
+   226	                        };
+   227	                        NSAttributedString *attrStr = [[NSAttributedString alloc] initWithData:htmlData options:options documentAttributes:nil error:nil];
+   228	                        if (attrStr) {
+   229	                            NSMutableAttributedString *mutAttrStr = [attrStr mutableCopy];
+   230	                            [mutAttrStr addAttribute:NSFontAttributeName value:[NSFont boldSystemFontOfSize:12] range:NSMakeRange(0, mutAttrStr.length)];
+   231	                            [self.maintenanceView.textStorage setAttributedString:mutAttrStr];
+   232	                            self.maintenanceView.hidden = NO;
+   233	                        }
+   234	                    } else {
+   235	                        self.maintenanceView.hidden = YES;
+   236	                    }
+   237	    
+   238	    CGFloat width = bounds.size.width;
+   239	    CGFloat height = bounds.size.height;
+   240	    
+   241	    CGFloat margin = 5.0;
+   242	    CGFloat inputHeight = 40.0;
+   243	    CGFloat btnWidth = 60.0;
+   244	    CGFloat listWidth = 150.0;
+   245	    CGFloat toolHeight = 24.0;
+   246	    CGFloat roomBtnHeight = 30.0;
+   247	    CGFloat headerHeight = 20.0;
+   248	    
+   249	    CGFloat maintenanceHeight = (!self.maintenanceView || self.maintenanceView.hidden) ? 0.0 : 16.0;
+   250	    CGFloat maintenanceMargin = (maintenanceHeight > 0) ? 2.0 : 0.0;
+   251	    
+   252	    CGFloat topHeight = height - inputHeight - toolHeight - maintenanceHeight - maintenanceMargin - margin * 4;
+   253	    if (topHeight < 50) topHeight = 50;
+   254	    
+   255	    CGFloat logWidth = width - listWidth - margin * 3;
+   256	    if (logWidth < 100) logWidth = 100;
+   257	    
+   258	    CGFloat topPanelBottomY = margin * 3 + inputHeight + toolHeight + maintenanceHeight + maintenanceMargin;
+   259	    
+   260	    // 1. Chat Log
+   261	    self.logScroll.frame = NSMakeRect(margin, topPanelBottomY, logWidth, topHeight);
+   262	    
+   263	    // 2. Right Panel (User Header, User List, Move Room Button)
+   264	    CGFloat rightPanelX = margin * 2 + logWidth;
+   265	    
+   266	    self.userListHeader.frame = NSMakeRect(rightPanelX, topPanelBottomY + topHeight - headerHeight, listWidth, headerHeight);
+   267	    
+   268	    self.moveRoomBtn.frame = NSMakeRect(rightPanelX, topPanelBottomY, listWidth, roomBtnHeight);
+   269	    
+   270	    CGFloat userListY = topPanelBottomY + roomBtnHeight + margin;
+   271	    CGFloat userListHeight = topHeight - roomBtnHeight - headerHeight - margin;
+   272	    if (userListHeight < 30) userListHeight = 30;
+   273	    self.userScroll.frame = NSMakeRect(rightPanelX, userListY, listWidth, userListHeight);
+   274	    
+   275	    // 3. Toolbar Row (Right under Chat Log)
+   276	    CGFloat toolY = margin * 2 + inputHeight + maintenanceHeight + maintenanceMargin;
+   277	    CGFloat currentX = margin;
+   278	    CGFloat gap = 4.0;
+   279	    
+   280	    self.btnB.frame = NSMakeRect(currentX, toolY, 24, toolHeight);
+   281	    currentX += 24 + gap;
+   282	    
+   283	    self.btnI.frame = NSMakeRect(currentX, toolY, 24, toolHeight);
+   284	    currentX += 24 + gap;
+   285	    
+   286	    self.btnU.frame = NSMakeRect(currentX, toolY, 24, toolHeight);
+   287	    currentX += 24 + gap;
+   288	    
+   289	    self.sizeCombo.frame = NSMakeRect(currentX, toolY, 48, toolHeight);
+   290	    currentX += 48 + gap;
+   291	    
+   292	    self.colorWell.frame = NSMakeRect(currentX, toolY, 32, toolHeight);
+   293	    currentX += 32 + gap;
+   294	    
+   295	    self.voiceButton.frame = NSMakeRect(currentX, toolY, 70, toolHeight);
+   296	    currentX += 70 + gap;
+   297	    
+   298	    self.micVolumeIndicator.frame = NSMakeRect(currentX, toolY + (toolHeight - 14) / 2, 70, 14);
+   299	    currentX += 70 + gap;
+   300	    
+   301	    self.volLabel.frame = NSMakeRect(currentX, toolY + (toolHeight - 18) / 2, 55, 18);
+   302	    currentX += 55 + gap;
+   303	    
+   304	    self.volumeSlider.frame = NSMakeRect(currentX, toolY + (toolHeight - 18) / 2, 90, 18);
+   305	    currentX += 90 + gap;
+   306	    
+   307	    self.videoButton.frame = NSMakeRect(currentX, toolY, 75, toolHeight);
+   308	    
+   309	    // 4. Bottom Input & Send Button Area
+   310	    CGFloat bottomY = margin;
+   311	    
+   312	    if (maintenanceHeight > 0) {
+   313	        self.maintenanceView.frame = NSMakeRect(margin, bottomY, width - margin * 2, maintenanceHeight);
+   314	        bottomY += maintenanceHeight + maintenanceMargin;
+   315	    }
+   316	    
+   317	    CGFloat inputWidth = width - btnWidth - margin * 3;
+   318	    if (inputWidth < 100) inputWidth = 100;
+   319	    
+   320	    self.inputScroll.frame = NSMakeRect(margin, bottomY, inputWidth, inputHeight);
+   321	    self.sendButton.frame = NSMakeRect(margin * 2 + inputWidth, bottomY, btnWidth, inputHeight);
+   322	}
+   323	
+   324	- (void)windowDidResize:(NSNotification *)notification {
+   325	    [self layoutControls];
+   326	    NSString *room = self.currentRoomName ? self.currentRoomName : NSLocalizedString(@"IDS_LOBBY", nil);
+   327	    NSString *title = [NSString stringWithFormat:[NSString stringWithFormat:@"%@ - [%%@]", NSLocalizedString(@"IDS_WINDOW_TITLE", nil)], room];
+   328	    bool isBold = self.btnB.state == NSControlStateValueOn;
+   329	    bool isItalic = self.btnI.state == NSControlStateValueOn;
+   330	    bool isUnderline = self.btnU.state == NSControlStateValueOn;
+   331	    
+   332	    int fontSize = 12;
+   333	    NSInteger idx = self.sizeCombo.indexOfSelectedItem;
+   334	    if (idx >= 0 && idx < self.sizeCombo.numberOfItems) {
+   335	        fontSize = [[self.sizeCombo itemObjectValueAtIndex:idx] intValue];
+   336	    } else {
+   337	        fontSize = self.sizeCombo.intValue;
+   338	    }
+   339	    if (fontSize <= 0) fontSize = 12; // fallback
+   340	    
+   341	    if (isBold) traits |= NSBoldFontMask;
+   342	    if (isItalic) traits |= NSItalicFontMask;
+   343	    
+   344	    NSFont *font = [[NSFontManager sharedFontManager] fontWithFamily:@"Helvetica" traits:traits weight:5 size:fontSize];
+   345	    if (!font) font = [NSFont systemFontOfSize:fontSize];
+   346	    
+   347	    NSColor *color = self.colorWell.color;
+   348	    
+   349	    NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
+   350	    if (font) attrs[NSFontAttributeName] = font;
+   351	    if (color) attrs[NSForegroundColorAttributeName] = color;
+   352	    if (isUnderline) {
+   353	        attrs[NSUnderlineStyleAttributeName] = @(NSUnderlineStyleSingle);
+   354	    }
+   355	    
+   356	    [self.inputTextView.textStorage setAttributes:attrs range:NSMakeRange(0, self.inputTextView.string.length)];
+   357	}
+   358	
+   359	- (void)comboBoxSelectionDidChange:(NSNotification *)notification {
+   360	    if (notification.object == self.sizeCombo) {
+   361	        // Need to run on next runloop cycle because the text field value might not be updated yet
+   362	        dispatch_async(dispatch_get_main_queue(), ^{
+   363	            [self onFormatChanged:nil];
+   364	        });
+   365	    }
+   366	    NSString *newText = [NSString stringWithFormat:@"%@\n", message];
+   367	    NSAttributedString *attrStr = [[NSAttributedString alloc] initWithString:newText];
+   368	    [[self.logTextView textStorage] appendAttributedString:attrStr];
+   369	    [self.logTextView scrollRangeToVisible:NSMakeRange(self.logTextView.string.length, 0)];
+   370	    NSString *newText = [NSString stringWithFormat:@"%@\n", message];
+   371	    NSDictionary *attrs = @{ NSFontAttributeName: [NSFont systemFontOfSize:12], NSForegroundColorAttributeName: [NSColor grayColor] };
+   372	    NSAttributedString *attrStr = [[NSAttributedString alloc] initWithString:newText attributes:attrs];
+   373	    [[self.logTextView textStorage] appendAttributedString:attrStr];
+   374	    [self.logTextView scrollRangeToVisible:NSMakeRange(self.logTextView.string.length, 0)];
+   375	    if (msg.length > 0) {
+   376	        bool isBold = self.btnB.state == NSControlStateValueOn;
+   377	        bool isItalic = self.btnI.state == NSControlStateValueOn;
+   378	        bool isUnderline = self.btnU.state == NSControlStateValueOn;
+   379	        
+   380	        int fontSize = 12;
+   381	        NSInteger idx = self.sizeCombo.indexOfSelectedItem;
+   382	        if (idx >= 0 && idx < self.sizeCombo.numberOfItems) {
+   383	            fontSize = [[self.sizeCombo itemObjectValueAtIndex:idx] intValue];
+   384	        } else {
+   385	            fontSize = self.sizeCombo.intValue;
+   386	        }
+   387	        if (fontSize <= 0) fontSize = 12; // fallback
+   388	        
+   389	        CGFloat r, g, b, a;
+   390	        [[self.colorWell.color colorUsingColorSpace:[NSColorSpace sRGBColorSpace]] getRed:&r green:&g blue:&b alpha:&a];
+   391	        int colorInt = ((int)(b * 255) << 16) | ((int)(g * 255) << 8) | (int)(r * 255);
+   392	        
+   393	        // Escape newlines and quotes for raw JSON construction
+   394	        NSString *escapedMsg = [msg stringByReplacingOccurrencesOfString:@"\\" withString:@"\\\\"];
+   395	        escapedMsg = [escapedMsg stringByReplacingOccurrencesOfString:@"\"" withString:@"\\\""];
+   396	        escapedMsg = [escapedMsg stringByReplacingOccurrencesOfString:@"\n" withString:@"\\n"];
+   397	        escapedMsg = [escapedMsg stringByReplacingOccurrencesOfString:@"\r" withString:@""];
+   398	        
+   399	        NSString *jsonStr = [NSString stringWithFormat:
+   400	            @"{\"type\":\"chat\", \"user\":\"%s\", \"msg\":\"%@\", \"b\":%s, \"i\":%s, \"u\":%s, \"sz\":%d, \"clr\":%d, \"nclr\":0}\n",
+   401	            g_localUserName.c_str(),
+   402	            escapedMsg,
+   403	            isBold ? "true" : "false",
+   404	            isItalic ? "true" : "false",
+   405	            isUnderline ? "true" : "false",
+   406	            fontSize,
+   407	            colorInt
+   408	        ];
+   409	        
+   410	        if (chatNetwork) {
+   411	            chatNetwork->SendMessage([jsonStr UTF8String]);
+   412	        }
+   413	        
+   414	        // Local echo to display with formatting
+   415	        NSFontTraitMask traits = 0;
+   416	        if (isBold) traits |= NSBoldFontMask;
+   417	        if (isItalic) traits |= NSItalicFontMask;
+   418	        
+   419	        NSFont *font = [[NSFontManager sharedFontManager] fontWithFamily:@"Helvetica" traits:traits weight:5 size:fontSize];
+   420	        if (!font) font = [NSFont systemFontOfSize:fontSize];
+   421	        
+   422	        NSMutableDictionary *attrs = [NSMutableDictionary dictionary];
+   423	        if (font) attrs[NSFontAttributeName] = font;
+   424	        if (self.colorWell.color) attrs[NSForegroundColorAttributeName] = self.colorWell.color;
+   425	        if (isUnderline) attrs[NSUnderlineStyleAttributeName] = @(NSUnderlineStyleSingle);
+   426	        
+   427	        NSString *rawName = [NSString stringWithUTF8String:g_localUserName.c_str()];
+   428	        NSRange hashRange = [rawName rangeOfString:@"#"];
+   429	        NSString *dispName = (hashRange.location != NSNotFound) ? [rawName substringToIndex:hashRange.location] : rawName;
+   430	        
+   431	        NSMutableAttributedString *finalStr = [[NSMutableAttributedString alloc] init];
+   432	        NSDictionary *nameAttrs = @{ NSFontAttributeName: [NSFont systemFontOfSize:12], NSForegroundColorAttributeName: [NSColor blackColor] };
+   433	        [finalStr appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%@: ", dispName] attributes:nameAttrs]];
+   434	        [finalStr appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%@\n", msg] attributes:attrs]];
+   435	        
+   436	        [[self.logTextView textStorage] appendAttributedString:finalStr];
+   437	        [self.logTextView scrollRangeToVisible:NSMakeRange(self.logTextView.string.length, 0)];
+   438	        
+   439	    if (textView == self.inputTextView) {
+   440	        if (commandSelector == @selector(insertNewline:)) {
+   441	            NSEvent *event = [NSApp currentEvent];
+   442	            if (event.modifierFlags & NSEventModifierFlagControl) {
+   443	                [textView insertText:@"\n" replacementRange:textView.selectedRange];
+   444	                return YES;
+   445	            } else {
+   446	                [self onSendClicked:nil];
+   447	                return YES;
+   448	            }
+   449	        }
+   450	    }
+   451	    if ([self.voiceButton.title isEqualToString:[NSString stringWithFormat:@"%@: OFF", NSLocalizedString(@"IDS_TALK", nil)]]) {
+   452	        self.voiceButton.title = [NSString stringWithFormat:@"%@: ON", NSLocalizedString(@"IDS_TALK", nil)];
+   453	        audioEngine->StartMicrophone();
+   454	    } else {
+   455	        self.voiceButton.title = [NSString stringWithFormat:@"%@: OFF", NSLocalizedString(@"IDS_TALK", nil)];
+   456	        audioEngine->StopMicrophone();
+   457	        self.micVolumeIndicator.doubleValue = 0;
+   458	    }
+   459	    if (audioEngine) {
+   460	        audioEngine->SetPlaybackVolume(self.volumeSlider.floatValue);
+   461	    }
+   462	}
+   463	
+   464	- (void)showLocalVideoWindowWithTitleSuffix:(NSString *)suffix {
+   465	    std::string uname = g_localUserName;
+   466	    NSString *rawName = [NSString stringWithUTF8String:uname.c_str()];
+   467	    NSRange hashRange = [rawName rangeOfString:@"#"];
+   468	    NSString *dispName = (hashRange.location != NSNotFound) ? [rawName substringToIndex:hashRange.location] : rawName;
+   469	    
+   470	    if (suffix) {
+   471	        dispName = [dispName stringByAppendingString:suffix];
+   472	    }
+   473	    
+   474	    if (g_videoWindows.find(g_userId) == g_videoWindows.end()) {
+   475	        VideoWindowController *videoWin = [[VideoWindowController alloc] initWithUserId:[NSString stringWithUTF8String:g_userId.c_str()] userName:dispName];
+   476	        [videoWin showWindow:self];
+   477	        videoWin.window.title = dispName;
+   478	        g_videoWindows[g_userId] = videoWin;
+   479	    } else {
+   480	        [g_videoWindows[g_userId] showWindow:self];
+   481	        [g_videoWindows[g_userId].window makeKeyAndOrderFront:self];
+   482	        g_videoWindows[g_userId].window.title = dispName;
+   483	    }
+   484	    if (g_captureSourceType == 1) {
+   485	        g_captureSourceType = 0;
+   486	        self.videoButton.title = [NSString stringWithFormat:@"%@: OFF", NSLocalizedString(@"IDS_VIDEO_STREAM", nil)];
+   487	        videoEngine->StopCapture();
+   488	        if (g_videoWindows.find(g_userId) != g_videoWindows.end()) {
+   489	            [g_videoWindows[g_userId] close];
+   490	            g_videoWindows.erase(g_userId);
+   491	        }
+   492	    } else {
+   493	        g_captureSourceType = 1;
+   494	        self.videoButton.title = [NSString stringWithFormat:@"%@: ON", NSLocalizedString(@"IDS_VIDEO_STREAM", nil)];
+   495	        [self showLocalVideoWindowWithTitleSuffix:nil];
+   496	        videoEngine->StartCapture();
+   497	    }
+   498	}
+   499	
+   500	- (void)onScreenContextClicked:(id)sender {
+   501	    if (g_captureSourceType == 2) {
+   502	        g_captureSourceType = 0;
+   503	        videoEngine->StopScreenCapture();
+   504	        if (g_videoWindows.find(g_userId) != g_videoWindows.end()) {
+   505	            [g_videoWindows[g_userId] close];
+   506	            g_videoWindows.erase(g_userId);
+   507	        }
+   508	    } else {
+   509	        g_captureSourceType = 2;
+   510	        self.videoButton.title = [NSString stringWithFormat:@"%@: OFF", NSLocalizedString(@"IDS_VIDEO_STREAM", nil)]; // Camera is disabled by engine logic
+   511	        [self showLocalVideoWindowWithTitleSuffix:@" (Screen)"];
+   512	        videoEngine->StartScreenCapture();
+   513	    }
+   514	}
+   515	
+   516	- (void)onWindowShareClicked:(id)sender {
+   517	    NSMenuItem *item = (NSMenuItem*)sender;
+   518	    NSNumber *winId = item.representedObject;
+   519	    if (g_captureSourceType == 3 && g_captureWindowId == winId.unsignedIntValue) {
+   520	        g_captureSourceType = 0;
+   521	        videoEngine->StopWindowCapture();
+   522	        if (g_videoWindows.find(g_userId) != g_videoWindows.end()) {
+   523	            [g_videoWindows[g_userId] close];
+   524	            g_videoWindows.erase(g_userId);
+   525	        }
+   526	    } else {
+   527	        g_captureSourceType = 3;
+   528	        g_captureWindowId = winId.unsignedIntValue;
+   529	        self.videoButton.title = [NSString stringWithFormat:@"%@: OFF", NSLocalizedString(@"IDS_VIDEO_STREAM", nil)];
+   530	        [self showLocalVideoWindowWithTitleSuffix:@" (Window)"];
+   531	        videoEngine->StartWindowCapture(g_captureWindowId);
+   532	    }
+   533	        if (uid == g_userId) {
+   534	            NSMenuItem *camItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"IDS_VIDEO_STREAM", nil) action:@selector(onVideoClicked:) keyEquivalent:@""];
+   535	            [camItem setState:(g_captureSourceType == 1) ? NSControlStateValueOn : NSControlStateValueOff];
+   536	            [menu addItem:camItem];
+   537	            
+   538	            NSMenuItem *shareItem = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"IDS_SCREEN_SHARE", nil) action:nil keyEquivalent:@""];
+   539	            NSMenu *shareMenu = [[NSMenu alloc] initWithTitle:NSLocalizedString(@"IDS_SCREEN_SHARE", nil)];
+   540	            
+   541	            NSMenuItem *fullScreenItem = [[NSMenuItem alloc] initWithTitle:@"Display 1" action:@selector(onScreenContextClicked:) keyEquivalent:@""];
+   542	            [fullScreenItem setState:(g_captureSourceType == 2) ? NSControlStateValueOn : NSControlStateValueOff];
+   543	            [shareMenu addItem:fullScreenItem];
+   544	            
+   545	            [shareMenu addItem:[NSMenuItem separatorItem]];
+   546	            
+   547	            CFArrayRef windowList = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
+   548	            if (windowList) {
+   549	                int winCount = 0;
+   550	                for (int i = 0; i < CFArrayGetCount(windowList); i++) {
+   551	                    CFDictionaryRef dict = (CFDictionaryRef)CFArrayGetValueAtIndex(windowList, i);
+   552	                    NSString *owner = (__bridge NSString *)CFDictionaryGetValue(dict, kCGWindowOwnerName);
+   553	                    NSString *title = (__bridge NSString *)CFDictionaryGetValue(dict, kCGWindowName);
+   554	                    NSNumber *layer = (__bridge NSNumber *)CFDictionaryGetValue(dict, kCGWindowLayer);
+   555	                    
+   556	                    if (layer.intValue == 0 && owner.length > 0) {
+   557	                        if ([owner isEqualToString:@"MacChat"]) continue;
+   558	                        if (!title) title = @"";
+   559	                        
+   560	                        NSString *menuTitle = [NSString stringWithFormat:@"[%@] %@", owner, title.length > 0 ? title : @"(No Title)"];
+   561	                        NSNumber *winId = (__bridge NSNumber *)CFDictionaryGetValue(dict, kCGWindowNumber);
+   562	                        
+   563	                        NSMenuItem *winItem = [[NSMenuItem alloc] initWithTitle:menuTitle action:@selector(onWindowShareClicked:) keyEquivalent:@""];
+   564	                        winItem.representedObject = winId;
+   565	                        [winItem setState:(g_captureSourceType == 3 && g_captureWindowId == winId.unsignedIntValue) ? NSControlStateValueOn : NSControlStateValueOff];
+   566	                        [shareMenu addItem:winItem];
+   567	                        
+   568	                        if (++winCount >= 50) break;
+   569	                    }
+   570	                }
+   571	                CFRelease(windowList);
+   572	            }
+   573	            
+   574	            [shareItem se

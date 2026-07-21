@@ -1,0 +1,40 @@
+- (void)setFrame:(NSRect)frameRect display:(BOOL)flag {
+- (void)processVideoData:(const uint8_t*)data size:(size_t)size isH264:(bool)isH264;
+- (void)drawRect:(NSRect)dirtyRect {
+- (void)updatePublicRooms:(NSArray *)rooms;
+- (void)onTimer:(NSTimer *)timer {
+- (void)updatePublicRooms:(NSArray *)rooms {
+- (void)controlTextDidChange:(NSNotification *)obj {
+- (void)filterRooms {
+- (void)tableViewSelectionDidChange:(NSNotification *)notification {
+- (void)onDoubleClickRow:(id)sender {
+- (void)onOK:(id)sender {
+- (void)onCancel:(id)sender {
+- (void)updateUserListUI;
+- (void)layoutControls;
+- (void)onMoveRoomClicked:(id)sender;
+- (void)onShowRenameDialog:(id)sender;
+- (void)onFormatChanged:(id)sender;
+- (void)updateWindowTitle;
+- (void)processVideoData:(const uint8_t*)data size:(size_t)size isH264:(bool)isH264 {
+- (void)windowWillClose:(NSNotification *)notification {
+- (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
+- (void)updateUserListUI {
+- (void)onMoveRoomClicked:(id)sender {
+- (void)onShowRenameDialog:(id)sender {
+- (void)layoutControls {
+- (void)updateWindowTitle {
+- (void)onFormatChanged:(id)sender {
+- (void)appendLogMessage:(NSString *)message {
+- (void)appendSystemLogMessage:(NSString *)message {
+- (void)onSendClicked:(id)sender {
+- (void)onVoiceClicked:(id)sender {
+- (void)onVolumeSliderChanged:(id)sender {
+- (void)showLocalVideoWindowWithTitleSuffix:(NSString *)suffix {
+- (void)onVideoClicked:(id)sender {
+- (void)onScreenContextClicked:(id)sender {
+- (void)onWindowShareClicked:(id)sender {
+- (void)menuNeedsUpdate:(NSMenu *)menu {
+- (void)onWatchVideoClicked:(id)sender {
+- (void)onBlockClicked:(id)sender {
+- (void)onReportClicked:(id)sender {
