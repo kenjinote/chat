@@ -1,6 +1,6 @@
-set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum macOS deployment version")
+set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum macOS deployment version")
 cmake_minimum_required(VERSION 3.14)
-project(MacChat VERSION 1.0 LANGUAGES CXX OBJCXX)
+project(RetroChat VERSION 1.0 LANGUAGES CXX OBJCXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -19,6 +19,8 @@ find_library(VIDEOTOOLBOX_LIBRARY VideoToolbox)
 find_library(AUDIOTOOLBOX_LIBRARY AudioToolbox)
 find_library(COREAUDIO_LIBRARY CoreAudio)
 
+
+
 set(SOURCES
     main.mm
     ChatNetwork.cpp
@@ -29,16 +31,17 @@ set(SOURCES
 
 file(GLOB_RECURSE RESOURCE_FILES "Resources/*")
 
-add_executable(MacChat MACOSX_BUNDLE ${SOURCES} ${RESOURCE_FILES} Info.plist)
+add_executable(RetroChat MACOSX_BUNDLE ${SOURCES} ${RESOURCE_FILES} Info.plist)
 
-set_target_properties(MacChat PROPERTIES
+set_target_properties(RetroChat PROPERTIES
     XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
     MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/Info.plist
+    XCODE_ATTRIBUTE_ENABLE_HARDENED_RUNTIME "YES"
     RESOURCE "${RESOURCE_FILES}"
 )
-target_compile_options(MacChat PRIVATE -fobjc-arc -Wno-availability -Wno-unguarded-availability -Wno-unguarded-availability-new -Wno-deprecated-declarations -Wno-unavailable-declarations)
+target_compile_options(RetroChat PRIVATE -fobjc-arc -Wno-availability -Wno-unguarded-availability -Wno-unguarded-availability-new -Wno-deprecated-declarations -Wno-unavailable-declarations)
 
-target_link_libraries(MacChat PRIVATE
+target_link_libraries(RetroChat PRIVATE
     ${APPKIT_LIBRARY}
     ${AVFOUNDATION_LIBRARY}
     ${COREMEDIA_LIBRARY}

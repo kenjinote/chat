@@ -10,6 +10,748 @@
 #include <vector>
 #include <memory>
 #include <set>
+
+typedef NS_ENUM(NSInteger, Win95ArrowType) {
+    Win95ArrowNone = 0,
+    Win95ArrowUp,
+    Win95ArrowDown
+};
+
+@interface Win95Button : NSButton
+@property (assign) BOOL isCheckbox;
+@property (assign) BOOL isGreenWhenPressed;
+@property (assign) BOOL isToggleButton;
+@property (assign) BOOL hasMicIcon;
+@property (assign) Win95ArrowType arrowType;
+@end
+@implementation Win95Button
+- (BOOL)isFlipped { return YES; }
+- (instancetype)initWithFrame:(NSRect)frameRect {
+    self = [super initWithFrame:frameRect];
+    if (self) {
+        [self setButtonType:NSButtonTypeMomentaryPushIn];
+    }
+    return self;
+}
+
+- (void)setButtonType:(NSButtonType)type {
+    [super setButtonType:type];
+    if (type == NSButtonTypeSwitch || type == NSButtonTypeRadio) {
+        self.isCheckbox = YES;
+        self.isToggleButton = YES;
+    } else if (type == NSButtonTypePushOnPushOff) {
+        self.isToggleButton = YES;
+    } else {
+        self.isToggleButton = NO;
+    }
+}
+- (void)drawRect:(NSRect)dirtyRect {
+    if (self.isCheckbox) {
+        NSRect bounds = self.bounds;
+        NSRect boxRect = NSMakeRect(0, (bounds.size.height - 13)/2.0, 13, 13);
+        
+        // Background
+        [[NSColor whiteColor] setFill];
+        NSRectFill(boxRect);
+        
+        // Sunken box
+        // Outer Top & Left (Dark Gray)
+        [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set];
+        NSRectFill(NSMakeRect(boxRect.origin.x, boxRect.origin.y, boxRect.size.width, 1)); // Top
+        NSRectFill(NSMakeRect(boxRect.origin.x, boxRect.origin.y, 1, boxRect.size.height)); // Left
+        
+        // Inner Top & Left (Black)
+        [[NSColor blackColor] set];
+        NSRectFill(NSMakeRect(boxRect.origin.x+1, boxRect.origin.y+1, boxRect.size.width-2, 1));
+        NSRectFill(NSMakeRect(boxRect.origin.x+1, boxRect.origin.y+1, 1, boxRect.size.height-2));
+        
+        // Outer Bottom & Right (White)
+        [[NSColor whiteColor] set];
+        NSRectFill(NSMakeRect(boxRect.origin.x, boxRect.origin.y + boxRect.size.height - 1, boxRect.size.width, 1));
+        NSRectFill(NSMakeRect(boxRect.origin.x + boxRect.size.width - 1, boxRect.origin.y, 1, boxRect.size.height));
+        
+        // Inner Bottom & Right (Light Gray)
+        [[NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0] set];
+        NSRectFill(NSMakeRect(boxRect.origin.x+1, boxRect.origin.y + boxRect.size.height - 2, boxRect.size.width-2, 1));
+        NSRectFill(NSMakeRect(boxRect.origin.x + boxRect.size.width - 2, boxRect.origin.y+1, 1, boxRect.size.height-2));
+        
+        if (self.state == NSControlStateValueOn) {
+            [[NSColor blackColor] set];
+            NSBezierPath *path = [NSBezierPath bezierPath];
+            [path moveToPoint:NSMakePoint(boxRect.origin.x + 3, boxRect.origin.y + 6)];
+            [path lineToPoint:NSMakePoint(boxRect.origin.x + 5, boxRect.origin.y + 8)];
+            [path lineToPoint:NSMakePoint(boxRect.origin.x + 10, boxRect.origin.y + 3)];
+            [path setLineWidth:1.5];
+            [path stroke];
+        }
+        
+        NSDictionary *attrs = @{NSFontAttributeName: self.font ? self.font : [NSFont systemFontOfSize:12], NSForegroundColorAttributeName: [NSColor blackColor]};
+        NSSize size = [self.title sizeWithAttributes:attrs];
+        [self.title drawAtPoint:NSMakePoint(18, (bounds.size.height - size.height)/2.0) withAttributes:attrs];
+        return;
+    }
+    
+    NSRect bounds = self.bounds;
+    
+    BOOL pressed = self.isHighlighted;
+    if (self.isToggleButton) {
+        pressed = pressed || (self.state == NSControlStateValueOn);
+    }
+    
+    if (pressed && self.isGreenWhenPressed) {
+        [[NSColor colorWithCalibratedRed:0.0 green:1.0 blue:0.0 alpha:1.0] setFill];
+    } else {
+        [[NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0] setFill];
+    }
+    NSRectFill(bounds);
+    
+    if (pressed) {
+        // Sunken (Pressed)
+        [[NSColor blackColor] set];
+        NSRectFill(NSMakeRect(0, 0, bounds.size.width, 1)); // Top
+        NSRectFill(NSMakeRect(0, 0, 1, bounds.size.height)); // Left
+        
+        [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set];
+        NSRectFill(NSMakeRect(1, 1, bounds.size.width-2, 1)); // Inner Top
+        NSRectFill(NSMakeRect(1, 1, 1, bounds.size.height-2)); // Inner Left
+        
+        [[NSColor whiteColor] set];
+        NSRectFill(NSMakeRect(0, bounds.size.height-1, bounds.size.width, 1)); // Bottom
+        NSRectFill(NSMakeRect(bounds.size.width-1, 0, 1, bounds.size.height)); // Right
+    } else {
+        // Raised (Unpressed)
+        [[NSColor whiteColor] set];
+        NSRectFill(NSMakeRect(0, 0, bounds.size.width, 1)); // Top
+        NSRectFill(NSMakeRect(0, 0, 1, bounds.size.height)); // Left
+        
+        [[NSColor colorWithCalibratedRed:0.85 green:0.85 blue:0.85 alpha:1.0] set];
+        NSRectFill(NSMakeRect(1, 1, bounds.size.width-2, 1)); // Inner Top
+        NSRectFill(NSMakeRect(1, 1, 1, bounds.size.height-2)); // Inner Left
+        
+        [[NSColor blackColor] set];
+        NSRectFill(NSMakeRect(0, bounds.size.height-1, bounds.size.width, 1)); // Bottom
+        NSRectFill(NSMakeRect(bounds.size.width-1, 0, 1, bounds.size.height)); // Right
+        
+        [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set];
+        NSRectFill(NSMakeRect(1, bounds.size.height-2, bounds.size.width-2, 1)); // Inner Bottom
+        NSRectFill(NSMakeRect(bounds.size.width-2, 1, 1, bounds.size.height-2)); // Inner Right
+    }
+    
+    NSMutableParagraphStyle *style = [[NSMutableParagraphStyle alloc] init];
+    style.alignment = NSTextAlignmentCenter;
+    NSDictionary *attrs = @{NSFontAttributeName: self.font ? self.font : [NSFont systemFontOfSize:12],
+                            NSForegroundColorAttributeName: [NSColor blackColor],
+                            NSParagraphStyleAttributeName: style};
+    NSSize size = [self.title sizeWithAttributes:attrs];
+    NSRect titleRect = NSMakeRect(0, (bounds.size.height - size.height) / 2.0, bounds.size.width, size.height);
+    if (pressed) { titleRect.origin.x += 1; titleRect.origin.y += 1; }
+    if (self.hasMicIcon) {
+        // Tightly group mic and text, and exactly center them inside the button
+        CGFloat gap = 2.0; // tighter gap for Windows 95 style
+        CGFloat micWidth = 10.0;
+        CGFloat totalBlockWidth = micWidth + gap + size.width;
+        CGFloat startX = round((bounds.size.width - totalBlockWidth) / 2.0);
+        
+        CGFloat cx = startX + (micWidth / 2.0) - 5.0; // Moved 5px left per user request
+        CGFloat cy = round(bounds.size.height / 2.0);
+        if (pressed) { cx += 1; cy += 1; }
+        
+        // Ensure the title is exactly positioned after the mic
+        titleRect.origin.x = startX + micWidth + gap;
+        titleRect.size.width = size.width; // fix text shifting out of bounds due to center alignment!
+        if (pressed) { titleRect.origin.x += 1; }
+        
+        // Draw Light Gray Inner Head
+        [[NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0] setFill];
+        NSRectFill(NSMakeRect(cx - 1, cy - 5, 3, 6));
+        
+        // Draw Black Outline & Structure
+        [[NSColor blackColor] setFill];
+        
+        // Head Top/Bottom
+        NSRectFill(NSMakeRect(cx - 1, cy - 6, 3, 1));
+        NSRectFill(NSMakeRect(cx - 1, cy + 1, 3, 1));
+        
+        // Head Sides
+        NSRectFill(NSMakeRect(cx - 2, cy - 5, 1, 6));
+        NSRectFill(NSMakeRect(cx + 2, cy - 5, 1, 6));
+        
+        // U-shape Arms
+        NSRectFill(NSMakeRect(cx - 4, cy - 1, 1, 3)); // left arm, y=-1 to 1
+        NSRectFill(NSMakeRect(cx + 4, cy - 1, 1, 3)); // right arm, y=-1 to 1
+        NSRectFill(NSMakeRect(cx - 3, cy + 2, 1, 1)); // left diagonal
+        NSRectFill(NSMakeRect(cx + 3, cy + 2, 1, 1)); // right diagonal
+        NSRectFill(NSMakeRect(cx - 2, cy + 3, 5, 1)); // u-shape bottom
+        
+        // Stem
+        NSRectFill(NSMakeRect(cx, cy + 4, 1, 2));
+        
+        // Base
+        NSRectFill(NSMakeRect(cx - 2, cy + 6, 5, 1));
+        NSRectFill(NSMakeRect(cx - 3, cy + 7, 7, 1));
+    }
+
+    if (self.arrowType != Win95ArrowNone) {
+        [[NSColor blackColor] setFill];
+        CGFloat cx = round(bounds.size.width / 2.0);
+        CGFloat cy = round(bounds.size.height / 2.0);
+        if (pressed) { cx += 1; cy += 1; }
+        
+        if (self.arrowType == Win95ArrowUp) {
+            NSRectFill(NSMakeRect(cx, cy - 2, 1, 1));
+            NSRectFill(NSMakeRect(cx - 1, cy - 1, 3, 1));
+            NSRectFill(NSMakeRect(cx - 2, cy, 5, 1));
+            NSRectFill(NSMakeRect(cx - 3, cy + 1, 7, 1));
+        } else if (self.arrowType == Win95ArrowDown) {
+            NSRectFill(NSMakeRect(cx - 3, cy - 1, 7, 1));
+            NSRectFill(NSMakeRect(cx - 2, cy, 5, 1));
+            NSRectFill(NSMakeRect(cx - 1, cy + 1, 3, 1));
+            NSRectFill(NSMakeRect(cx, cy + 2, 1, 1));
+        }
+    } else if (self.image) {
+        NSSize imgSize = self.image.size;
+        NSRect imgRect = NSMakeRect((bounds.size.width - imgSize.width)/2.0, (bounds.size.height - imgSize.height)/2.0, imgSize.width, imgSize.height);
+        if (pressed) { imgRect.origin.x += 1; imgRect.origin.y += 1; }
+        [self.image drawInRect:imgRect];
+    } else {
+        [self.title drawInRect:titleRect withAttributes:attrs];
+    }
+}
+@end
+
+@interface Win95TextField : NSTextField
+@property (assign) BOOL hasSunkenBorder;
+@end
+@implementation Win95TextField
+- (BOOL)isFlipped { return YES; }
+- (instancetype)initWithFrame:(NSRect)frameRect {
+    self = [super initWithFrame:frameRect];
+    if (self) { 
+        self.bordered = NO; 
+        self.drawsBackground = YES; 
+        self.backgroundColor = [NSColor whiteColor];
+        self.hasSunkenBorder = YES;
+    }
+    return self;
+}
+- (void)drawRect:(NSRect)dirtyRect {
+    NSRect bounds = self.bounds;
+    [super drawRect:dirtyRect];
+    
+    if (self.hasSunkenBorder) {
+        // Sunken border
+        [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set]; // Dark Gray outer top/left
+        NSRectFill(NSMakeRect(0, 0, bounds.size.width, 1));
+        NSRectFill(NSMakeRect(0, 0, 1, bounds.size.height));
+        
+        [[NSColor blackColor] set]; // Black inner top/left
+        NSRectFill(NSMakeRect(1, 1, bounds.size.width-2, 1));
+        NSRectFill(NSMakeRect(1, 1, 1, bounds.size.height-2));
+        
+        [[NSColor whiteColor] set]; // White outer bottom/right
+        NSRectFill(NSMakeRect(0, bounds.size.height-1, bounds.size.width, 1));
+        NSRectFill(NSMakeRect(bounds.size.width-1, 0, 1, bounds.size.height));
+        
+        [[NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0] set]; // Light Gray inner bottom/right
+        NSRectFill(NSMakeRect(1, bounds.size.height-2, bounds.size.width-2, 1));
+        NSRectFill(NSMakeRect(bounds.size.width-2, 1, 1, bounds.size.height-2));
+    }
+}
+@end
+
+@interface Win95Scroller : NSScroller
+@end
+
+@implementation Win95Scroller
++ (BOOL)isCompatibleWithOverlayScrollers {
+    return NO;
+}
+- (instancetype)initWithFrame:(NSRect)frameRect {
+    self = [super initWithFrame:frameRect];
+    if (self) {
+        self.scrollerStyle = NSScrollerStyleLegacy;
+    }
+    return self;
+}
+- (void)drawKnobSlotInRect:(NSRect)slotRect highlight:(BOOL)flag {
+    // Checkerboard or light gray pattern. 
+    // Win95 usually uses a checkered gray for the track, but light gray is acceptable and simpler.
+    // Actually, drawing a checkerboard is very Win95!
+    [[NSColor colorWithCalibratedWhite:0.88 alpha:1.0] setFill];
+    NSRectFill(slotRect);
+    
+    // Draw a quick checkerboard pattern
+    [[NSColor colorWithCalibratedWhite:0.95 alpha:1.0] setFill];
+    NSBezierPath *path = [NSBezierPath bezierPath];
+    for (int y = slotRect.origin.y; y < slotRect.origin.y + slotRect.size.height; y += 2) {
+        for (int x = slotRect.origin.x + (y % 4 == 0 ? 0 : 2); x < slotRect.origin.x + slotRect.size.width; x += 4) {
+            [path appendBezierPathWithRect:NSMakeRect(x, y, 2, 2)];
+        }
+    }
+    [path fill];
+}
+- (void)drawKnob {
+    NSRect knobRect = [self rectForPart:NSScrollerKnob];
+    
+    [[NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0] setFill];
+    NSRectFill(knobRect);
+    
+    // Raised 3D effect
+    // Top & Left
+    [[NSColor whiteColor] set];
+    NSRectFill(NSMakeRect(knobRect.origin.x, knobRect.origin.y, knobRect.size.width, 1));
+    NSRectFill(NSMakeRect(knobRect.origin.x, knobRect.origin.y, 1, knobRect.size.height));
+    
+    // Bottom & Right
+    [[NSColor blackColor] set];
+    NSRectFill(NSMakeRect(knobRect.origin.x, knobRect.origin.y + knobRect.size.height - 1, knobRect.size.width, 1));
+    NSRectFill(NSMakeRect(knobRect.origin.x + knobRect.size.width - 1, knobRect.origin.y, 1, knobRect.size.height));
+    
+    // Inner Top & Left
+    [[NSColor colorWithCalibratedRed:0.85 green:0.85 blue:0.85 alpha:1.0] set];
+    NSRectFill(NSMakeRect(knobRect.origin.x + 1, knobRect.origin.y + 1, knobRect.size.width - 2, 1));
+    NSRectFill(NSMakeRect(knobRect.origin.x + 1, knobRect.origin.y + 1, 1, knobRect.size.height - 2));
+    
+    // Inner Bottom & Right
+    [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set];
+    NSRectFill(NSMakeRect(knobRect.origin.x + 1, knobRect.origin.y + knobRect.size.height - 2, knobRect.size.width - 2, 1));
+    NSRectFill(NSMakeRect(knobRect.origin.x + knobRect.size.width - 2, knobRect.origin.y + 1, 1, knobRect.size.height - 2));
+}
+
+// Deprecated in recent macOS, but try drawing arrows if the OS calls it
+- (void)drawArrow:(NSScrollerArrow)whichArrow highlight:(BOOL)flag {
+    NSRect arrowRect = [self rectForPart:(whichArrow == NSScrollerDecrementArrow ? NSScrollerDecrementLine : NSScrollerIncrementLine)];
+    if (NSIsEmptyRect(arrowRect)) return;
+    
+    if (flag) {
+        [[NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0] setFill];
+        NSRectFill(arrowRect);
+        [[NSColor blackColor] set];
+        NSRectFill(NSMakeRect(arrowRect.origin.x, arrowRect.origin.y, arrowRect.size.width, 1));
+        NSRectFill(NSMakeRect(arrowRect.origin.x, arrowRect.origin.y, 1, arrowRect.size.height));
+        [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set];
+        NSRectFill(NSMakeRect(arrowRect.origin.x+1, arrowRect.origin.y+1, arrowRect.size.width-2, 1));
+        NSRectFill(NSMakeRect(arrowRect.origin.x+1, arrowRect.origin.y+1, 1, arrowRect.size.height-2));
+    } else {
+        [[NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0] setFill];
+        NSRectFill(arrowRect);
+        [[NSColor whiteColor] set];
+        NSRectFill(NSMakeRect(arrowRect.origin.x, arrowRect.origin.y, arrowRect.size.width, 1));
+        NSRectFill(NSMakeRect(arrowRect.origin.x, arrowRect.origin.y, 1, arrowRect.size.height));
+        [[NSColor blackColor] set];
+        NSRectFill(NSMakeRect(arrowRect.origin.x, arrowRect.origin.y + arrowRect.size.height - 1, arrowRect.size.width, 1));
+        NSRectFill(NSMakeRect(arrowRect.origin.x + arrowRect.size.width - 1, arrowRect.origin.y, 1, arrowRect.size.height));
+        [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set];
+        NSRectFill(NSMakeRect(arrowRect.origin.x+1, arrowRect.origin.y + arrowRect.size.height - 2, arrowRect.size.width-2, 1));
+        NSRectFill(NSMakeRect(arrowRect.origin.x + arrowRect.size.width - 2, arrowRect.origin.y+1, 1, arrowRect.size.height-2));
+    }
+    
+    [[NSColor blackColor] setFill];
+    NSBezierPath *path = [NSBezierPath bezierPath];
+    CGFloat cx = NSMidX(arrowRect);
+    CGFloat cy = NSMidY(arrowRect);
+    if (flag) { cx += 1; cy += 1; }
+    
+    if (self.bounds.size.width > self.bounds.size.height) { // Horizontal
+        if (whichArrow == NSScrollerDecrementArrow) {
+            [path moveToPoint:NSMakePoint(cx - 2, cy)];
+            [path lineToPoint:NSMakePoint(cx + 2, cy - 3)];
+            [path lineToPoint:NSMakePoint(cx + 2, cy + 3)];
+        } else {
+            [path moveToPoint:NSMakePoint(cx + 2, cy)];
+            [path lineToPoint:NSMakePoint(cx - 2, cy - 3)];
+            [path lineToPoint:NSMakePoint(cx - 2, cy + 3)];
+        }
+    } else { // Vertical
+        if (whichArrow == NSScrollerDecrementArrow) { // Up
+            [path moveToPoint:NSMakePoint(cx, cy - 2)];
+            [path lineToPoint:NSMakePoint(cx - 3, cy + 2)];
+            [path lineToPoint:NSMakePoint(cx + 3, cy + 2)];
+        } else { // Down
+            [path moveToPoint:NSMakePoint(cx, cy + 2)];
+            [path lineToPoint:NSMakePoint(cx - 3, cy - 2)];
+            [path lineToPoint:NSMakePoint(cx + 3, cy - 2)];
+        }
+    }
+    [path fill];
+}
+@end
+
+@interface Win95ComboBox : NSComboBox
+@end
+@implementation Win95ComboBox
+- (BOOL)isFlipped { return YES; }
+
+- (instancetype)initWithFrame:(NSRect)frameRect {
+    self = [super initWithFrame:frameRect];
+    if (self) {
+        self.bordered = NO;
+        self.backgroundColor = [NSColor whiteColor];
+        self.drawsBackground = YES;
+        self.focusRingType = NSFocusRingTypeNone;
+    }
+    return self;
+}
+
+- (void)drawRect:(NSRect)dirtyRect {
+    [super drawRect:dirtyRect];
+    
+    NSRect bounds = self.bounds;
+    
+    // 1. Draw Sunken Border around the text field part
+    [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set];
+    NSRectFill(NSMakeRect(0, 0, bounds.size.width, 1)); // Top
+    NSRectFill(NSMakeRect(0, 0, 1, bounds.size.height)); // Left
+    
+    [[NSColor blackColor] set];
+    NSRectFill(NSMakeRect(1, 1, bounds.size.width-2, 1));
+    NSRectFill(NSMakeRect(1, 1, 1, bounds.size.height-2));
+    
+    [[NSColor whiteColor] set];
+    NSRectFill(NSMakeRect(0, bounds.size.height - 1, bounds.size.width, 1));
+    NSRectFill(NSMakeRect(bounds.size.width - 1, 0, 1, bounds.size.height));
+    
+    [[NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0] set];
+    NSRectFill(NSMakeRect(1, bounds.size.height - 2, bounds.size.width - 2, 1));
+    NSRectFill(NSMakeRect(bounds.size.width - 2, 1, 1, bounds.size.height - 2));
+    
+    // 2. Draw the Windows 95 button over the right side
+    CGFloat btnWidth = 16.0;
+    NSRect btnRect = NSMakeRect(bounds.size.width - btnWidth - 2, 2, btnWidth, bounds.size.height - 4);
+    
+    // Erase the native macOS blue arrow that bleeds out to the left of our button
+    [[NSColor whiteColor] setFill];
+    NSRect eraseRect = NSMakeRect(btnRect.origin.x - 6, 2, 6, bounds.size.height - 4);
+    NSRectFill(eraseRect);
+    
+    // We cover whatever was drawn under this rectangle
+    [[NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0] setFill];
+    NSRectFill(btnRect);
+    
+    BOOL pressed = [self.cell isHighlighted];
+    
+    // Raised 3D Button Border
+    if (pressed) {
+        [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set];
+        NSRectFill(NSMakeRect(btnRect.origin.x, btnRect.origin.y, btnRect.size.width, 1));
+        NSRectFill(NSMakeRect(btnRect.origin.x, btnRect.origin.y, 1, btnRect.size.height));
+        [[NSColor blackColor] set];
+        NSRectFill(NSMakeRect(btnRect.origin.x+1, btnRect.origin.y+1, btnRect.size.width-2, 1));
+        NSRectFill(NSMakeRect(btnRect.origin.x+1, btnRect.origin.y+1, 1, btnRect.size.height-2));
+    } else {
+        [[NSColor whiteColor] set];
+        NSRectFill(NSMakeRect(btnRect.origin.x, btnRect.origin.y, btnRect.size.width, 1));
+        NSRectFill(NSMakeRect(btnRect.origin.x, btnRect.origin.y, 1, btnRect.size.height));
+        [[NSColor blackColor] set];
+        NSRectFill(NSMakeRect(btnRect.origin.x, btnRect.origin.y + btnRect.size.height - 1, btnRect.size.width, 1));
+        NSRectFill(NSMakeRect(btnRect.origin.x + btnRect.size.width - 1, btnRect.origin.y, 1, btnRect.size.height));
+        [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set];
+        NSRectFill(NSMakeRect(btnRect.origin.x+1, btnRect.origin.y + btnRect.size.height - 2, btnRect.size.width-2, 1));
+        NSRectFill(NSMakeRect(btnRect.origin.x + btnRect.size.width - 2, btnRect.origin.y+1, 1, btnRect.size.height-2));
+    }
+    
+    // Pixel-perfect Down Arrow (centered in the button)
+    CGFloat cx = round(NSMidX(btnRect));
+    CGFloat cy = round(NSMidY(btnRect));
+    if (pressed) { cx += 1; cy += 1; }
+    
+    [[NSColor blackColor] setFill];
+    NSRectFill(NSMakeRect(cx - 3, cy - 1, 7, 1));
+    NSRectFill(NSMakeRect(cx - 2, cy, 5, 1));
+    NSRectFill(NSMakeRect(cx - 1, cy + 1, 3, 1));
+    NSRectFill(NSMakeRect(cx, cy + 2, 1, 1));
+}
+@end
+
+@interface Win95ColorWell : NSControl
+@property (nonatomic, strong) NSColor *color;
+@property (nonatomic, assign) BOOL isPressed;
+@property (nonatomic, strong) NSColor *originalColor;
+@property (nonatomic, assign) BOOL confirmedColor;
+@end
+
+@implementation Win95ColorWell
+
+- (instancetype)initWithFrame:(NSRect)frameRect {
+    self = [super initWithFrame:frameRect];
+    if (self) {
+        _color = [NSColor blackColor]; // Default color
+    }
+    return self;
+}
+
+- (void)setColor:(NSColor *)color {
+    if (_color != color) {
+        _color = color;
+        [self setNeedsDisplay:YES];
+    }
+}
+
+- (BOOL)isFlipped { return YES; }
+
+- (void)onColorPanelOK:(id)sender {
+    self.confirmedColor = YES;
+    [[NSColorPanel sharedColorPanel] close];
+}
+
+- (void)onColorPanelCancel:(id)sender {
+    self.confirmedColor = NO;
+    [[NSColorPanel sharedColorPanel] close];
+}
+
+- (void)mouseDown:(NSEvent *)event {
+    self.isPressed = YES;
+    [self setNeedsDisplay:YES];
+    
+    self.originalColor = self.color;
+    self.confirmedColor = NO;
+    
+    NSColorPanel *panel = [NSColorPanel sharedColorPanel];
+    panel.color = self.color;
+    panel.showsAlpha = NO;
+    
+    // Setup OK / Cancel accessory view
+    NSView *accView = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, panel.frame.size.width, 40)];
+    Win95Button *okBtn = [[Win95Button alloc] initWithFrame:NSMakeRect(accView.bounds.size.width - 160, 8, 70, 24)];
+    okBtn.title = @"OK";
+    okBtn.target = self;
+    okBtn.action = @selector(onColorPanelOK:);
+    [accView addSubview:okBtn];
+    
+    Win95Button *cancelBtn = [[Win95Button alloc] initWithFrame:NSMakeRect(accView.bounds.size.width - 80, 8, 70, 24)];
+    cancelBtn.title = @"キャンセル";
+    cancelBtn.target = self;
+    cancelBtn.action = @selector(onColorPanelCancel:);
+    [accView addSubview:cancelBtn];
+    
+    panel.accessoryView = accView;
+    
+    // Center it on the main window
+    NSRect windowFrame = self.window.frame;
+    NSRect panelFrame = panel.frame;
+    panelFrame.origin.x = windowFrame.origin.x + (windowFrame.size.width - panelFrame.size.width) / 2.0;
+    panelFrame.origin.y = windowFrame.origin.y + (windowFrame.size.height - panelFrame.size.height) / 2.0;
+    [panel setFrame:panelFrame display:YES];
+    
+    id observer = [[NSNotificationCenter defaultCenter] addObserverForName:NSWindowWillCloseNotification object:panel queue:nil usingBlock:^(NSNotification * _Nonnull note) {
+        [NSApp stopModal];
+    }];
+    
+    [NSApp runModalForWindow:panel];
+    
+    [[NSNotificationCenter defaultCenter] removeObserver:observer];
+    panel.accessoryView = nil; // Clean up
+    
+    if (self.confirmedColor) {
+        self.color = panel.color;
+        if (self.action) {
+            [NSApp sendAction:self.action to:self.target from:self];
+        }
+    } else {
+        self.color = self.originalColor;
+    }
+    
+    self.isPressed = NO;
+    [self setNeedsDisplay:YES];
+}
+
+- (void)drawRect:(NSRect)dirtyRect {
+    NSRect bounds = self.bounds;
+    BOOL pressed = self.isPressed;
+    
+    // 1. Draw Button Background
+    [[NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0] setFill];
+    NSRectFill(bounds);
+    
+    // 2. Draw 3D Button Bevel
+    if (pressed) {
+        [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set];
+        NSRectFill(NSMakeRect(0, 0, bounds.size.width, 1));
+        NSRectFill(NSMakeRect(0, 0, 1, bounds.size.height));
+        [[NSColor blackColor] set];
+        NSRectFill(NSMakeRect(1, 1, bounds.size.width-2, 1));
+        NSRectFill(NSMakeRect(1, 1, 1, bounds.size.height-2));
+    } else {
+        [[NSColor whiteColor] set];
+        NSRectFill(NSMakeRect(0, 0, bounds.size.width, 1));
+        NSRectFill(NSMakeRect(0, 0, 1, bounds.size.height));
+        [[NSColor blackColor] set];
+        NSRectFill(NSMakeRect(0, bounds.size.height - 1, bounds.size.width, 1));
+        NSRectFill(NSMakeRect(bounds.size.width - 1, 0, 1, bounds.size.height));
+        [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set];
+        NSRectFill(NSMakeRect(1, bounds.size.height - 2, bounds.size.width-2, 1));
+        NSRectFill(NSMakeRect(bounds.size.width - 2, 1, 1, bounds.size.height-2));
+    }
+    
+    // 3. Draw Square Color Preview
+    CGFloat squareSize = 12.0;
+    NSRect colorRect = NSMakeRect(round((bounds.size.width - squareSize) / 2.0), round((bounds.size.height - squareSize) / 2.0), squareSize, squareSize);
+    
+    if (pressed) {
+        colorRect.origin.x += 1;
+        colorRect.origin.y += 1;
+    }
+    
+    // Black border around the color square
+    [[NSColor blackColor] setFill];
+    NSRect borderRect = NSMakeRect(colorRect.origin.x - 1, colorRect.origin.y - 1, colorRect.size.width + 2, colorRect.size.height + 2);
+    NSRectFill(borderRect);
+    
+    // The actual selected color
+    [self.color setFill];
+    NSRectFill(colorRect);
+}
+@end
+
+@interface Win95EdgeView : NSView
+@end
+@implementation Win95EdgeView
+- (BOOL)isFlipped { return YES; }
+- (void)drawRect:(NSRect)dirtyRect {
+    NSRect bounds = self.bounds;
+    [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] setFill];
+    NSRectFill(NSMakeRect(0, 0, bounds.size.width, 1));
+    NSRectFill(NSMakeRect(0, 0, 1, bounds.size.height));
+    [[NSColor blackColor] setFill];
+    NSRectFill(NSMakeRect(1, 1, bounds.size.width - 2, 1));
+    NSRectFill(NSMakeRect(1, 1, 1, bounds.size.height - 2));
+    [[NSColor whiteColor] setFill];
+    NSRectFill(NSMakeRect(0, bounds.size.height - 1, bounds.size.width, 1));
+    NSRectFill(NSMakeRect(bounds.size.width - 1, 0, 1, bounds.size.height));
+    [[NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0] setFill];
+    NSRectFill(NSMakeRect(1, bounds.size.height - 2, bounds.size.width - 2, 1));
+    NSRectFill(NSMakeRect(bounds.size.width - 2, 1, 1, bounds.size.height - 2));
+}
+@end
+
+@interface Win95HeaderLabel : NSTextField
+@end
+@implementation Win95HeaderLabel
+- (BOOL)isFlipped { return YES; }
+- (instancetype)initWithFrame:(NSRect)frameRect {
+    self = [super initWithFrame:frameRect];
+    if (self) {
+        self.bordered = NO;
+        self.drawsBackground = YES;
+        self.backgroundColor = [NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0];
+    }
+    return self;
+}
+- (void)drawRect:(NSRect)dirtyRect {
+    NSRect bounds = self.bounds;
+    [self.backgroundColor setFill];
+    NSRectFill(bounds);
+    
+    // Half-raised border (1px instead of 2px)
+    [[NSColor whiteColor] setFill]; // Top/Left Outer
+    NSRectFill(NSMakeRect(0, 0, bounds.size.width, 1));
+    NSRectFill(NSMakeRect(0, 0, 1, bounds.size.height));
+    
+    [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] setFill]; // Dark Gray Bottom/Right Outer
+    NSRectFill(NSMakeRect(0, bounds.size.height - 1, bounds.size.width, 1));
+    NSRectFill(NSMakeRect(bounds.size.width - 1, 0, 1, bounds.size.height));
+    
+    [super drawRect:dirtyRect];
+}
+@end
+
+@interface Win95ScrollView : NSScrollView
+@property (strong) Win95Button *vUpBtn;
+@property (strong) Win95Button *vDownBtn;
+@property (strong) NSTimer *scrollTimer;
+@end
+@implementation Win95ScrollView
+- (BOOL)isFlipped { return YES; }
+- (instancetype)initWithFrame:(NSRect)frameRect {
+    self = [super initWithFrame:frameRect];
+    if (self) { 
+        self.borderType = NSNoBorder; 
+        self.drawsBackground = YES; 
+        self.backgroundColor = [NSColor whiteColor]; 
+        
+        Win95Scroller *vScroller = [[Win95Scroller alloc] init];
+        self.verticalScroller = vScroller;
+        
+        self.vUpBtn = [[Win95Button alloc] initWithFrame:NSZeroRect];
+        self.vUpBtn.title = @"";
+        self.vUpBtn.arrowType = Win95ArrowUp;
+        self.vUpBtn.target = self;
+        self.vUpBtn.action = @selector(doScrollUp);
+        [self addSubview:self.vUpBtn];
+        
+        self.vDownBtn = [[Win95Button alloc] initWithFrame:NSZeroRect];
+        self.vDownBtn.title = @"";
+        self.vDownBtn.arrowType = Win95ArrowDown;
+        self.vDownBtn.target = self;
+        self.vDownBtn.action = @selector(doScrollDown);
+        [self addSubview:self.vDownBtn];
+    }
+    return self;
+}
+
+- (void)tile {
+    [super tile];
+    if (self.hasVerticalScroller && self.verticalScroller) {
+        NSRect vsFrame = self.verticalScroller.frame;
+        CGFloat btnHeight = vsFrame.size.width; // square button
+        
+        self.vUpBtn.frame = NSMakeRect(vsFrame.origin.x, vsFrame.origin.y, vsFrame.size.width, btnHeight);
+        self.vDownBtn.frame = NSMakeRect(vsFrame.origin.x, vsFrame.origin.y + vsFrame.size.height - btnHeight, vsFrame.size.width, btnHeight);
+        
+        vsFrame.origin.y += btnHeight;
+        vsFrame.size.height -= btnHeight * 2;
+        self.verticalScroller.frame = vsFrame;
+        
+        self.vUpBtn.hidden = NO;
+        self.vDownBtn.hidden = NO;
+    } else {
+        self.vUpBtn.hidden = YES;
+        self.vDownBtn.hidden = YES;
+    }
+}
+
+- (void)doScrollUp {
+    NSPoint pt = self.contentView.bounds.origin;
+    pt.y -= 20;
+    if (pt.y < 0) pt.y = 0;
+    [self.contentView scrollToPoint:pt];
+    [self reflectScrolledClipView:self.contentView];
+}
+
+- (void)doScrollDown {
+    NSPoint pt = self.contentView.bounds.origin;
+    pt.y += 20;
+    NSRect docRect = [self.documentView frame];
+    NSRect clipRect = [self.contentView bounds];
+    if (pt.y > docRect.size.height - clipRect.size.height) pt.y = docRect.size.height - clipRect.size.height;
+    if (pt.y < 0) pt.y = 0;
+    [self.contentView scrollToPoint:pt];
+    [self reflectScrolledClipView:self.contentView];
+}
+
+- (void)drawRect:(NSRect)dirtyRect {
+    [super drawRect:dirtyRect];
+    NSRect bounds = self.bounds;
+    // Sunken border
+    [[NSColor colorWithCalibratedRed:0.5 green:0.5 blue:0.5 alpha:1.0] set]; // Dark Gray outer top/left
+    NSRectFill(NSMakeRect(0, 0, bounds.size.width, 1));
+    NSRectFill(NSMakeRect(0, 0, 1, bounds.size.height));
+    
+    [[NSColor blackColor] set]; // Black inner top/left
+    NSRectFill(NSMakeRect(1, 1, bounds.size.width-2, 1));
+    NSRectFill(NSMakeRect(1, 1, 1, bounds.size.height-2));
+    
+    [[NSColor whiteColor] set]; // White outer bottom/right
+    NSRectFill(NSMakeRect(0, bounds.size.height-1, bounds.size.width, 1));
+    NSRectFill(NSMakeRect(bounds.size.width-1, 0, 1, bounds.size.height));
+    
+    [[NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0] set]; // Light Gray inner bottom/right
+    NSRectFill(NSMakeRect(1, bounds.size.height-2, bounds.size.width-2, 1));
+    NSRectFill(NSMakeRect(bounds.size.width-2, 1, 1, bounds.size.height-2));
+}
+@end
+
+
 @class VideoWindowController;
 
 #include "ChatNetwork.h"
@@ -241,7 +983,7 @@ static std::vector<UserInfo> g_userList;
         self.iconView = [[UserIconView alloc] initWithFrame:NSMakeRect(2, 2, 24, 24)];
         [self addSubview:self.iconView];
         
-        self.nameLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(28, 2, frameRect.size.width - 30, 24)];
+        self.nameLabel = [[Win95TextField alloc] initWithFrame:NSMakeRect(28, 2, frameRect.size.width - 30, 24)];
         self.nameLabel.editable = NO;
         self.nameLabel.bordered = NO;
         self.nameLabel.drawsBackground = NO;
@@ -278,6 +1020,7 @@ static std::vector<UserInfo> g_userList;
                                                     defer:NO];
     [win setTitle:NSLocalizedString(@"IDS_MOVE_ROOM_TITLE", nil)];
     win.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+    win.backgroundColor = [NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0];
     self = [super initWithWindow:win];
     if (self) {
         self.allRooms = [NSMutableArray array];
@@ -285,17 +1028,20 @@ static std::vector<UserInfo> g_userList;
         NSView *content = win.contentView;
         
         self.selectedRoom = currentRoom ? currentRoom : NSLocalizedString(@"IDS_LOBBY", nil);
-        self.roomField = [[NSTextField alloc] initWithFrame:NSMakeRect(15, 230, 270, 24)];
+        self.roomField = [[Win95TextField alloc] initWithFrame:NSMakeRect(15, 230, 270, 24)];
         self.roomField.stringValue = @"";
         self.roomField.placeholderString = NSLocalizedString(@"IDS_MOVE_ROOM_TITLE", nil);
         self.roomField.delegate = self;
         [content addSubview:self.roomField];
         
-        NSScrollView *scroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(15, 50, 270, 170)];
+        NSScrollView *scroll = [[Win95ScrollView alloc] initWithFrame:NSMakeRect(15, 50, 270, 170)];
         scroll.hasVerticalScroller = YES;
         scroll.autohidesScrollers = YES;
         
         self.roomTableView = [[NSTableView alloc] initWithFrame:scroll.bounds];
+        if (@available(macOS 11.0, *)) { self.roomTableView.style = NSTableViewStylePlain; }
+        self.roomTableView.focusRingType = NSFocusRingTypeNone;
+        self.roomTableView.intercellSpacing = NSMakeSize(0, 0);
         NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:@"RoomCol"];
         col.width = 250;
         [self.roomTableView addTableColumn:col];
@@ -307,20 +1053,20 @@ static std::vector<UserInfo> g_userList;
         scroll.documentView = self.roomTableView;
         [content addSubview:scroll];
         
-        self.privateCheckbox = [[NSButton alloc] initWithFrame:NSMakeRect(15, 15, 90, 25)];
+        self.privateCheckbox = [[Win95Button alloc] initWithFrame:NSMakeRect(15, 15, 90, 25)];
         [self.privateCheckbox setButtonType:NSButtonTypeSwitch];
         self.privateCheckbox.title = NSLocalizedString(@"IDS_PRIVATE", nil);
         self.privateCheckbox.state = NSControlStateValueOff;
         [content addSubview:self.privateCheckbox];
         
-        self.okButton = [[NSButton alloc] initWithFrame:NSMakeRect(135, 12, 70, 30)];
+        self.okButton = [[Win95Button alloc] initWithFrame:NSMakeRect(135, 12, 70, 30)];
         self.okButton.title = @"OK";
         self.okButton.bezelStyle = NSBezelStyleRounded;
         self.okButton.target = self;
         self.okButton.action = @selector(onOK:);
         [content addSubview:self.okButton];
         
-        self.cancelButton = [[NSButton alloc] initWithFrame:NSMakeRect(210, 12, 75, 30)];
+        self.cancelButton = [[Win95Button alloc] initWithFrame:NSMakeRect(210, 12, 75, 30)];
         self.cancelButton.title = NSLocalizedString(@"IDS_CANCEL", nil);
         self.cancelButton.bezelStyle = NSBezelStyleRounded;
         self.cancelButton.target = self;
@@ -387,12 +1133,13 @@ static std::vector<UserInfo> g_userList;
     if (!cell) {
         cell = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 250, 20)];
         cell.identifier = @"RoomCell";
-        cell.editable = NO;
-        cell.bordered = NO;
-        cell.drawsBackground = NO;
-        cell.font = [NSFont systemFontOfSize:13];
-        cell.textColor = [NSColor labelColor];
     }
+    cell.editable = NO;
+    cell.bordered = NO;
+    cell.drawsBackground = NO;
+    cell.font = [NSFont systemFontOfSize:13];
+    cell.textColor = [NSColor labelColor];
+    
     if (row < self.filteredRooms.count) {
         cell.stringValue = self.filteredRooms[row][@"display"];
     }
@@ -446,13 +1193,16 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     std::unique_ptr<MacVideoEngine> videoEngine;
 }
 @property (strong) SnappableWindow *window;
+@property (strong) Win95EdgeView *logEdge;
 @property (strong) NSScrollView *logScroll;
 @property (strong) NSTextView *logTextView;
+@property (strong) Win95EdgeView *inputEdge;
 @property (strong) NSScrollView *inputScroll;
 @property (strong) NSTextView *inputTextView;
-@property (strong) NSTextField *userListHeader;
+@property (strong) Win95HeaderLabel *userListHeader;
+@property (strong) Win95EdgeView *userEdge;
 @property (strong) NSScrollView *userScroll;
-@property (strong) NSTableView *userListView;
+@property (strong) NSTextView *userListView;
 @property (strong) NSButton *sendButton;
 @property (strong) NSButton *voiceButton;
 
@@ -460,7 +1210,7 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
 @property (strong) NSButton *btnI;
 @property (strong) NSButton *btnU;
 @property (strong) NSComboBox *sizeCombo;
-@property (strong) NSColorWell *colorWell;
+@property (strong) Win95ColorWell *colorWell;
 @property (strong) NSButton *moveRoomBtn;
 @property (strong) NSString *currentRoomName;
 @property (strong) NSLevelIndicator *micVolumeIndicator;
@@ -487,6 +1237,7 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     [win setTitle:userName];
     [win center];
     win.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
+    win.backgroundColor = [NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0];
     self = [super initWithWindow:win];
     if (self) {
         self.userId = userId;
@@ -559,6 +1310,21 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
 @end
 
 @implementation AppDelegate
+
+- (void)applicationWillFinishLaunching:(NSNotification *)notification {
+    NSMenu *mainMenu = [[NSMenu alloc] initWithTitle:@"MainMenu"];
+    
+    NSMenuItem *appMenuItem = [[NSMenuItem alloc] initWithTitle:@"" action:nil keyEquivalent:@""];
+    NSMenu *appMenu = [[NSMenu alloc] initWithTitle:@"RetroChat"];
+    
+    NSMenuItem *quitItem = [[NSMenuItem alloc] initWithTitle:@"終了" action:@selector(terminate:) keyEquivalent:@"q"];
+    [appMenu addItem:quitItem];
+    
+    [appMenuItem setSubmenu:appMenu];
+    [mainMenu addItem:appMenuItem];
+    
+    [NSApp setMainMenu:mainMenu];
+}
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
     chatNetwork = std::make_unique<ChatNetwork>();
@@ -795,11 +1561,15 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     NSUInteger styleMask = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable | NSWindowStyleMaskMiniaturizable;
     self.window = [[SnappableWindow alloc] initWithContentRect:frame styleMask:styleMask backing:NSBackingStoreBuffered defer:NO];
     self.window.appearance = [NSAppearance appearanceNamed:NSAppearanceNameAqua];
-    [self.window setTitle:@"MacChat"];
+    self.window.backgroundColor = [NSColor colorWithCalibratedRed:0.75 green:0.75 blue:0.75 alpha:1.0];
+    [self.window setTitle:@"RetroChat"];
     [self.window center];
     self.window.delegate = self;
     
-    self.logScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)];
+    self.logEdge = [[Win95EdgeView alloc] initWithFrame:NSZeroRect];
+    [self.window.contentView addSubview:self.logEdge];
+    self.logScroll = [[Win95ScrollView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)];
+    [self.logEdge addSubview:self.logScroll];
     self.logScroll.hasVerticalScroller = YES;
     NSSize contentSize = [self.logScroll contentSize];
     self.logTextView = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, contentSize.width, contentSize.height)];
@@ -813,54 +1583,52 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     self.logTextView.editable = NO;
     self.logTextView.richText = YES;
     self.logScroll.documentView = self.logTextView;
-    [self.window.contentView addSubview:self.logScroll];
     
-    self.userListHeader = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    
+    self.userListHeader = [[Win95HeaderLabel alloc] initWithFrame:NSZeroRect];
     self.userListHeader.editable = NO;
     self.userListHeader.bordered = NO;
     self.userListHeader.drawsBackground = NO;
     self.userListHeader.alignment = NSTextAlignmentCenter;
     [self.window.contentView addSubview:self.userListHeader];
     
-    self.userScroll = [[NSScrollView alloc] initWithFrame:NSZeroRect];
+    self.userEdge = [[Win95EdgeView alloc] initWithFrame:NSZeroRect];
+    [self.window.contentView addSubview:self.userEdge];
+    self.userScroll = [[Win95ScrollView alloc] initWithFrame:NSZeroRect];
+    [self.userEdge addSubview:self.userScroll];
     self.userScroll.hasVerticalScroller = YES;
-    self.userListView = [[NSTableView alloc] initWithFrame:self.userScroll.bounds];
-    NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:@"Users"];
-    col.width = 150;
-    [self.userListView addTableColumn:col];
-    self.userListView.headerView = nil;
-    self.userListView.dataSource = self;
-    self.userListView.delegate = self;
+    self.userListView = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, self.userScroll.bounds.size.width, self.userScroll.bounds.size.height)];
+    self.userListView.editable = NO;
+    self.userListView.selectable = NO;
+    self.userListView.richText = YES;
+    self.userListView.autoresizingMask = NSViewWidthSizable;
     self.userListView.menu = [[NSMenu alloc] initWithTitle:@"Context"];
     self.userListView.menu.delegate = self;
     self.userScroll.documentView = self.userListView;
-    [self.window.contentView addSubview:self.userScroll];
     
-    self.btnB = [[NSButton alloc] initWithFrame:NSZeroRect];
-    [self.btnB setButtonType:NSButtonTypePushOnPushOff];
+    
+    self.btnB = [[Win95Button alloc] initWithFrame:NSZeroRect];
     self.btnB.bezelStyle = NSBezelStyleRegularSquare;
     self.btnB.title = @"B";
     self.btnB.target = self;
     self.btnB.action = @selector(onFormatChanged:);
     [self.window.contentView addSubview:self.btnB];
     
-    self.btnI = [[NSButton alloc] initWithFrame:NSZeroRect];
-    [self.btnI setButtonType:NSButtonTypePushOnPushOff];
+    self.btnI = [[Win95Button alloc] initWithFrame:NSZeroRect];
     self.btnI.bezelStyle = NSBezelStyleRegularSquare;
     self.btnI.title = @"I";
     self.btnI.target = self;
     self.btnI.action = @selector(onFormatChanged:);
     [self.window.contentView addSubview:self.btnI];
     
-    self.btnU = [[NSButton alloc] initWithFrame:NSZeroRect];
-    [self.btnU setButtonType:NSButtonTypePushOnPushOff];
+    self.btnU = [[Win95Button alloc] initWithFrame:NSZeroRect];
     self.btnU.bezelStyle = NSBezelStyleRegularSquare;
     self.btnU.title = @"U";
     self.btnU.target = self;
     self.btnU.action = @selector(onFormatChanged:);
     [self.window.contentView addSubview:self.btnU];
     
-    self.sizeCombo = [[NSComboBox alloc] initWithFrame:NSZeroRect];
+    self.sizeCombo = [[Win95ComboBox alloc] initWithFrame:NSZeroRect];
     [self.sizeCombo addItemsWithObjectValues:@[@"6", @"8", @"9", @"10", @"11", @"12", @"14", @"16", @"18", @"20", @"22", @"24", @"26", @"28", @"32"]];
     [self.sizeCombo selectItemAtIndex:5];
     self.sizeCombo.target = self;
@@ -868,21 +1636,24 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     self.sizeCombo.delegate = self;
     [self.window.contentView addSubview:self.sizeCombo];
     
-    self.colorWell = [[NSColorWell alloc] initWithFrame:NSZeroRect];
+    self.colorWell = [[Win95ColorWell alloc] initWithFrame:NSZeroRect];
     self.colorWell.target = self;
     self.colorWell.action = @selector(onFormatChanged:);
     [self.window.contentView addSubview:self.colorWell];
     
     self.currentRoomName = NSLocalizedString(@"IDS_LOBBY", nil);
     [self updateWindowTitle];
-    self.moveRoomBtn = [[NSButton alloc] initWithFrame:NSZeroRect];
+    self.moveRoomBtn = [[Win95Button alloc] initWithFrame:NSZeroRect];
     self.moveRoomBtn.title = NSLocalizedString(@"IDS_MOVE_ROOM_BTN", nil);
     self.moveRoomBtn.target = self;
     self.moveRoomBtn.action = @selector(onMoveRoomClicked:);
     [self.window.contentView addSubview:self.moveRoomBtn];
     
-    self.voiceButton = [[NSButton alloc] initWithFrame:NSZeroRect];
-    self.voiceButton.title = [NSString stringWithFormat:@"%@: OFF", NSLocalizedString(@"IDS_TALK", nil)];
+    self.voiceButton = [[Win95Button alloc] initWithFrame:NSZeroRect];
+    [self.voiceButton setButtonType:NSButtonTypePushOnPushOff];
+    ((Win95Button*)self.voiceButton).isGreenWhenPressed = YES;
+    ((Win95Button*)self.voiceButton).hasMicIcon = YES;
+    self.voiceButton.title = NSLocalizedString(@"IDS_TALK", nil);
     self.voiceButton.target = self;
     self.voiceButton.action = @selector(onVoiceClicked:);
     [self.window.contentView addSubview:self.voiceButton];
@@ -898,14 +1669,18 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     self.volumeSlider.action = @selector(onVolumeSliderChanged:);
     [self.window.contentView addSubview:self.volumeSlider];
     
-    self.maintenanceView = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    self.maintenanceView = [[Win95TextField alloc] initWithFrame:NSZeroRect];
     self.maintenanceView.hidden = YES;
     self.maintenanceView.editable = NO;
     self.maintenanceView.bordered = NO;
     self.maintenanceView.drawsBackground = NO;
+    ((Win95TextField*)self.maintenanceView).hasSunkenBorder = NO;
     [self.window.contentView addSubview:self.maintenanceView];
     
-    self.inputScroll = [[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)];
+    self.inputEdge = [[Win95EdgeView alloc] initWithFrame:NSZeroRect];
+    [self.window.contentView addSubview:self.inputEdge];
+    self.inputScroll = [[Win95ScrollView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)];
+    [self.inputEdge addSubview:self.inputScroll];
     self.inputScroll.hasVerticalScroller = YES;
     NSSize inputContentSize = [self.inputScroll contentSize];
     self.inputTextView = [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, inputContentSize.width, inputContentSize.height)];
@@ -920,15 +1695,16 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     self.inputTextView.richText = YES;
     self.inputTextView.delegate = self;
     self.inputScroll.documentView = self.inputTextView;
-    [self.window.contentView addSubview:self.inputScroll];
     
-    self.sendButton = [[NSButton alloc] initWithFrame:NSZeroRect];
+    
+    self.sendButton = [[Win95Button alloc] initWithFrame:NSZeroRect];
     self.sendButton.title = NSLocalizedString(@"IDS_SEND", nil);
     self.sendButton.target = self;
     self.sendButton.action = @selector(onSendClicked:);
     [self.window.contentView addSubview:self.sendButton];
     
     [self layoutControls];
+    [self updateUserListUI]; // Ensure the header displays '0' instead of blank at startup
     [self.window makeKeyAndOrderFront:nil];
     [self onFormatChanged:nil];
     
@@ -976,7 +1752,9 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     CGFloat topPanelBottomY = margin * 3 + inputHeight + toolHeight + maintenanceHeight + maintenanceMargin;
     
     // 1. Chat Log
-    self.logScroll.frame = NSMakeRect(margin, topPanelBottomY, logWidth, topHeight);
+    NSRect logFrame = NSMakeRect(margin, topPanelBottomY, logWidth, topHeight);
+    self.logEdge.frame = logFrame;
+    self.logScroll.frame = NSMakeRect(2, 2, logFrame.size.width - 4, logFrame.size.height - 4);
     
     // 2. Right Panel (User Header, User List, Move Room Button)
     CGFloat rightPanelX = margin * 2 + logWidth;
@@ -988,7 +1766,9 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     CGFloat userListY = topPanelBottomY + roomBtnHeight + margin;
     CGFloat userListHeight = topHeight - roomBtnHeight - headerHeight - margin;
     if (userListHeight < 30) userListHeight = 30;
-    self.userScroll.frame = NSMakeRect(rightPanelX, userListY, listWidth, userListHeight);
+    NSRect userFrame = NSMakeRect(rightPanelX, userListY, listWidth, userListHeight);
+    self.userEdge.frame = userFrame;
+    self.userScroll.frame = NSMakeRect(2, 2, userFrame.size.width - 4, userFrame.size.height - 4);
     
     // 3. Toolbar Row (Right under Chat Log)
     CGFloat toolY = margin * 2 + inputHeight + maintenanceHeight + maintenanceMargin;
@@ -1010,8 +1790,8 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     self.colorWell.frame = NSMakeRect(currentX, toolY, 32, toolHeight);
     currentX += 32 + gap;
     
-    self.voiceButton.frame = NSMakeRect(currentX, toolY, 75, toolHeight);
-    currentX += 80;
+    self.voiceButton.frame = NSMakeRect(currentX, toolY, 65, toolHeight);
+    currentX += 70;
     
     self.micVolumeIndicator.frame = NSMakeRect(currentX, toolY + (toolHeight - 16) / 2, 80, 16);
     currentX += 85;
@@ -1030,7 +1810,9 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     CGFloat inputWidth = width - btnWidth - margin * 3;
     if (inputWidth < 100) inputWidth = 100;
     
-    self.inputScroll.frame = NSMakeRect(margin, bottomY, inputWidth, inputHeight);
+    NSRect inputFrame = NSMakeRect(margin, bottomY, inputWidth, inputHeight);
+    self.inputEdge.frame = inputFrame;
+    self.inputScroll.frame = NSMakeRect(2, 2, inputFrame.size.width - 4, inputFrame.size.height - 4);
     self.sendButton.frame = NSMakeRect(margin * 2 + inputWidth, bottomY, btnWidth, inputHeight);
 }
 
@@ -1039,7 +1821,7 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
 }
 
 - (void)updateWindowTitle {
-    NSString *title = [NSString stringWithFormat:@"MacChat - [%@]", self.currentRoomName];
+    NSString *title = [NSString stringWithFormat:@"RetroChat - [%@]", self.currentRoomName];
     [self.window setTitle:title];
 }
 
@@ -1219,7 +2001,7 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
         self.voiceButton.title = [NSString stringWithFormat:@"%@: ON", NSLocalizedString(@"IDS_TALK", nil)];
         if (audioEngine) audioEngine->StartMicrophone();
     } else {
-        self.voiceButton.title = [NSString stringWithFormat:@"%@: OFF", NSLocalizedString(@"IDS_TALK", nil)];
+        self.voiceButton.title = NSLocalizedString(@"IDS_TALK", nil);
         if (audioEngine) audioEngine->StopMicrophone();
         self.micVolumeIndicator.doubleValue = 0;
     }
@@ -1333,9 +2115,26 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     }
 }
 
+- (NSInteger)clickedRowInUserList {
+    NSPoint pt = [self.window mouseLocationOutsideOfEventStream];
+    NSPoint localPt = [self.userListView convertPoint:pt fromView:nil];
+    NSLayoutManager *layoutManager = self.userListView.layoutManager;
+    NSTextContainer *textContainer = self.userListView.textContainer;
+    NSUInteger glyphIndex = [layoutManager glyphIndexForPoint:localPt inTextContainer:textContainer fractionOfDistanceThroughGlyph:NULL];
+    NSUInteger charIndex = [layoutManager characterIndexForGlyphAtIndex:glyphIndex];
+    NSRect usedRect = [layoutManager usedRectForTextContainer:textContainer];
+    if (localPt.y > NSMaxY(usedRect)) {
+        return -1;
+    }
+    NSString *text = self.userListView.string;
+    NSRange range = NSMakeRange(0, charIndex);
+    NSUInteger row = [[text substringWithRange:range] componentsSeparatedByString:@"\n"].count - 1;
+    return row;
+}
+
 - (void)menuNeedsUpdate:(NSMenu *)menu {
     [menu removeAllItems];
-    NSInteger row = [self.userListView clickedRow];
+    NSInteger row = [self clickedRowInUserList];
     if (row >= 0 && row < g_userList.size()) {
         std::string uid = g_userList[row].userId;
         if (uid == g_userId) {
@@ -1371,7 +2170,7 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
                     NSNumber *layer = (__bridge NSNumber *)CFDictionaryGetValue(dict, kCGWindowLayer);
                     
                     if (layer.intValue == 0 && owner.length > 0) {
-                        if ([owner isEqualToString:@"MacChat"] || [owner isEqualToString:@"Terminal"]) continue;
+                        if ([owner isEqualToString:@"RetroChat"] || [owner isEqualToString:@"Terminal"]) continue;
                         if (!title) title = @"";
                         
                         NSString *menuTitle = [NSString stringWithFormat:@"[%@] %@", owner, title.length > 0 ? title : @"(No Title)"];
@@ -1437,7 +2236,7 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
 }
 
 - (void)onBlockClicked:(id)sender {
-    NSInteger row = self.userListView.clickedRow;
+    NSInteger row = [self clickedRowInUserList];
     if (row >= 0 && row < g_userList.size()) {
         std::string uid = g_userList[row].userId;
         if (g_ignoredUsers.find(uid) == g_ignoredUsers.end()) {
@@ -1452,7 +2251,7 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
 }
 
 - (void)onReportClicked:(id)sender {
-    NSInteger row = self.userListView.clickedRow;
+    NSInteger row = [self clickedRowInUserList];
     if (row >= 0 && row < g_userList.size()) {
         std::string uid = g_userList[row].userId;
         if (chatNetwork) {
@@ -1516,7 +2315,21 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
 }
 
 - (void)updateUserListUI {
-    [self.userListView reloadData];
+    NSMutableAttributedString *attrStr = [[NSMutableAttributedString alloc] init];
+    for (size_t i = 0; i < g_userList.size(); i++) {
+        const UserInfo& u = g_userList[i];
+        NSString *name = [NSString stringWithUTF8String:u.userName.c_str()];
+        NSColor *textColor = [NSColor textColor];
+        if (u.color != -1 && u.color != 0xFFFFFFFF) {
+            CGFloat r = (u.color & 0xFF) / 255.0;
+            CGFloat g = ((u.color >> 8) & 0xFF) / 255.0;
+            CGFloat b = ((u.color >> 16) & 0xFF) / 255.0;
+            textColor = [NSColor colorWithCalibratedRed:r green:g blue:b alpha:1.0];
+        }
+        NSAttributedString *line = [[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"%@\n", name] attributes:@{ NSForegroundColorAttributeName: textColor, NSFontAttributeName: [NSFont systemFontOfSize:13] }];
+        [attrStr appendAttributedString:line];
+    }
+    [[self.userListView textStorage] setAttributedString:attrStr];
     self.userListHeader.stringValue = [NSString stringWithFormat:NSLocalizedString(@"IDS_USER_LIST_FMT", nil), (int)g_userList.size()];
 }
 
@@ -1544,18 +2357,18 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
     
     NSView *container = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 200, 60)];
     
-    NSTextField *input = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 30, 200, 24)];
+    NSTextField *input = [[Win95TextField alloc] initWithFrame:NSMakeRect(0, 30, 200, 24)];
     [input setStringValue:[NSString stringWithUTF8String:g_localUserName.c_str()]];
     [container addSubview:input];
     
-    NSTextField *colorLabel = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 100, 24)];
+    NSTextField *colorLabel = [[Win95TextField alloc] initWithFrame:NSMakeRect(0, 0, 100, 24)];
     colorLabel.stringValue = @"Color:";
     colorLabel.editable = NO;
     colorLabel.bordered = NO;
     colorLabel.drawsBackground = NO;
     [container addSubview:colorLabel];
     
-    NSColorWell *colorWell = [[NSColorWell alloc] initWithFrame:NSMakeRect(100, 0, 50, 24)];
+    Win95ColorWell *colorWell = [[Win95ColorWell alloc] initWithFrame:NSMakeRect(100, 0, 50, 24)];
     colorWell.color = self.colorWell.color;
     [container addSubview:colorWell];
     
@@ -1585,38 +2398,10 @@ static MoveRoomWindowController *g_activeMoveRoomDlg = nil;
 }
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView {
-    if (tableView == self.userListView) {
-        return g_userList.size();
-    }
     return 0;
 }
 
 - (NSView *)tableView:(NSTableView *)tableView viewForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row {
-    if (tableView == self.userListView) {
-        NSTextField *cell = [tableView makeViewWithIdentifier:@"UserCell" owner:self];
-        if (!cell) {
-            cell = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, tableColumn.width, 20)];
-            cell.identifier = @"UserCell";
-            cell.editable = NO;
-            cell.bordered = NO;
-            cell.drawsBackground = NO;
-            cell.font = [NSFont systemFontOfSize:13];
-        }
-        if (row < g_userList.size()) {
-            const UserInfo& u = g_userList[row];
-            cell.stringValue = [NSString stringWithUTF8String:u.userName.c_str()];
-            
-            NSColor *textColor = [NSColor textColor];
-            if (u.color != -1 && u.color != 0xFFFFFFFF) {
-                CGFloat r = (u.color & 0xFF) / 255.0;
-                CGFloat g = ((u.color >> 8) & 0xFF) / 255.0;
-                CGFloat b = ((u.color >> 16) & 0xFF) / 255.0;
-                textColor = [NSColor colorWithCalibratedRed:r green:g blue:b alpha:1.0];
-            }
-            cell.textColor = textColor;
-        }
-        return cell;
-    }
     return nil;
 }
 

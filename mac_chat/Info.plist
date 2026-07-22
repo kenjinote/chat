@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>MacChat</string>
+    <string>RetroChat</string>
     <key>CFBundleIdentifier</key>
-    <string>com.macchat.app</string>
+    <string>com.retrochat.app</string>
     <key>CFBundleName</key>
-    <string>MacChat</string>
+    <string>RetroChat</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -15,11 +15,11 @@
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>NSCameraUsageDescription</key>
-    <string>MacChat requires access to the camera for video chat.</string>
+    <string>RetroChat requires access to the camera for video chat.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>MacChat requires access to the microphone for audio chat.</string>
+    <string>RetroChat requires access to the microphone for audio chat.</string>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>MacChat requires access to screen capture for screen sharing.</string>
+    <string>RetroChat requires access to screen capture for screen sharing.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

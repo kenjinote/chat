@@ -1,0 +1,866 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXAggregateTarget section */
+		1ED16916742091BE7DB64269 /* ZERO_CHECK */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = 516436E2DC8746818E9A7387 /* Build configuration list for PBXAggregateTarget "ZERO_CHECK" */;
+			buildPhases = (
+				161D9A197FAFD7E539892B81 /* Generate CMakeFiles/ZERO_CHECK */,
+			);
+			dependencies = (
+			);
+			name = ZERO_CHECK;
+			productName = ZERO_CHECK;
+		};
+		3F8A878C7DA88913495E7D6B /* ALL_BUILD */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = 49764C1CCF9F4759ACD52D60 /* Build configuration list for PBXAggregateTarget "ALL_BUILD" */;
+			buildPhases = (
+				33A83E6BF27F7C0E3A977DB0 /* Generate CMakeFiles/ALL_BUILD */,
+			);
+			dependencies = (
+				F0747132E0AF4AE48E949847 /* PBXTargetDependency */,
+				9CB83204AC4E43C3982B2036 /* PBXTargetDependency */,
+			);
+			name = ALL_BUILD;
+			productName = ALL_BUILD;
+		};
+/* End PBXAggregateTarget section */
+
+/* Begin PBXBuildFile section */
+		019710A7130E4B3DA8FB2D87 /* /Users/kenji/Desktop/mac_chat/Resources/hi.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 5353B1FD5BAF4EE4AEA8FD92 /* /Users/kenji/Desktop/mac_chat/Resources/hi.lproj/Localizable.strings */; };
+		0C2222CC68EB4057AA1BE6F9 /* /Users/kenji/Desktop/mac_chat/json11.cpp */ = {isa = PBXBuildFile; fileRef = 21B52F65A0F747A2BE85C91D /* /Users/kenji/Desktop/mac_chat/json11.cpp */; };
+		234564A9EE9C4DE99748F39D /* /Users/kenji/Desktop/mac_chat/CMakeLists.txt */ = {isa = PBXBuildFile; fileRef = 4DDE0080AA944DF587170A9F /* /Users/kenji/Desktop/mac_chat/CMakeLists.txt */; };
+		2525EFE23BF740FB889253F1 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreMedia.framework */ = {isa = PBXBuildFile; fileRef = 93BA078D5ECC45E1BE6EBBEE /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreMedia.framework */; };
+		27DAB53C08074A02B97DA46D /* /Users/kenji/Desktop/mac_chat/MacVideoEngine.mm */ = {isa = PBXBuildFile; fileRef = BA3DF1D94F314E68A2FDCF52 /* /Users/kenji/Desktop/mac_chat/MacVideoEngine.mm */; };
+		288C2B2DF21245DB849251A0 /* /Users/kenji/Desktop/mac_chat/main.mm */ = {isa = PBXBuildFile; fileRef = 3C1F4CDEEDD244CC91E966E7 /* /Users/kenji/Desktop/mac_chat/main.mm */; };
+		31AF77D3F9FA478290E8A09B /* /Users/kenji/Desktop/mac_chat/Resources/fr.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 0EFFDDFC49164B33B3499E3E /* /Users/kenji/Desktop/mac_chat/Resources/fr.lproj/Localizable.strings */; };
+		32337E551B3B465785100123 /* /Users/kenji/Desktop/mac_chat/Info.plist */ = {isa = PBXBuildFile; fileRef = AD12F7C2AF6F47C9BB0A4A9D /* /Users/kenji/Desktop/mac_chat/Info.plist */; };
+		39DA568AB3FF45B9A78BEB62 /* /Users/kenji/Desktop/mac_chat/build/CMakeFiles/RetroChat.dir/Info.plist */ = {isa = PBXBuildFile; fileRef = F37E22F5FC9743248D9B208A /* /Users/kenji/Desktop/mac_chat/build/CMakeFiles/RetroChat.dir/Info.plist */; };
+		4D60498F95C145E59E9DD333 /* /Users/kenji/Desktop/mac_chat/Resources/ru.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 1714899285634ADF97AB6EA9 /* /Users/kenji/Desktop/mac_chat/Resources/ru.lproj/Localizable.strings */; };
+		57E8A26D6B414D1EB092611C /* /Users/kenji/Desktop/mac_chat/Resources/de.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = A621D19DBACA435DA133BDB9 /* /Users/kenji/Desktop/mac_chat/Resources/de.lproj/Localizable.strings */; };
+		582A3237FF41442585CBC7F3 /* /Users/kenji/Desktop/mac_chat/ChatNetwork.cpp */ = {isa = PBXBuildFile; fileRef = F1A1A917979C421D924EA86C /* /Users/kenji/Desktop/mac_chat/ChatNetwork.cpp */; };
+		7048919708CA4F79B8E4D3D8 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/QuartzCore.framework */ = {isa = PBXBuildFile; fileRef = 9398C5BB5CAA4E278D247214 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/QuartzCore.framework */; };
+		724AAFF98F4541B5AD9569FA /* /Users/kenji/Desktop/mac_chat/Resources/pt.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = E6D44F6987BF436183674BEE /* /Users/kenji/Desktop/mac_chat/Resources/pt.lproj/Localizable.strings */; };
+		74F9BD2BF4414898AAD230AA /* /Users/kenji/Desktop/mac_chat/Resources/ja.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 477D7D9CE32F4B11B8695D09 /* /Users/kenji/Desktop/mac_chat/Resources/ja.lproj/Localizable.strings */; };
+		7C7CF93050944FAB96681BFD /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreAudio.framework */ = {isa = PBXBuildFile; fileRef = 765AA0F6C7EE4BA7AFC8CBBD /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreAudio.framework */; };
+		85288A79B4C4499095FF9BC7 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AudioToolbox.framework */ = {isa = PBXBuildFile; fileRef = CEBA78214F294176BDB770E4 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AudioToolbox.framework */; };
+		85E53AF94748475A8FFB2351 /* /Users/kenji/Desktop/mac_chat/Resources/zh-Hant.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = C9B2A023843446D3B04DEFC8 /* /Users/kenji/Desktop/mac_chat/Resources/zh-Hant.lproj/Localizable.strings */; };
+		867ACF358B7D4EF7B5D3F1FC /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AVFoundation.framework */ = {isa = PBXBuildFile; fileRef = 90C8CB4FD4CC4003836E0308 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AVFoundation.framework */; };
+		89EF4FF321F14345A4300B6A /* /Users/kenji/Desktop/mac_chat/Resources/it.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 6AD48E4BA88F4C66930E68DB /* /Users/kenji/Desktop/mac_chat/Resources/it.lproj/Localizable.strings */; };
+		8DDFDD3ACD624341BF339C99 /* /Users/kenji/Desktop/mac_chat/Resources/vi.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 5AF293A2A10C49D794ABFEFF /* /Users/kenji/Desktop/mac_chat/Resources/vi.lproj/Localizable.strings */; };
+		8FD4331D8C0E46E2BF0C2B24 /* /Users/kenji/Desktop/mac_chat/MacAudioEngine.mm */ = {isa = PBXBuildFile; fileRef = 518836D555B541C48AAF8899 /* /Users/kenji/Desktop/mac_chat/MacAudioEngine.mm */; };
+		917056BF53634212BAA75C86 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AppKit.framework */ = {isa = PBXBuildFile; fileRef = 0C47E9FCCC5943D6AA6D226F /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AppKit.framework */; };
+		940A545F939D49C59FFC6CEA /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/VideoToolbox.framework */ = {isa = PBXBuildFile; fileRef = D85C86F9815445159A6E7B66 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/VideoToolbox.framework */; };
+		97B7B2D8B19E4A368F383A6B /* /Users/kenji/Desktop/mac_chat/Resources/es.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 7BBFE1F5C3154719992DFCC1 /* /Users/kenji/Desktop/mac_chat/Resources/es.lproj/Localizable.strings */; };
+		C403896D84874177AD6EC98B /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreVideo.framework */ = {isa = PBXBuildFile; fileRef = 5E9700541F454BC7B1C970FA /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreVideo.framework */; };
+		CC993085D3D049F0ADC29FEE /* /Users/kenji/Desktop/mac_chat/Resources/zh-Hans.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = DBA552FC2DF743B18AB307A2 /* /Users/kenji/Desktop/mac_chat/Resources/zh-Hans.lproj/Localizable.strings */; };
+		DFE03AD53CAB4740B23EE870 /* /Users/kenji/Desktop/mac_chat/Resources/ko.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 87AB672EB5FE4541A5B46AFD /* /Users/kenji/Desktop/mac_chat/Resources/ko.lproj/Localizable.strings */; };
+		E972F70A007E4700AA74199C /* /Users/kenji/Desktop/mac_chat/Resources/id.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 1454EB77A3E54D9CA79B411C /* /Users/kenji/Desktop/mac_chat/Resources/id.lproj/Localizable.strings */; };
+		F310A31159074DD9B7D6C5B8 /* /Users/kenji/Desktop/mac_chat/Resources/tr.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 529FD96A488149698121D5B6 /* /Users/kenji/Desktop/mac_chat/Resources/tr.lproj/Localizable.strings */; };
+		F59D143BE3704657887268D3 /* /Users/kenji/Desktop/mac_chat/Resources/en.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 0D78EA80E9234FB79F689033 /* /Users/kenji/Desktop/mac_chat/Resources/en.lproj/Localizable.strings */; };
+		FADC68DB042B4BD484AE62B5 /* /Users/kenji/Desktop/mac_chat/Resources/bn.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 9E6062B3628C490989BC65BF /* /Users/kenji/Desktop/mac_chat/Resources/bn.lproj/Localizable.strings */; };
+		FB1407E4818C410F8F8E25F6 /* /Users/kenji/Desktop/mac_chat/Resources/ar.lproj/Localizable.strings */ = {isa = PBXBuildFile; fileRef = 3A0A3F0F6CAF48B4A39887ED /* /Users/kenji/Desktop/mac_chat/Resources/ar.lproj/Localizable.strings */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXBuildStyle section */
+		5EA17199E5B842A29AF14C19 /* Release */ = {
+			isa = PBXBuildStyle;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+			};
+			name = Release;
+		};
+		6719D42DCCAA4440B8D3E893 /* MinSizeRel */ = {
+			isa = PBXBuildStyle;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+			};
+			name = MinSizeRel;
+		};
+		EF03557A46994F9381E42166 /* Debug */ = {
+			isa = PBXBuildStyle;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+			};
+			name = Debug;
+		};
+		FEC04EFA06044F2980ECF6FB /* RelWithDebInfo */ = {
+			isa = PBXBuildStyle;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+			};
+			name = RelWithDebInfo;
+		};
+/* End PBXBuildStyle section */
+
+/* Begin PBXContainerItemProxy section */
+		236FE772E37B4081894CAACC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D836985D12144432A2626223 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 71BFFFAB84F685047744A8F6;
+			remoteInfo = RetroChat;
+		};
+		41ABC61DFD0B432B90A43E43 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D836985D12144432A2626223 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1ED16916742091BE7DB64269;
+			remoteInfo = ZERO_CHECK;
+		};
+		B066E008348E415FA964A684 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D836985D12144432A2626223 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1ED16916742091BE7DB64269;
+			remoteInfo = ZERO_CHECK;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0C47E9FCCC5943D6AA6D226F /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AppKit.framework */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AppKit.framework; sourceTree = "<absolute>"; };
+		0D78EA80E9234FB79F689033 /* /Users/kenji/Desktop/mac_chat/Resources/en.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/en.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		0EFFDDFC49164B33B3499E3E /* /Users/kenji/Desktop/mac_chat/Resources/fr.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/fr.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		1454EB77A3E54D9CA79B411C /* /Users/kenji/Desktop/mac_chat/Resources/id.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/id.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		1714899285634ADF97AB6EA9 /* /Users/kenji/Desktop/mac_chat/Resources/ru.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/ru.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		21B52F65A0F747A2BE85C91D /* /Users/kenji/Desktop/mac_chat/json11.cpp */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; name = json11.cpp; path = json11.cpp; sourceTree = SOURCE_ROOT; };
+		2900F6D7405C48419F0BDB6B /* /Users/kenji/Desktop/mac_chat/CMakeLists.txt */ = {isa = PBXFileReference; explicitFileType = sourcecode.text; fileEncoding = 4; name = CMakeLists.txt; path = CMakeLists.txt; sourceTree = SOURCE_ROOT; };
+		3A0A3F0F6CAF48B4A39887ED /* /Users/kenji/Desktop/mac_chat/Resources/ar.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/ar.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		3C1F4CDEEDD244CC91E966E7 /* /Users/kenji/Desktop/mac_chat/main.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; name = main.mm; path = main.mm; sourceTree = SOURCE_ROOT; };
+		477D7D9CE32F4B11B8695D09 /* /Users/kenji/Desktop/mac_chat/Resources/ja.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/ja.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		4DDE0080AA944DF587170A9F /* /Users/kenji/Desktop/mac_chat/CMakeLists.txt */ = {isa = PBXFileReference; explicitFileType = sourcecode.text; fileEncoding = 4; name = CMakeLists.txt; path = CMakeLists.txt; sourceTree = SOURCE_ROOT; };
+		518836D555B541C48AAF8899 /* /Users/kenji/Desktop/mac_chat/MacAudioEngine.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; name = MacAudioEngine.mm; path = MacAudioEngine.mm; sourceTree = SOURCE_ROOT; };
+		529FD96A488149698121D5B6 /* /Users/kenji/Desktop/mac_chat/Resources/tr.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/tr.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		5353B1FD5BAF4EE4AEA8FD92 /* /Users/kenji/Desktop/mac_chat/Resources/hi.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/hi.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		5AF293A2A10C49D794ABFEFF /* /Users/kenji/Desktop/mac_chat/Resources/vi.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/vi.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		5E9700541F454BC7B1C970FA /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreVideo.framework */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreVideo.framework; sourceTree = "<absolute>"; };
+		6AD48E4BA88F4C66930E68DB /* /Users/kenji/Desktop/mac_chat/Resources/it.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/it.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		765AA0F6C7EE4BA7AFC8CBBD /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreAudio.framework */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = wrapper.framework; name = CoreAudio.framework; path = /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreAudio.framework; sourceTree = "<absolute>"; };
+		7BBFE1F5C3154719992DFCC1 /* /Users/kenji/Desktop/mac_chat/Resources/es.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/es.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		87AB672EB5FE4541A5B46AFD /* /Users/kenji/Desktop/mac_chat/Resources/ko.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/ko.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		90C8CB4FD4CC4003836E0308 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AVFoundation.framework */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AVFoundation.framework; sourceTree = "<absolute>"; };
+		9398C5BB5CAA4E278D247214 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/QuartzCore.framework */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/QuartzCore.framework; sourceTree = "<absolute>"; };
+		93BA078D5ECC45E1BE6EBBEE /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreMedia.framework */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreMedia.framework; sourceTree = "<absolute>"; };
+		9E6062B3628C490989BC65BF /* /Users/kenji/Desktop/mac_chat/Resources/bn.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/bn.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		A621D19DBACA435DA133BDB9 /* /Users/kenji/Desktop/mac_chat/Resources/de.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/de.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		AD12F7C2AF6F47C9BB0A4A9D /* /Users/kenji/Desktop/mac_chat/Info.plist */ = {isa = PBXFileReference; explicitFileType = sourcecode.text.plist; fileEncoding = 4; name = Info.plist; path = Info.plist; sourceTree = SOURCE_ROOT; };
+		BA3DF1D94F314E68A2FDCF52 /* /Users/kenji/Desktop/mac_chat/MacVideoEngine.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; name = MacVideoEngine.mm; path = MacVideoEngine.mm; sourceTree = SOURCE_ROOT; };
+		C9B2A023843446D3B04DEFC8 /* /Users/kenji/Desktop/mac_chat/Resources/zh-Hant.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = "Resources/zh-Hant.lproj/Localizable.strings"; sourceTree = SOURCE_ROOT; };
+		CEBA78214F294176BDB770E4 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AudioToolbox.framework */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AudioToolbox.framework; sourceTree = "<absolute>"; };
+		D85C86F9815445159A6E7B66 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/VideoToolbox.framework */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = wrapper.framework; name = VideoToolbox.framework; path = /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/VideoToolbox.framework; sourceTree = "<absolute>"; };
+		DBA552FC2DF743B18AB307A2 /* /Users/kenji/Desktop/mac_chat/Resources/zh-Hans.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = "Resources/zh-Hans.lproj/Localizable.strings"; sourceTree = SOURCE_ROOT; };
+		E6D44F6987BF436183674BEE /* /Users/kenji/Desktop/mac_chat/Resources/pt.lproj/Localizable.strings */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = Localizable.strings; path = Resources/pt.lproj/Localizable.strings; sourceTree = SOURCE_ROOT; };
+		F1A1A917979C421D924EA86C /* /Users/kenji/Desktop/mac_chat/ChatNetwork.cpp */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; name = ChatNetwork.cpp; path = ChatNetwork.cpp; sourceTree = SOURCE_ROOT; };
+		F37E22F5FC9743248D9B208A /* /Users/kenji/Desktop/mac_chat/build/CMakeFiles/RetroChat.dir/Info.plist */ = {isa = PBXFileReference; explicitFileType = sourcecode.text.plist; fileEncoding = 4; name = Info.plist; path = build/CMakeFiles/RetroChat.dir/Info.plist; sourceTree = SOURCE_ROOT; };
+		F90755F999C546F98EAE4CEC /* RetroChat */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; path = RetroChat; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		E21F4E0B571945A586834C7E /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		044030D826C34454A9D32E8A /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				AD12F7C2AF6F47C9BB0A4A9D /* /Users/kenji/Desktop/mac_chat/Info.plist */,
+				F37E22F5FC9743248D9B208A /* /Users/kenji/Desktop/mac_chat/build/CMakeFiles/RetroChat.dir/Info.plist */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		34C498A80DAA4939B889D517 /* ALL_BUILD */ = {
+			isa = PBXGroup;
+			children = (
+				6EAB81E13F5E460C9F643E72 /* CMake Rules */,
+				2900F6D7405C48419F0BDB6B /* /Users/kenji/Desktop/mac_chat/CMakeLists.txt */,
+			);
+			name = ALL_BUILD;
+			sourceTree = "<group>";
+		};
+		3B13B38081134312B91EBB61 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F90755F999C546F98EAE4CEC /* RetroChat */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		64D073B69A514C258EB745AD /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				0C47E9FCCC5943D6AA6D226F /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AppKit.framework */,
+				90C8CB4FD4CC4003836E0308 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AVFoundation.framework */,
+				93BA078D5ECC45E1BE6EBBEE /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreMedia.framework */,
+				5E9700541F454BC7B1C970FA /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreVideo.framework */,
+				9398C5BB5CAA4E278D247214 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/QuartzCore.framework */,
+				D85C86F9815445159A6E7B66 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/VideoToolbox.framework */,
+				CEBA78214F294176BDB770E4 /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/AudioToolbox.framework */,
+				765AA0F6C7EE4BA7AFC8CBBD /* /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks/CoreAudio.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		6EAB81E13F5E460C9F643E72 /* CMake Rules */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = "CMake Rules";
+			sourceTree = "<group>";
+		};
+		75A0A0B86392422ABC55A178 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		88CA287CDD9B48BEBEB0DB40 /* Source Files */ = {
+			isa = PBXGroup;
+			children = (
+				F1A1A917979C421D924EA86C /* /Users/kenji/Desktop/mac_chat/ChatNetwork.cpp */,
+				518836D555B541C48AAF8899 /* /Users/kenji/Desktop/mac_chat/MacAudioEngine.mm */,
+				BA3DF1D94F314E68A2FDCF52 /* /Users/kenji/Desktop/mac_chat/MacVideoEngine.mm */,
+				21B52F65A0F747A2BE85C91D /* /Users/kenji/Desktop/mac_chat/json11.cpp */,
+				3C1F4CDEEDD244CC91E966E7 /* /Users/kenji/Desktop/mac_chat/main.mm */,
+			);
+			name = "Source Files";
+			sourceTree = "<group>";
+		};
+		9FC224C5C4A948108527C171 = {
+			isa = PBXGroup;
+			children = (
+				34C498A80DAA4939B889D517 /* ALL_BUILD */,
+				AD95C5872D9A4CF195F63047 /* RetroChat */,
+				3B13B38081134312B91EBB61 /* Products */,
+				64D073B69A514C258EB745AD /* Frameworks */,
+				75A0A0B86392422ABC55A178 /* Resources */,
+			);
+			sourceTree = "<group>";
+		};
+		AD95C5872D9A4CF195F63047 /* RetroChat */ = {
+			isa = PBXGroup;
+			children = (
+				044030D826C34454A9D32E8A /* Resources */,
+				88CA287CDD9B48BEBEB0DB40 /* Source Files */,
+				4DDE0080AA944DF587170A9F /* /Users/kenji/Desktop/mac_chat/CMakeLists.txt */,
+				3A0A3F0F6CAF48B4A39887ED /* /Users/kenji/Desktop/mac_chat/Resources/ar.lproj/Localizable.strings */,
+				9E6062B3628C490989BC65BF /* /Users/kenji/Desktop/mac_chat/Resources/bn.lproj/Localizable.strings */,
+				A621D19DBACA435DA133BDB9 /* /Users/kenji/Desktop/mac_chat/Resources/de.lproj/Localizable.strings */,
+				0D78EA80E9234FB79F689033 /* /Users/kenji/Desktop/mac_chat/Resources/en.lproj/Localizable.strings */,
+				7BBFE1F5C3154719992DFCC1 /* /Users/kenji/Desktop/mac_chat/Resources/es.lproj/Localizable.strings */,
+				0EFFDDFC49164B33B3499E3E /* /Users/kenji/Desktop/mac_chat/Resources/fr.lproj/Localizable.strings */,
+				5353B1FD5BAF4EE4AEA8FD92 /* /Users/kenji/Desktop/mac_chat/Resources/hi.lproj/Localizable.strings */,
+				1454EB77A3E54D9CA79B411C /* /Users/kenji/Desktop/mac_chat/Resources/id.lproj/Localizable.strings */,
+				6AD48E4BA88F4C66930E68DB /* /Users/kenji/Desktop/mac_chat/Resources/it.lproj/Localizable.strings */,
+				477D7D9CE32F4B11B8695D09 /* /Users/kenji/Desktop/mac_chat/Resources/ja.lproj/Localizable.strings */,
+				87AB672EB5FE4541A5B46AFD /* /Users/kenji/Desktop/mac_chat/Resources/ko.lproj/Localizable.strings */,
+				E6D44F6987BF436183674BEE /* /Users/kenji/Desktop/mac_chat/Resources/pt.lproj/Localizable.strings */,
+				1714899285634ADF97AB6EA9 /* /Users/kenji/Desktop/mac_chat/Resources/ru.lproj/Localizable.strings */,
+				529FD96A488149698121D5B6 /* /Users/kenji/Desktop/mac_chat/Resources/tr.lproj/Localizable.strings */,
+				5AF293A2A10C49D794ABFEFF /* /Users/kenji/Desktop/mac_chat/Resources/vi.lproj/Localizable.strings */,
+				DBA552FC2DF743B18AB307A2 /* /Users/kenji/Desktop/mac_chat/Resources/zh-Hans.lproj/Localizable.strings */,
+				C9B2A023843446D3B04DEFC8 /* /Users/kenji/Desktop/mac_chat/Resources/zh-Hant.lproj/Localizable.strings */,
+			);
+			name = RetroChat;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		71BFFFAB84F685047744A8F6 /* RetroChat */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E19A20F506D40AEB5EBA823 /* Build configuration list for PBXNativeTarget "RetroChat" */;
+			buildPhases = (
+				90AD6771EE184615A28136FD /* Resources */,
+				7D17A98F46F14940B47B3628 /* Sources */,
+				E21F4E0B571945A586834C7E /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				14571EC8D8914EB595107359 /* PBXTargetDependency */,
+			);
+			name = RetroChat;
+			productName = RetroChat;
+			productReference = F90755F999C546F98EAE4CEC /* RetroChat */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D836985D12144432A2626223 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2620;
+			};
+			buildConfigurationList = 76469847C2354339B0534F6B /* Build configuration list for PBXProject "RetroChat" */;
+			buildSettings = {
+			};
+			buildStyles = (
+				EF03557A46994F9381E42166 /* Debug */,
+				5EA17199E5B842A29AF14C19 /* Release */,
+				6719D42DCCAA4440B8D3E893 /* MinSizeRel */,
+				FEC04EFA06044F2980ECF6FB /* RelWithDebInfo */,
+			);
+			compatibilityVersion = "Xcode 3.2";
+			hasScannedForEncodings = 0;
+			mainGroup = 9FC224C5C4A948108527C171;
+			projectDirPath = /Users/kenji/Desktop/mac_chat;
+			projectRoot = "";
+			targets = (
+				3F8A878C7DA88913495E7D6B /* ALL_BUILD */,
+				71BFFFAB84F685047744A8F6 /* RetroChat */,
+				1ED16916742091BE7DB64269 /* ZERO_CHECK */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		161D9A197FAFD7E539892B81 /* Generate CMakeFiles/ZERO_CHECK */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Generate CMakeFiles/ZERO_CHECK";
+			outputPaths = (
+/Users/kenji/Desktop/mac_chat/build/CMakeFiles/ZERO_CHECK			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e
+if test \"$CONFIGURATION\" = \"Debug\"; then :
+  cd /Users/kenji/Desktop/mac_chat/build
+  make -f /Users/kenji/Desktop/mac_chat/build/CMakeScripts/ReRunCMake.make
+fi
+if test \"$CONFIGURATION\" = \"Release\"; then :
+  cd /Users/kenji/Desktop/mac_chat/build
+  make -f /Users/kenji/Desktop/mac_chat/build/CMakeScripts/ReRunCMake.make
+fi
+if test \"$CONFIGURATION\" = \"MinSizeRel\"; then :
+  cd /Users/kenji/Desktop/mac_chat/build
+  make -f /Users/kenji/Desktop/mac_chat/build/CMakeScripts/ReRunCMake.make
+fi
+if test \"$CONFIGURATION\" = \"RelWithDebInfo\"; then :
+  cd /Users/kenji/Desktop/mac_chat/build
+  make -f /Users/kenji/Desktop/mac_chat/build/CMakeScripts/ReRunCMake.make
+fi
+";
+			showEnvVarsInLog = 0;
+		};
+		33A83E6BF27F7C0E3A977DB0 /* Generate CMakeFiles/ALL_BUILD */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Generate CMakeFiles/ALL_BUILD";
+			outputPaths = (
+/Users/kenji/Desktop/mac_chat/build/CMakeFiles/ALL_BUILD			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e
+if test \"$CONFIGURATION\" = \"Debug\"; then :
+  cd /Users/kenji/Desktop/mac_chat/build
+  echo Build\\ all\\ projects
+fi
+if test \"$CONFIGURATION\" = \"Release\"; then :
+  cd /Users/kenji/Desktop/mac_chat/build
+  echo Build\\ all\\ projects
+fi
+if test \"$CONFIGURATION\" = \"MinSizeRel\"; then :
+  cd /Users/kenji/Desktop/mac_chat/build
+  echo Build\\ all\\ projects
+fi
+if test \"$CONFIGURATION\" = \"RelWithDebInfo\"; then :
+  cd /Users/kenji/Desktop/mac_chat/build
+  echo Build\\ all\\ projects
+fi
+";
+			showEnvVarsInLog = 0;
+		};
+		3C0110FC8322DE7E50886E21 = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# shell script goes here
+exit 0";
+			showEnvVarsInLog = 0;
+		};
+		9B50530E35CC49C82C2FACCF = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# shell script goes here
+exit 0";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXResourcesBuildPhase section */
+		90AD6771EE184615A28136FD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FB1407E4818C410F8F8E25F6 /* /Users/kenji/Desktop/mac_chat/Resources/ar.lproj/Localizable.strings */,
+				FADC68DB042B4BD484AE62B5 /* /Users/kenji/Desktop/mac_chat/Resources/bn.lproj/Localizable.strings */,
+				57E8A26D6B414D1EB092611C /* /Users/kenji/Desktop/mac_chat/Resources/de.lproj/Localizable.strings */,
+				F59D143BE3704657887268D3 /* /Users/kenji/Desktop/mac_chat/Resources/en.lproj/Localizable.strings */,
+				97B7B2D8B19E4A368F383A6B /* /Users/kenji/Desktop/mac_chat/Resources/es.lproj/Localizable.strings */,
+				31AF77D3F9FA478290E8A09B /* /Users/kenji/Desktop/mac_chat/Resources/fr.lproj/Localizable.strings */,
+				019710A7130E4B3DA8FB2D87 /* /Users/kenji/Desktop/mac_chat/Resources/hi.lproj/Localizable.strings */,
+				E972F70A007E4700AA74199C /* /Users/kenji/Desktop/mac_chat/Resources/id.lproj/Localizable.strings */,
+				89EF4FF321F14345A4300B6A /* /Users/kenji/Desktop/mac_chat/Resources/it.lproj/Localizable.strings */,
+				74F9BD2BF4414898AAD230AA /* /Users/kenji/Desktop/mac_chat/Resources/ja.lproj/Localizable.strings */,
+				DFE03AD53CAB4740B23EE870 /* /Users/kenji/Desktop/mac_chat/Resources/ko.lproj/Localizable.strings */,
+				724AAFF98F4541B5AD9569FA /* /Users/kenji/Desktop/mac_chat/Resources/pt.lproj/Localizable.strings */,
+				4D60498F95C145E59E9DD333 /* /Users/kenji/Desktop/mac_chat/Resources/ru.lproj/Localizable.strings */,
+				F310A31159074DD9B7D6C5B8 /* /Users/kenji/Desktop/mac_chat/Resources/tr.lproj/Localizable.strings */,
+				8DDFDD3ACD624341BF339C99 /* /Users/kenji/Desktop/mac_chat/Resources/vi.lproj/Localizable.strings */,
+				CC993085D3D049F0ADC29FEE /* /Users/kenji/Desktop/mac_chat/Resources/zh-Hans.lproj/Localizable.strings */,
+				85E53AF94748475A8FFB2351 /* /Users/kenji/Desktop/mac_chat/Resources/zh-Hant.lproj/Localizable.strings */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		7D17A98F46F14940B47B3628 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				582A3237FF41442585CBC7F3 /* /Users/kenji/Desktop/mac_chat/ChatNetwork.cpp */,
+				8FD4331D8C0E46E2BF0C2B24 /* /Users/kenji/Desktop/mac_chat/MacAudioEngine.mm */,
+				27DAB53C08074A02B97DA46D /* /Users/kenji/Desktop/mac_chat/MacVideoEngine.mm */,
+				0C2222CC68EB4057AA1BE6F9 /* /Users/kenji/Desktop/mac_chat/json11.cpp */,
+				288C2B2DF21245DB849251A0 /* /Users/kenji/Desktop/mac_chat/main.mm */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		14571EC8D8914EB595107359 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1ED16916742091BE7DB64269 /* ZERO_CHECK */;
+			targetProxy = B066E008348E415FA964A684 /* PBXContainerItemProxy */;
+		};
+		9CB83204AC4E43C3982B2036 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 71BFFFAB84F685047744A8F6 /* RetroChat */;
+			targetProxy = 236FE772E37B4081894CAACC /* PBXContainerItemProxy */;
+		};
+		F0747132E0AF4AE48E949847 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1ED16916742091BE7DB64269 /* ZERO_CHECK */;
+			targetProxy = 41ABC61DFD0B432B90A43E43 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		03C91657A2F149C685658F6B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COMBINE_HIDPI_IMAGES = YES;
+				CONFIGURATION_BUILD_DIR = /Users/kenji/Desktop/mac_chat/build/Release;
+				ENABLE_HARDENED_RUNTIME = YES;
+				EXECUTABLE_PREFIX = "";
+				EXECUTABLE_SUFFIX = "";
+				FRAMEWORK_SEARCH_PATHS = (/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks,"$(inherited)");
+				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 3;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INFOPLIST_FILE = /Users/kenji/Desktop/mac_chat/build/CMakeFiles/RetroChat.dir/Info.plist;
+				INSTALL_PATH = "";
+				OTHER_CPLUSPLUSFLAGS = "    -DNDEBUG '-std=gnu++17' -fobjc-arc -Wno-availability -Wno-unguarded-availability -Wno-unguarded-availability-new -Wno-deprecated-declarations -Wno-unavailable-declarations ";
+				OTHER_LDFLAGS = (" -Wl,-search_paths_first -Wl,-headerpad_max_install_names","-framework AppKit","-framework AVFoundation","-framework CoreMedia","-framework CoreVideo","-framework QuartzCore","-framework VideoToolbox","-framework AudioToolbox","-framework CoreAudio","-lobjc","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = RetroChat;
+				SECTORDER_FLAGS = "";
+				TARGET_TEMP_DIR = "/Users/kenji/Desktop/mac_chat/build/build/RetroChat.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = Release;
+		};
+		20E4AF893AC4416EA46AD7B9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ALL_BUILD;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = Release;
+		};
+		2E3A199134394EA79A7DCF5D /* MinSizeRel */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ALL_BUILD;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = MinSizeRel;
+		};
+		429515D53EA9468389A3F700 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(NATIVE_ARCH_ACTUAL)";
+				MACOSX_DEPLOYMENT_TARGET = 15.7;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = "";
+				SYMROOT = /Users/kenji/Desktop/mac_chat/build/build;
+			};
+			name = Debug;
+		};
+		6AA7D6EF81DF40A6A9FB5427 /* RelWithDebInfo */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ZERO_CHECK;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = RelWithDebInfo;
+		};
+		6AC30EE227F14B1D980386C4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(NATIVE_ARCH_ACTUAL)";
+				MACOSX_DEPLOYMENT_TARGET = 15.7;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = "";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SYMROOT = /Users/kenji/Desktop/mac_chat/build/build;
+			};
+			name = Release;
+		};
+		6BA4A678B2594091A4EEC256 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ZERO_CHECK;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = Debug;
+		};
+		756A1E71E2E7411381200BEE /* RelWithDebInfo */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ALL_BUILD;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = RelWithDebInfo;
+		};
+		770066AB37EA49FF826FDF6E /* MinSizeRel */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(NATIVE_ARCH_ACTUAL)";
+				MACOSX_DEPLOYMENT_TARGET = 15.7;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = "";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SYMROOT = /Users/kenji/Desktop/mac_chat/build/build;
+			};
+			name = MinSizeRel;
+		};
+		BECEFC4A940644E3AADD70FC /* RelWithDebInfo */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COMBINE_HIDPI_IMAGES = YES;
+				CONFIGURATION_BUILD_DIR = /Users/kenji/Desktop/mac_chat/build/RelWithDebInfo;
+				ENABLE_HARDENED_RUNTIME = YES;
+				EXECUTABLE_PREFIX = "";
+				EXECUTABLE_SUFFIX = "";
+				FRAMEWORK_SEARCH_PATHS = (/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks,"$(inherited)");
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 2;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INFOPLIST_FILE = /Users/kenji/Desktop/mac_chat/build/CMakeFiles/RetroChat.dir/Info.plist;
+				INSTALL_PATH = "";
+				OTHER_CPLUSPLUSFLAGS = "       -DNDEBUG '-std=gnu++17' -fobjc-arc -Wno-availability -Wno-unguarded-availability -Wno-unguarded-availability-new -Wno-deprecated-declarations -Wno-unavailable-declarations ";
+				OTHER_LDFLAGS = (" -Wl,-search_paths_first -Wl,-headerpad_max_install_names","-framework AppKit","-framework AVFoundation","-framework CoreMedia","-framework CoreVideo","-framework QuartzCore","-framework VideoToolbox","-framework AudioToolbox","-framework CoreAudio","-lobjc","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = RetroChat;
+				SECTORDER_FLAGS = "";
+				TARGET_TEMP_DIR = "/Users/kenji/Desktop/mac_chat/build/build/RetroChat.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = RelWithDebInfo;
+		};
+		C72A4A8AA98F4537BFF2A777 /* RelWithDebInfo */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(NATIVE_ARCH_ACTUAL)";
+				MACOSX_DEPLOYMENT_TARGET = 15.7;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = "";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SYMROOT = /Users/kenji/Desktop/mac_chat/build/build;
+			};
+			name = RelWithDebInfo;
+		};
+		CB2EAE07F77D41CFADDDD72E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COMBINE_HIDPI_IMAGES = YES;
+				CONFIGURATION_BUILD_DIR = /Users/kenji/Desktop/mac_chat/build/Debug;
+				ENABLE_HARDENED_RUNTIME = YES;
+				EXECUTABLE_PREFIX = "";
+				EXECUTABLE_SUFFIX = "";
+				FRAMEWORK_SEARCH_PATHS = (/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks,"$(inherited)");
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INFOPLIST_FILE = /Users/kenji/Desktop/mac_chat/build/CMakeFiles/RetroChat.dir/Info.plist;
+				INSTALL_PATH = "";
+				OTHER_CPLUSPLUSFLAGS = "   '-std=gnu++17' -fobjc-arc -Wno-availability -Wno-unguarded-availability -Wno-unguarded-availability-new -Wno-deprecated-declarations -Wno-unavailable-declarations ";
+				OTHER_LDFLAGS = (" -Wl,-search_paths_first -Wl,-headerpad_max_install_names","-framework AppKit","-framework AVFoundation","-framework CoreMedia","-framework CoreVideo","-framework QuartzCore","-framework VideoToolbox","-framework AudioToolbox","-framework CoreAudio","-lobjc","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = RetroChat;
+				SECTORDER_FLAGS = "";
+				TARGET_TEMP_DIR = "/Users/kenji/Desktop/mac_chat/build/build/RetroChat.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = Debug;
+		};
+		D67C980F5BBB4544A4098E26 /* MinSizeRel */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COMBINE_HIDPI_IMAGES = YES;
+				CONFIGURATION_BUILD_DIR = /Users/kenji/Desktop/mac_chat/build/MinSizeRel;
+				ENABLE_HARDENED_RUNTIME = YES;
+				EXECUTABLE_PREFIX = "";
+				EXECUTABLE_SUFFIX = "";
+				FRAMEWORK_SEARCH_PATHS = (/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk/System/Library/Frameworks,"$(inherited)");
+				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = s;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INFOPLIST_FILE = /Users/kenji/Desktop/mac_chat/build/CMakeFiles/RetroChat.dir/Info.plist;
+				INSTALL_PATH = "";
+				OTHER_CPLUSPLUSFLAGS = "    -DNDEBUG '-std=gnu++17' -fobjc-arc -Wno-availability -Wno-unguarded-availability -Wno-unguarded-availability-new -Wno-deprecated-declarations -Wno-unavailable-declarations ";
+				OTHER_LDFLAGS = (" -Wl,-search_paths_first -Wl,-headerpad_max_install_names","-framework AppKit","-framework AVFoundation","-framework CoreMedia","-framework CoreVideo","-framework QuartzCore","-framework VideoToolbox","-framework AudioToolbox","-framework CoreAudio","-lobjc","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = RetroChat;
+				SECTORDER_FLAGS = "";
+				TARGET_TEMP_DIR = "/Users/kenji/Desktop/mac_chat/build/build/RetroChat.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = MinSizeRel;
+		};
+		DD952641D9B7456A856CF042 /* MinSizeRel */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ZERO_CHECK;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = MinSizeRel;
+		};
+		E33356A544074754A3ED4587 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ZERO_CHECK;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = Release;
+		};
+		F43D87473331465FB9C53B9B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ALL_BUILD;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		49764C1CCF9F4759ACD52D60 /* Build configuration list for PBXAggregateTarget "ALL_BUILD" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F43D87473331465FB9C53B9B /* Debug */,
+				20E4AF893AC4416EA46AD7B9 /* Release */,
+				2E3A199134394EA79A7DCF5D /* MinSizeRel */,
+				756A1E71E2E7411381200BEE /* RelWithDebInfo */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		516436E2DC8746818E9A7387 /* Build configuration list for PBXAggregateTarget "ZERO_CHECK" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6BA4A678B2594091A4EEC256 /* Debug */,
+				E33356A544074754A3ED4587 /* Release */,
+				DD952641D9B7456A856CF042 /* MinSizeRel */,
+				6AA7D6EF81DF40A6A9FB5427 /* RelWithDebInfo */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		5E19A20F506D40AEB5EBA823 /* Build configuration list for PBXNativeTarget "RetroChat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CB2EAE07F77D41CFADDDD72E /* Debug */,
+				03C91657A2F149C685658F6B /* Release */,
+				D67C980F5BBB4544A4098E26 /* MinSizeRel */,
+				BECEFC4A940644E3AADD70FC /* RelWithDebInfo */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		76469847C2354339B0534F6B /* Build configuration list for PBXProject "RetroChat" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				429515D53EA9468389A3F700 /* Debug */,
+				6AC30EE227F14B1D980386C4 /* Release */,
+				770066AB37EA49FF826FDF6E /* MinSizeRel */,
+				C72A4A8AA98F4537BFF2A777 /* RelWithDebInfo */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = D836985D12144432A2626223 /* Project object */;
+}
