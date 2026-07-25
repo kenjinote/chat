@@ -890,7 +890,7 @@ DWORD g_lastVoiceActiveTime = 0;
 extern ID3D11Device* g_pD3D11Device;
 extern ID3D11DeviceContext* g_pD3D11Context;
 
-const int AUDIO_BUF_SIZE = 960; 
+const int AUDIO_BUF_SIZE = 640; // 320 samples = 20ms at 16000Hz
 const int AUDIO_BUF_COUNT = 16;
 WAVEHDR g_waveInHdr[AUDIO_BUF_COUNT];
 char g_waveInBuf[AUDIO_BUF_COUNT][AUDIO_BUF_SIZE];
@@ -5918,6 +5918,7 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                         
                         pRT->DrawBitmap(pBitmap, D2D1::RectF(offsetX, offsetY, offsetX + drawW, offsetY + drawH));
                         
+#ifdef _DEBUG
                         std::wstring formatText = L"H.264";
                         {
                             auto itFormat = g_videoIsH264Map.find(*pUser);
@@ -5954,6 +5955,7 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                             if (pBrush) pBrush->Release();
                             if (pShadowBrush) pShadowBrush->Release();
                         }
+#endif
                     } else {
                         char buf[256]; sprintf_s(buf, "VideoViewProc FAILED: CreateBitmap hr=0x%X, sz=%dx%d", hrBmp, sz.first, sz.second); LogToFile(buf);
                     }
@@ -7499,6 +7501,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             std::wstring displayUser = user;
             if (g_userNames.count(user)) {
                 displayUser = g_userNames[user];
+            }
+            if (user == g_userId) {
+                displayUser += L" (You)";
             }
 
             bool isIgnored = false;
