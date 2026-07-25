@@ -1,0 +1,8 @@
+C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/opus.dir
+C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/package.dir
+C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/package_source.dir
+C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/edit_cache.dir
+C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/rebuild_cache.dir
+C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/list_install_components.dir
+C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/install.dir
+C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/install/local.dir

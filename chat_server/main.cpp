@@ -57,7 +57,7 @@ class Room {
 public:
     bool join(std::shared_ptr<ChatSession> session) {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_participants.size() >= 50) return false;
+        if (m_participants.size() >= 100) return false;
         m_participants.insert(session);
         return true;
     }

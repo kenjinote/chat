@@ -1,0 +1,795 @@
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeDetermineSystem.cmake:205 (message)"
+      - "CMakeLists.txt:7 (project)"
+    message: |
+      The system is: Windows - 10.0.22631 - AMD64
+...
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:7 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler: C:/Program Files/Microsoft Visual Studio/18/Enterprise/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe 
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      Microsoft(R) C/C++ Optimizing Compiler Version 19.50.35728 for x64
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      CMakeCCompilerId.c
+      Microsoft (R) Incremental Linker Version 14.50.35728.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      /out:CMakeCCompilerId.exe 
+      CMakeCCompilerId.obj 
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.exe"
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.obj"
+      
+      The C compiler identification is MSVC, found in:
+        C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/3.31.7/CompilerIdC/CMakeCCompilerId.exe
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:1288 (message)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeDetermineCompilerId.cmake:250 (CMAKE_DETERMINE_MSVC_SHOWINCLUDES_PREFIX)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:7 (project)"
+    message: |
+      Detecting C compiler /showIncludes prefix:
+        main.c
+        繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\ShowIncludes\\foo.h
+        
+      Found prefix "繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  "
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:74 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:7 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-6jevon"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-6jevon"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-6jevon'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_206fa\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_206fa.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_206fa.dir\\build
+        Building C object CMakeFiles/cmTC_206fa.dir/CMakeCCompilerABI.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_206fa.dir\\CMakeCCompilerABI.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-6jevon --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmABE5.tmp
+        CMakeCCompilerABI.c
+        Linking C executable cmTC_206fa.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_206fa.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_206fa.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmAE18.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_206fa.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_206fa.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_206fa.dir/manifest.res CMakeFiles\\cmTC_206fa.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_206fa.dir\\objects1.rsp /out:cmTC_206fa.exe /implib:cmTC_206fa.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-6jevon\\cmTC_206fa.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_206fa.dir/intermediate.manifest CMakeFiles\\cmTC_206fa.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_206fa.dir/intermediate.manifest /out:CMakeFiles\\cmTC_206fa.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_206fa.dir/manifest.res CMakeFiles\\cmTC_206fa.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_206fa.dir\\objects1.rsp /out:cmTC_206fa.exe /implib:cmTC_206fa.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-6jevon\\cmTC_206fa.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_206fa.dir/intermediate.manifest CMakeFiles\\cmTC_206fa.dir/manifest.res
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:218 (message)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:7 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(\\.[a-z]+)?|link\\.exe|lld-link(\\.exe)?|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(\\.[a-z]+)?|link\\.exe|lld-link(\\.exe)?))("|,| |$)]
+        linker tool for 'C': C:/PROGRA~1/MIB055~1/18/ENTERP~1/VC/Tools/MSVC/1450~1.357/bin/Hostx64/x64/link.exe
+        implicit libs: []
+        implicit objs: []
+        implicit dirs: []
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/Internal/CMakeDetermineLinkerId.cmake:40 (message)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeDetermineCompilerABI.cmake:255 (cmake_determine_linker_id)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:7 (project)"
+    message: |
+      Running the C compiler's linker: "C:/PROGRA~1/MIB055~1/18/ENTERP~1/VC/Tools/MSVC/1450~1.357/bin/Hostx64/x64/link.exe" "-v"
+      Microsoft (R) Incremental Linker Version 14.50.35728.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "cmake/CFeatureCheck.cmake:30 (try_compile)"
+      - "cmake/OpusConfig.cmake:27 (c_feature_check)"
+      - "CMakeLists.txt:11 (include)"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeTmp"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeTmp"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "COMPILE_VLA_SUPPORTED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeTmp'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_59da4\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_59da4.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_59da4.dir\\build
+        Building C object CMakeFiles/cmTC_59da4.dir/vla.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_59da4.dir\\vla.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeTmp --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmB26D.tmp
+        vla.c
+        C:\\Users\\kenjinote\\Desktop\\chat\\opus\\cmake\\vla.c(3): error C2057: 陞ｳ螢ｽ辟夊台ｸ岩\xc2\x80ｲ陟｢繝ｻ・ｦ竏壹\xc2\x80堤ｸｺ蜷ｶﾂ\xc2\x80繝ｻ
+        C:\\Users\\kenjinote\\Desktop\\chat\\opus\\cmake\\vla.c(3): error C2466: 郢ｧ・ｵ郢ｧ・､郢ｧ・ｺ邵ｺ繝ｻ0 邵ｺ・ｮ鬩滓ｦ翫・郢ｧ雋樒横郢ｧ髮・ｽｽ阮吮\xc2\x80ｻ邵ｺ・ｾ邵ｺ貅倥・陞ｳ・｣髫ｪﾂ\xc2\x80邵ｺ蜉ｱ・育ｸｺ繝ｻ竊堤ｸｺ蜉ｱ竏ｪ邵ｺ蜉ｱ笳・ｸｲ繝ｻ
+        C:\\Users\\kenjinote\\Desktop\\chat\\opus\\cmake\\vla.c(3): error C2133: 'a': 郢ｧ・ｵ郢ｧ・､郢ｧ・ｺ邵ｺ蠕｡・ｸ閧ｴ繝ｻ邵ｺ・ｧ邵ｺ蜷ｶﾂ\xc2\x80繝ｻ
+        C:\\Users\\kenjinote\\Desktop\\chat\\opus\\cmake\\vla.c(4): warning C4034: sizeof 雋咲坩・ｮ諤懶ｽｭ闊娯\xc2\x80ｲ郢ｧ・ｵ郢ｧ・､郢ｧ・ｺ邵ｺ繝ｻ0 邵ｺ・ｨ邵ｺ・ｪ邵ｺ・｣邵ｺ貅倥′郢晏｣ｹﾎ帷ｹ晢ｽｳ郢晏ｳｨ竊馴ｩ包ｽｩ騾包ｽｨ邵ｺ霈費ｽ檎ｸｺ・ｾ邵ｺ蜉ｱ笳・ｸｲ繝ｻ
+        NMAKE : fatal error U1077: '"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_59da4.dir\\vla.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeTmp --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmB26D.tmp' : リターン コード '0x2'
+        Stop.
+        NMAKE : fatal error U1077: '"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_59da4.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_59da4.dir\\build' : リターン コード '0x2'
+        Stop.
+        
+      exitCode: 2
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckIncludeFile.cmake:99 (try_compile)"
+      - "cmake/OpusConfig.cmake:30 (check_include_file)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Looking for alloca.h"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-r4h5ij"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-r4h5ij"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "HAVE_ALLOCA_H"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-r4h5ij'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_3e669\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_3e669.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_3e669.dir\\build
+        Building C object CMakeFiles/cmTC_3e669.dir/CheckIncludeFile.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_3e669.dir\\CheckIncludeFile.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-r4h5ij --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmB347.tmp
+        CheckIncludeFile.c
+        C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-r4h5ij\\CheckIncludeFile.c(1): fatal error C1083: include 郢晁ｼ斐＜郢ｧ・､郢晢ｽｫ郢ｧ蟶晏ｹ慕ｸｺ莉｣竏ｪ邵ｺ蟶呻ｽ鍋ｸｲ繝ｻalloca.h':No such file or directory
+        NMAKE : fatal error U1077: '"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_3e669.dir\\CheckIncludeFile.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-r4h5ij --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmB347.tmp' : リターン コード '0x2'
+        Stop.
+        NMAKE : fatal error U1077: '"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_3e669.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_3e669.dir\\build' : リターン コード '0x2'
+        Stop.
+        
+      exitCode: 2
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckSymbolExists.cmake:163 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckSymbolExists.cmake:68 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "cmake/OpusConfig.cmake:37 (check_symbol_exists)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Looking for alloca"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-2hky0n"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-2hky0n"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "USE_ALLOCA_SUPPORTED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-2hky0n'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_7e08b\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_7e08b.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_7e08b.dir\\build
+        Building C object CMakeFiles/cmTC_7e08b.dir/CheckSymbolExists.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_7e08b.dir\\CheckSymbolExists.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-2hky0n --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmB432.tmp
+        CheckSymbolExists.c
+        Linking C executable cmTC_7e08b.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_7e08b.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_7e08b.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmB4B0.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_7e08b.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_7e08b.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_7e08b.dir/manifest.res CMakeFiles\\cmTC_7e08b.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_7e08b.dir\\objects1.rsp /out:cmTC_7e08b.exe /implib:cmTC_7e08b.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-2hky0n\\cmTC_7e08b.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_7e08b.dir/intermediate.manifest CMakeFiles\\cmTC_7e08b.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_7e08b.dir/intermediate.manifest /out:CMakeFiles\\cmTC_7e08b.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_7e08b.dir/manifest.res CMakeFiles\\cmTC_7e08b.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_7e08b.dir\\objects1.rsp /out:cmTC_7e08b.exe /implib:cmTC_7e08b.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-2hky0n\\cmTC_7e08b.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_7e08b.dir/intermediate.manifest CMakeFiles\\cmTC_7e08b.dir/manifest.res
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckLibraryExists.cmake:78 (try_compile)"
+      - "cmake/OpusConfig.cmake:43 (check_library_exists)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Looking for floor in m"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-b0lvvw"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-b0lvvw"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "HAVE_LIBM"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-b0lvvw'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_b1603\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_b1603.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_b1603.dir\\build
+        Building C object CMakeFiles/cmTC_b1603.dir/CheckFunctionExists.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_b1603.dir\\CheckFunctionExists.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-b0lvvw --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmB684.tmp
+        CheckFunctionExists.c
+        Linking C executable cmTC_b1603.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_b1603.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_b1603.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmB6F2.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_b1603.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_b1603.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_b1603.dir/manifest.res CMakeFiles\\cmTC_b1603.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_b1603.dir\\objects1.rsp /out:cmTC_b1603.exe /implib:cmTC_b1603.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-b0lvvw\\cmTC_b1603.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console m.lib kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_b1603.dir/intermediate.manifest CMakeFiles\\cmTC_b1603.dir/manifest.res
+        LINK Pass 1: command "C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_b1603.dir\\objects1.rsp /out:cmTC_b1603.exe /implib:cmTC_b1603.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-b0lvvw\\cmTC_b1603.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console m.lib kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_b1603.dir/intermediate.manifest CMakeFiles\\cmTC_b1603.dir/manifest.res" failed (exit code 1104) with the following output:
+        LINK : fatal error LNK1104: 繝輔ぃ繧､繝ｫ 'm.lib' 繧帝幕縺上％縺ｨ縺後〒縺阪∪縺帙ｓ縲・
+        NMAKE : fatal error U1077: '"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_b1603.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_b1603.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmB6F2.tmp' : リターン コード '0xffffffff'
+        Stop.
+        NMAKE : fatal error U1077: '"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_b1603.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_b1603.dir\\build' : リターン コード '0x2'
+        Stop.
+        
+      exitCode: 2
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckSymbolExists.cmake:163 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckSymbolExists.cmake:68 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "cmake/OpusConfig.cmake:49 (check_symbol_exists)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Looking for lrintf"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-6zspsj"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-6zspsj"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "HAVE_LRINTF"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-6zspsj'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_fa73a\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_fa73a.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_fa73a.dir\\build
+        Building C object CMakeFiles/cmTC_fa73a.dir/CheckSymbolExists.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_fa73a.dir\\CheckSymbolExists.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-6zspsj --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmB7BC.tmp
+        CheckSymbolExists.c
+        Linking C executable cmTC_fa73a.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_fa73a.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_fa73a.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmB83A.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_fa73a.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_fa73a.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_fa73a.dir/manifest.res CMakeFiles\\cmTC_fa73a.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_fa73a.dir\\objects1.rsp /out:cmTC_fa73a.exe /implib:cmTC_fa73a.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-6zspsj\\cmTC_fa73a.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_fa73a.dir/intermediate.manifest CMakeFiles\\cmTC_fa73a.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_fa73a.dir/intermediate.manifest /out:CMakeFiles\\cmTC_fa73a.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_fa73a.dir/manifest.res CMakeFiles\\cmTC_fa73a.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_fa73a.dir\\objects1.rsp /out:cmTC_fa73a.exe /implib:cmTC_fa73a.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-6zspsj\\cmTC_fa73a.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_fa73a.dir/intermediate.manifest CMakeFiles\\cmTC_fa73a.dir/manifest.res
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckSymbolExists.cmake:163 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckSymbolExists.cmake:68 (__CHECK_SYMBOL_EXISTS_IMPL)"
+      - "cmake/OpusConfig.cmake:50 (check_symbol_exists)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Looking for lrint"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-gtvzvo"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-gtvzvo"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "HAVE_LRINT"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-gtvzvo'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_0afc8\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_0afc8.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_0afc8.dir\\build
+        Building C object CMakeFiles/cmTC_0afc8.dir/CheckSymbolExists.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_0afc8.dir\\CheckSymbolExists.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-gtvzvo --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmBA0E.tmp
+        CheckSymbolExists.c
+        Linking C executable cmTC_0afc8.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_0afc8.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_0afc8.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmBA8C.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_0afc8.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_0afc8.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_0afc8.dir/manifest.res CMakeFiles\\cmTC_0afc8.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_0afc8.dir\\objects1.rsp /out:cmTC_0afc8.exe /implib:cmTC_0afc8.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-gtvzvo\\cmTC_0afc8.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_0afc8.dir/intermediate.manifest CMakeFiles\\cmTC_0afc8.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_0afc8.dir/intermediate.manifest /out:CMakeFiles\\cmTC_0afc8.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_0afc8.dir/manifest.res CMakeFiles\\cmTC_0afc8.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_0afc8.dir\\objects1.rsp /out:cmTC_0afc8.exe /implib:cmTC_0afc8.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-gtvzvo\\cmTC_0afc8.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_0afc8.dir/intermediate.manifest CMakeFiles\\cmTC_0afc8.dir/manifest.res
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckIncludeFile.cmake:99 (try_compile)"
+      - "cmake/OpusFunctions.cmake:150 (check_include_file)"
+      - "cmake/OpusConfig.cmake:64 (opus_supports_cpu_detection)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Looking for intrin.h"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-t494al"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-t494al"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "HAVE_INTRIN_H"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-t494al'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_49b29\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_49b29.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_49b29.dir\\build
+        Building C object CMakeFiles/cmTC_49b29.dir/CheckIncludeFile.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_49b29.dir\\CheckIncludeFile.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-t494al --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmBC60.tmp
+        CheckIncludeFile.c
+        Linking C executable cmTC_49b29.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_49b29.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_49b29.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmBCFD.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_49b29.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_49b29.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_49b29.dir/manifest.res CMakeFiles\\cmTC_49b29.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_49b29.dir\\objects1.rsp /out:cmTC_49b29.exe /implib:cmTC_49b29.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-t494al\\cmTC_49b29.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_49b29.dir/intermediate.manifest CMakeFiles\\cmTC_49b29.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_49b29.dir/intermediate.manifest /out:CMakeFiles\\cmTC_49b29.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_49b29.dir/manifest.res CMakeFiles\\cmTC_49b29.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_49b29.dir\\objects1.rsp /out:cmTC_49b29.exe /implib:cmTC_49b29.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-t494al\\cmTC_49b29.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_49b29.dir/intermediate.manifest CMakeFiles\\cmTC_49b29.dir/manifest.res
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckIncludeFile.cmake:99 (try_compile)"
+      - "cmake/OpusFunctions.cmake:58 (check_include_file)"
+      - "cmake/OpusConfig.cmake:68 (opus_detect_sse)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Looking for xmmintrin.h"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-5ipkfx"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-5ipkfx"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "HAVE_XMMINTRIN_H"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-5ipkfx'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_a73d4\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_a73d4.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_a73d4.dir\\build
+        Building C object CMakeFiles/cmTC_a73d4.dir/CheckIncludeFile.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_a73d4.dir\\CheckIncludeFile.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5ipkfx --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmBED1.tmp
+        CheckIncludeFile.c
+        Linking C executable cmTC_a73d4.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_a73d4.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_a73d4.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmBF4F.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_a73d4.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_a73d4.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_a73d4.dir/manifest.res CMakeFiles\\cmTC_a73d4.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_a73d4.dir\\objects1.rsp /out:cmTC_a73d4.exe /implib:cmTC_a73d4.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5ipkfx\\cmTC_a73d4.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_a73d4.dir/intermediate.manifest CMakeFiles\\cmTC_a73d4.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_a73d4.dir/intermediate.manifest /out:CMakeFiles\\cmTC_a73d4.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_a73d4.dir/manifest.res CMakeFiles\\cmTC_a73d4.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_a73d4.dir\\objects1.rsp /out:cmTC_a73d4.exe /implib:cmTC_a73d4.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-5ipkfx\\cmTC_a73d4.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_a73d4.dir/intermediate.manifest CMakeFiles\\cmTC_a73d4.dir/manifest.res
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckIncludeFile.cmake:99 (try_compile)"
+      - "cmake/OpusFunctions.cmake:78 (check_include_file)"
+      - "cmake/OpusConfig.cmake:68 (opus_detect_sse)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Looking for emmintrin.h"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-8mp1gl"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-8mp1gl"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "HAVE_EMMINTRIN_H"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-8mp1gl'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_fd148\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_fd148.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_fd148.dir\\build
+        Building C object CMakeFiles/cmTC_fd148.dir/CheckIncludeFile.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_fd148.dir\\CheckIncludeFile.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-8mp1gl --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmC122.tmp
+        CheckIncludeFile.c
+        Linking C executable cmTC_fd148.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_fd148.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_fd148.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmC1A0.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_fd148.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_fd148.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_fd148.dir/manifest.res CMakeFiles\\cmTC_fd148.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_fd148.dir\\objects1.rsp /out:cmTC_fd148.exe /implib:cmTC_fd148.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-8mp1gl\\cmTC_fd148.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_fd148.dir/intermediate.manifest CMakeFiles\\cmTC_fd148.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_fd148.dir/intermediate.manifest /out:CMakeFiles\\cmTC_fd148.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_fd148.dir/manifest.res CMakeFiles\\cmTC_fd148.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_fd148.dir\\objects1.rsp /out:cmTC_fd148.exe /implib:cmTC_fd148.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-8mp1gl\\cmTC_fd148.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_fd148.dir/intermediate.manifest CMakeFiles\\cmTC_fd148.dir/manifest.res
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckIncludeFile.cmake:99 (try_compile)"
+      - "cmake/OpusFunctions.cmake:97 (check_include_file)"
+      - "cmake/OpusConfig.cmake:68 (opus_detect_sse)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Looking for smmintrin.h"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-g3xy48"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-g3xy48"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "HAVE_SMMINTRIN_H"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-g3xy48'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_4f30b\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_4f30b.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_4f30b.dir\\build
+        Building C object CMakeFiles/cmTC_4f30b.dir/CheckIncludeFile.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_4f30b.dir\\CheckIncludeFile.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g3xy48 --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmC384.tmp
+        CheckIncludeFile.c
+        Linking C executable cmTC_4f30b.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_4f30b.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_4f30b.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmC402.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_4f30b.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_4f30b.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_4f30b.dir/manifest.res CMakeFiles\\cmTC_4f30b.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_4f30b.dir\\objects1.rsp /out:cmTC_4f30b.exe /implib:cmTC_4f30b.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g3xy48\\cmTC_4f30b.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_4f30b.dir/intermediate.manifest CMakeFiles\\cmTC_4f30b.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_4f30b.dir/intermediate.manifest /out:CMakeFiles\\cmTC_4f30b.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_4f30b.dir/manifest.res CMakeFiles\\cmTC_4f30b.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_4f30b.dir\\objects1.rsp /out:cmTC_4f30b.exe /implib:cmTC_4f30b.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-g3xy48\\cmTC_4f30b.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_4f30b.dir/intermediate.manifest CMakeFiles\\cmTC_4f30b.dir/manifest.res
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckIncludeFile.cmake:99 (try_compile)"
+      - "cmake/OpusFunctions.cmake:116 (check_include_file)"
+      - "cmake/OpusConfig.cmake:68 (opus_detect_sse)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Looking for immintrin.h"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-njpzo9"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-njpzo9"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "HAVE_IMMINTRIN_H"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-njpzo9'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_63202\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_63202.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_63202.dir\\build
+        Building C object CMakeFiles/cmTC_63202.dir/CheckIncludeFile.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_63202.dir\\CheckIncludeFile.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-njpzo9 --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmC5E5.tmp
+        CheckIncludeFile.c
+        Linking C executable cmTC_63202.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_63202.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_63202.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmC682.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_63202.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_63202.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_63202.dir/manifest.res CMakeFiles\\cmTC_63202.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_63202.dir\\objects1.rsp /out:cmTC_63202.exe /implib:cmTC_63202.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-njpzo9\\cmTC_63202.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_63202.dir/intermediate.manifest CMakeFiles\\cmTC_63202.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_63202.dir/intermediate.manifest /out:CMakeFiles\\cmTC_63202.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_63202.dir/manifest.res CMakeFiles\\cmTC_63202.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_63202.dir\\objects1.rsp /out:cmTC_63202.exe /implib:cmTC_63202.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-njpzo9\\cmTC_63202.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_63202.dir/intermediate.manifest CMakeFiles\\cmTC_63202.dir/manifest.res
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/Internal/CheckSourceCompiles.cmake:108 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/Internal/CheckCompilerFlag.cmake:18 (cmake_check_source_compiles)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckCCompilerFlag.cmake:56 (cmake_check_compiler_flag)"
+      - "cmake/OpusFunctions.cmake:46 (check_c_compiler_flag)"
+      - "cmake/OpusFunctions.cmake:119 (check_flag)"
+      - "cmake/OpusConfig.cmake:68 (opus_detect_sse)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Performing Test AVX2_SUPPORTED"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-x01ja1"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-x01ja1"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "AVX2_SUPPORTED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-x01ja1'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_cb57f\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_cb57f.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_cb57f.dir\\build
+        Building C object CMakeFiles/cmTC_cb57f.dir/src.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_cb57f.dir\\src.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-x01ja1 --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmC866.tmp
+        src.c
+        Linking C executable cmTC_cb57f.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_cb57f.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_cb57f.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmC8E4.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_cb57f.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_cb57f.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_cb57f.dir/manifest.res CMakeFiles\\cmTC_cb57f.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_cb57f.dir\\objects1.rsp /out:cmTC_cb57f.exe /implib:cmTC_cb57f.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-x01ja1\\cmTC_cb57f.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_cb57f.dir/intermediate.manifest CMakeFiles\\cmTC_cb57f.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_cb57f.dir/intermediate.manifest /out:CMakeFiles\\cmTC_cb57f.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_cb57f.dir/manifest.res CMakeFiles\\cmTC_cb57f.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_cb57f.dir\\objects1.rsp /out:cmTC_cb57f.exe /implib:cmTC_cb57f.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-x01ja1\\cmTC_cb57f.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_cb57f.dir/intermediate.manifest CMakeFiles\\cmTC_cb57f.dir/manifest.res
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/Internal/CheckSourceCompiles.cmake:108 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/Internal/CheckCompilerFlag.cmake:18 (cmake_check_source_compiles)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckCCompilerFlag.cmake:56 (cmake_check_compiler_flag)"
+      - "cmake/OpusFunctions.cmake:46 (check_c_compiler_flag)"
+      - "cmake/OpusConfig.cmake:84 (check_flag)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Performing Test FAST_MATH_SUPPORTED"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-jqyunu"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-jqyunu"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "FAST_MATH_SUPPORTED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-jqyunu'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_0d59c\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_0d59c.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_0d59c.dir\\build
+        Building C object CMakeFiles/cmTC_0d59c.dir/src.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_0d59c.dir\\src.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-jqyunu --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmCAA8.tmp
+        src.c
+        Linking C executable cmTC_0d59c.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_0d59c.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_0d59c.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmCB16.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_0d59c.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_0d59c.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_0d59c.dir/manifest.res CMakeFiles\\cmTC_0d59c.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_0d59c.dir\\objects1.rsp /out:cmTC_0d59c.exe /implib:cmTC_0d59c.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-jqyunu\\cmTC_0d59c.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_0d59c.dir/intermediate.manifest CMakeFiles\\cmTC_0d59c.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_0d59c.dir/intermediate.manifest /out:CMakeFiles\\cmTC_0d59c.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_0d59c.dir/manifest.res CMakeFiles\\cmTC_0d59c.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_0d59c.dir\\objects1.rsp /out:cmTC_0d59c.exe /implib:cmTC_0d59c.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-jqyunu\\cmTC_0d59c.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_0d59c.dir/intermediate.manifest CMakeFiles\\cmTC_0d59c.dir/manifest.res
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/Internal/CheckSourceCompiles.cmake:108 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/Internal/CheckCompilerFlag.cmake:18 (cmake_check_source_compiles)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckCCompilerFlag.cmake:56 (cmake_check_compiler_flag)"
+      - "cmake/OpusFunctions.cmake:46 (check_c_compiler_flag)"
+      - "cmake/OpusConfig.cmake:85 (check_flag)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Performing Test STACK_PROTECTOR_SUPPORTED"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-pdjzcm"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-pdjzcm"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "STACK_PROTECTOR_SUPPORTED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-pdjzcm'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_e10c3\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_e10c3.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_e10c3.dir\\build
+        Building C object CMakeFiles/cmTC_e10c3.dir/src.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_e10c3.dir\\src.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pdjzcm --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmCCFA.tmp
+        src.c
+        Linking C executable cmTC_e10c3.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_e10c3.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_e10c3.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmCD58.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_e10c3.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_e10c3.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_e10c3.dir/manifest.res CMakeFiles\\cmTC_e10c3.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_e10c3.dir\\objects1.rsp /out:cmTC_e10c3.exe /implib:cmTC_e10c3.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pdjzcm\\cmTC_e10c3.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_e10c3.dir/intermediate.manifest CMakeFiles\\cmTC_e10c3.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_e10c3.dir/intermediate.manifest /out:CMakeFiles\\cmTC_e10c3.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_e10c3.dir/manifest.res CMakeFiles\\cmTC_e10c3.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_e10c3.dir\\objects1.rsp /out:cmTC_e10c3.exe /implib:cmTC_e10c3.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-pdjzcm\\cmTC_e10c3.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_e10c3.dir/intermediate.manifest CMakeFiles\\cmTC_e10c3.dir/manifest.res
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/Internal/CheckSourceCompiles.cmake:108 (try_compile)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/Internal/CheckCompilerFlag.cmake:18 (cmake_check_source_compiles)"
+      - "C:/Program Files/CMake/share/cmake-3.31/Modules/CheckCCompilerFlag.cmake:56 (cmake_check_compiler_flag)"
+      - "cmake/OpusFunctions.cmake:46 (check_c_compiler_flag)"
+      - "cmake/OpusConfig.cmake:86 (check_flag)"
+      - "CMakeLists.txt:11 (include)"
+    checks:
+      - "Performing Test STACK_PROTECTOR_DISABLED_SUPPORTED"
+    directories:
+      source: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-tw42q7"
+      binary: "C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-tw42q7"
+    cmakeVariables:
+      CMAKE_C_FLAGS: "/DWIN32 /D_WINDOWS"
+      CMAKE_C_FLAGS_DEBUG: "/Zi /Ob0 /Od /RTC1"
+      CMAKE_EXE_LINKER_FLAGS: "/machine:x64"
+      CMAKE_MODULE_PATH: "C:/Users/kenjinote/Desktop/chat/opus/cmake"
+    buildResult:
+      variable: "STACK_PROTECTOR_DISABLED_SUPPORTED"
+      cached: true
+      stdout: |
+        Change Dir: 'C:/Users/kenjinote/Desktop/chat/opus/build/CMakeFiles/CMakeScratch/TryCompile-tw42q7'
+        
+        Run Build Command(s): "C:/Program Files/CMake/bin/cmake.exe" -E env VERBOSE=1 nmake -f Makefile /nologo cmTC_1de78\\fast
+        	"C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.50.35717\\bin\\HostX64\\x64\\nmake.exe"  -f CMakeFiles\\cmTC_1de78.dir\\build.make /nologo -L                  CMakeFiles\\cmTC_1de78.dir\\build
+        Building C object CMakeFiles/cmTC_1de78.dir/src.c.obj
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E cmake_cl_compile_depends --dep-file=CMakeFiles\\cmTC_1de78.dir\\src.c.obj.d --working-dir=C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-tw42q7 --filter-prefix="繝｡繝｢: 繧､繝ｳ繧ｯ繝ｫ繝ｼ繝・繝輔ぃ繧､繝ｫ:  " -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\cl.exe @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmCF2C.tmp
+        src.c
+        Linking C executable cmTC_1de78.exe
+        	"C:\\Program Files\\CMake\\bin\\cmake.exe" -E vs_link_exe --msvc-ver=1950 --intdir=CMakeFiles\\cmTC_1de78.dir --rc=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe --mt=C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe --manifests -- C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_1de78.dir\\objects1.rsp @C:\\Users\\KENJIN~1\\AppData\\Local\\Temp\\nmCF9A.tmp
+        Visual Studio Incremental Link with embedded manifests
+        Create CMakeFiles\\cmTC_1de78.dir/manifest.rc
+        Create empty: CMakeFiles\\cmTC_1de78.dir/embed.manifest
+        RC Pass 1:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_1de78.dir/manifest.res CMakeFiles\\cmTC_1de78.dir/manifest.rc
+        LINK Pass 1:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_1de78.dir\\objects1.rsp /out:cmTC_1de78.exe /implib:cmTC_1de78.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-tw42q7\\cmTC_1de78.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_1de78.dir/intermediate.manifest CMakeFiles\\cmTC_1de78.dir/manifest.res
+        MT:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\mt.exe /nologo /manifest CMakeFiles\\cmTC_1de78.dir/intermediate.manifest /out:CMakeFiles\\cmTC_1de78.dir/embed.manifest /notify_update
+        RC Pass 2:
+        C:\\PROGRA~2\\WI3CF2~1\\10\\bin\\100261~1.0\\x64\\rc.exe /fo CMakeFiles\\cmTC_1de78.dir/manifest.res CMakeFiles\\cmTC_1de78.dir/manifest.rc
+        FINAL LINK:
+        C:\\PROGRA~1\\MIB055~1\\18\\ENTERP~1\\VC\\Tools\\MSVC\\1450~1.357\\bin\\Hostx64\\x64\\link.exe /nologo @CMakeFiles\\cmTC_1de78.dir\\objects1.rsp /out:cmTC_1de78.exe /implib:cmTC_1de78.lib /pdb:C:\\Users\\kenjinote\\Desktop\\chat\\opus\\build\\CMakeFiles\\CMakeScratch\\TryCompile-tw42q7\\cmTC_1de78.pdb /version:0.0 /machine:x64 /debug /INCREMENTAL /subsystem:console kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTFILE:CMakeFiles\\cmTC_1de78.dir/intermediate.manifest CMakeFiles\\cmTC_1de78.dir/manifest.res
+        
+      exitCode: 0
+...

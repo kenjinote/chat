@@ -4,8 +4,10 @@
 #include <codecapi.h>
 
 static void Log(const std::string& msg) {
+#ifdef _DEBUG
     static std::ofstream ofs("h264_debug.log", std::ios::app);
     ofs << GetTickCount() << " " << msg << std::endl;
+#endif
 }
 
 ID3D11Device* g_pD3D11Device = NULL;

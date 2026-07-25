@@ -4,6 +4,7 @@
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
+#include <richedit.h>
 
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
@@ -63,10 +64,10 @@ H264Encoder* g_pH264Encoder = nullptr;
 #include "resource.h"
 
 std::wstring GetString(UINT id) {
-    WCHAR buffer[512];
-    int len = LoadStringW(GetModuleHandle(NULL), id, buffer, 512);
-    if (len > 0) {
-        return std::wstring(buffer, len);
+    LPCWSTR pString = NULL;
+    int len = LoadStringW(GetModuleHandle(NULL), id, (LPWSTR)&pString, 0);
+    if (len > 0 && pString) {
+        return std::wstring(pString, len);
     }
     return L"";
 }
@@ -75,6 +76,7 @@ std::wstring GetString(UINT id) {
 #define WM_USER_MSG (WM_APP + 2)
 
 void LogToFile(const std::string& msg) {
+#ifdef _DEBUG
     FILE* fp = NULL;
     fopen_s(&fp, "chat.log", "a");
     if (fp) {
@@ -83,6 +85,7 @@ void LogToFile(const std::string& msg) {
         fprintf(fp, "[%02d:%02d:%02d.%03d] %s\n", st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, msg.c_str());
         fclose(fp);
     }
+#endif
 }
 #define WM_NEW_ROOM (WM_APP + 3)
 #define WM_REVERT_ROOM (WM_APP + 4)
@@ -134,6 +137,7 @@ CAudioSessionEvents* g_pAudioEvents = nullptr;
 
 #define WM_APP_VOLUME_CHANGED (WM_APP + 1)
 #define WM_APP_MAINTENANCE_MSG (WM_APP + 5)
+#define WM_APP_CONNECT_SERVER (WM_APP + 6)
 
 HRESULT STDMETHODCALLTYPE CAudioSessionEvents::OnSimpleVolumeChanged(float NewVolume, BOOL NewMute, LPCGUID EventContext) {
     if (g_hVolumeSlider) {
@@ -874,9 +878,14 @@ struct JitterFrame {
 };
 std::map<std::wstring, std::queue<JitterFrame>> g_jitterBuffers;
 
+#include <opus.h>
+OpusEncoder* g_opusEncoder = nullptr;
+std::map<std::wstring, OpusDecoder*> g_opusDecoders;
+
 HWAVEOUT g_hWaveOut = NULL;
 bool g_isVoiceActive = false;
 bool g_suspectMicDead = false;
+DWORD g_lastVoiceActiveTime = 0;
 
 extern ID3D11Device* g_pD3D11Device;
 extern ID3D11DeviceContext* g_pD3D11Context;
@@ -892,7 +901,7 @@ char g_waveOutBuf[AUDIO_OUT_BUF_COUNT][AUDIO_BUF_SIZE];
 
 void LoadSettings() {
     HKEY hKey;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\RetroChat", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\chat.exe", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
         WCHAR buf[256] = { 0 };
         DWORD type = REG_SZ;
         DWORD cbData = sizeof(buf);
@@ -948,7 +957,7 @@ void LoadSettings() {
 
 void SaveSettings() {
     HKEY hKey;
-    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\RetroChat", 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
+    if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\chat.exe", 0, NULL, 0, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
         RegSetValueExW(hKey, L"Username", 0, REG_SZ, (const BYTE*)g_username.c_str(), (DWORD)((g_username.length() + 1) * sizeof(WCHAR)));
         RegSetValueExW(hKey, L"SecretId", 0, REG_SZ, (const BYTE*)g_secretId.c_str(), (DWORD)((g_secretId.length() + 1) * sizeof(WCHAR)));
         RegSetValueExW(hKey, L"NameColor", 0, REG_DWORD, (const BYTE*)&g_nameColor, sizeof(DWORD));
@@ -1674,10 +1683,26 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
                 g_currentMicVolume = (rms * 100) / 32768;
                 if (g_currentMicVolume > 100) g_currentMicVolume = 100;
                 if (g_currentMicVolume < 0) g_currentMicVolume = 0;
+                
+                // VAD (Voice Activity Detection) Threshold
+                // Base rms scale is 0 to 32768. We consider rms > 150 (approx 0.5%) as active speech.
+                if (rms > 150) {
+                    g_lastVoiceActiveTime = GetTickCount();
+                }
+                
                 // Boost visual indicator slightly for low voices
                 g_currentMicVolume = g_currentMicVolume * 3;
                 if (g_currentMicVolume > 100) g_currentMicVolume = 100;
                 InvalidateRect(g_hVolumeIndicator, NULL, FALSE);
+            }
+
+            // If voice hasn't been active in the last 500ms, skip sending
+            if (GetTickCount() - g_lastVoiceActiveTime > 500) {
+                // Return buffer to queue
+                if (g_isVoiceActive) {
+                    waveInAddBuffer(hwi, pHdr, sizeof(WAVEHDR));
+                }
+                return;
             }
 
             char udpPkt[2048];
@@ -1689,18 +1714,22 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
             mhdr->timestamp = GetTickCount();
             wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
             
-            memcpy(udpPkt + sizeof(MediaHeader), pHdr->lpData, pHdr->dwBytesRecorded);
-            
-            sockaddr_in serverUdp = {0};
-            serverUdp.sin_family = AF_INET;
-            serverUdp.sin_port = htons(4001);
-            if (!g_isServerUdpAddrResolved) {
-                g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+            if (g_opusEncoder) {
+                unsigned char* payloadData = (unsigned char*)(udpPkt + sizeof(MediaHeader));
+                int payloadMax = sizeof(udpPkt) - sizeof(MediaHeader);
+                int opusBytes = opus_encode(g_opusEncoder, (opus_int16*)pHdr->lpData, AUDIO_BUF_SIZE / 2, payloadData, payloadMax);
+                if (opusBytes > 0) {
+                    sockaddr_in serverUdp = {0};
+                    serverUdp.sin_family = AF_INET;
+                    serverUdp.sin_port = htons(4001);
+                    if (!g_isServerUdpAddrResolved) {
+                        g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                    }
+                    serverUdp.sin_addr = g_serverUdpAddr;
+                    
+                    sendto(g_sock, udpPkt, sizeof(MediaHeader) + opusBytes, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                }
             }
-            serverUdp.sin_addr = g_serverUdpAddr;
-            
-            int sent = sendto(g_sock, udpPkt, sizeof(MediaHeader) + pHdr->dwBytesRecorded, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
-            LogToFile("UDP Sending Audio Packet, len=" + std::to_string(pHdr->dwBytesRecorded) + ", sent=" + std::to_string(sent));
         }
         if (g_isVoiceActive) {
             // If the buffer was aborted (e.g. unplugged), do not re-add it.
@@ -1766,6 +1795,14 @@ bool InitAudioIn() {
     wfx.nBlockAlign = wfx.nChannels * wfx.wBitsPerSample / 8;
     wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
 
+    if (!g_opusEncoder) {
+        int err;
+        g_opusEncoder = opus_encoder_create(16000, 1, OPUS_APPLICATION_VOIP, &err);
+        if (g_opusEncoder) {
+            opus_encoder_ctl(g_opusEncoder, OPUS_SET_BITRATE(32000));
+        }
+    }
+
     if (waveInOpen(&g_hWaveIn, WAVE_MAPPER, &wfx, (DWORD_PTR)waveInProc, 0, CALLBACK_FUNCTION) != MMSYSERR_NOERROR) {
         g_hWaveIn = NULL;
         return false;
@@ -1802,6 +1839,11 @@ void CleanupAudioIn() {
         }
         waveInClose(g_hWaveIn);
         g_hWaveIn = NULL;
+    }
+    
+    if (g_opusEncoder) {
+        opus_encoder_destroy(g_opusEncoder);
+        g_opusEncoder = nullptr;
     }
 }
 
@@ -4460,6 +4502,33 @@ LRESULT CALLBACK ScrollbarColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
         }
     }
     else if (msg == WM_MOUSEWHEEL || msg == WM_KEYDOWN || msg == WM_KEYUP || msg == WM_VSCROLL) {
+        wchar_t className[256];
+        GetClassNameW(hWnd, className, 256);
+        if (wcscmp(className, MSFTEDIT_CLASS) == 0) {
+            if (msg == WM_MOUSEWHEEL) {
+                int delta = (short)HIWORD(wParam);
+                int lines = (delta > 0 ? 3 : -3);
+                if (lines > 0) {
+                    for (int i = 0; i < lines; i++) SendMessage(hWnd, WM_VSCROLL, MAKEWPARAM(SB_LINEUP, 0), 0);
+                } else {
+                    for (int i = 0; i < -lines; i++) SendMessage(hWnd, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
+                }
+                RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+                return 0;
+            } else if (msg == WM_KEYDOWN) {
+                int action = -1;
+                if (wParam == VK_UP) action = SB_LINEUP;
+                else if (wParam == VK_DOWN) action = SB_LINEDOWN;
+                else if (wParam == VK_PRIOR) action = SB_PAGEUP;
+                else if (wParam == VK_NEXT) action = SB_PAGEDOWN;
+                
+                if (action != -1) {
+                    SendMessage(hWnd, WM_VSCROLL, MAKEWPARAM(action, 0), 0);
+                    RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+                    return 0;
+                }
+            }
+        }
         LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
         RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
         return res;
@@ -4562,7 +4631,12 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         SendMessage(hList, LB_SETITEMHEIGHT, 0, Scale(16));
         
         s_roomNames.clear();
-        for (const auto& r : g_publicRooms) {
+        std::vector<std::pair<std::wstring, int>> sortedRooms(g_publicRooms.begin(), g_publicRooms.end());
+        std::sort(sortedRooms.begin(), sortedRooms.end(), [](const auto& a, const auto& b) {
+            if (a.second != b.second) return a.second > b.second;
+            return a.first < b.first;
+        });
+        for (const auto& r : sortedRooms) {
             if (r.second <= 0) continue;
             std::wstring display = r.first + L" (" + std::to_wstring(r.second) + L")";
             int idx = (int)SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)display.c_str());
@@ -4620,7 +4694,12 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             
             SendMessage(hList, LB_RESETCONTENT, 0, 0);
             s_roomNames.clear();
-            for (const auto& r : g_publicRooms) {
+            std::vector<std::pair<std::wstring, int>> sortedRooms(g_publicRooms.begin(), g_publicRooms.end());
+            std::sort(sortedRooms.begin(), sortedRooms.end(), [](const auto& a, const auto& b) {
+                if (a.second != b.second) return a.second > b.second;
+                return a.first < b.first;
+            });
+            for (const auto& r : sortedRooms) {
                 if (r.second <= 0) continue;
                 if (search.empty() || r.first.find(search) != std::wstring::npos) {
                     std::wstring display = r.first + L" (" + std::to_wstring(r.second) + L")";
@@ -4694,7 +4773,12 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         
         SendMessage(hList, LB_RESETCONTENT, 0, 0);
         s_roomNames.clear();
-        for (const auto& r : g_publicRooms) {
+        std::vector<std::pair<std::wstring, int>> sortedRooms(g_publicRooms.begin(), g_publicRooms.end());
+        std::sort(sortedRooms.begin(), sortedRooms.end(), [](const auto& a, const auto& b) {
+            if (a.second != b.second) return a.second > b.second;
+            return a.first < b.first;
+        });
+        for (const auto& r : sortedRooms) {
             if (r.second <= 0) continue;
             if (search.empty() || r.first.find(search) != std::wstring::npos) {
                 std::wstring display = r.first + L" (" + std::to_wstring(r.second) + L")";
@@ -5309,42 +5393,56 @@ DWORD WINAPI RecvThread(LPVOID param) {
 
                         if (mhdr->payloadType == 1) { // Audio
                             std::wstring wname = mhdr->userId;
-                            int audioLen = res - (int)sizeof(MediaHeader);
-                            short* samples = (short*)(udpBuf + sizeof(MediaHeader));
-                            int sampleCount = audioLen / 2;
+                            unsigned char* payload = (unsigned char*)(udpBuf + sizeof(MediaHeader));
+                            int payloadLen = res - (int)sizeof(MediaHeader);
+                            short decodedSamples[960];
+                            int decodedCount = 0;
                             
                             {
                                 std::lock_guard<std::mutex> lock(g_audioMixerMutex);
-                                JitterFrame frame;
-                                frame.samples.assign(samples, samples + sampleCount);
-                                g_jitterBuffers[wname].push(frame);
+                                if (g_opusDecoders.find(wname) == g_opusDecoders.end()) {
+                                    int err;
+                                    g_opusDecoders[wname] = opus_decoder_create(16000, 1, &err);
+                                }
+                                OpusDecoder* dec = g_opusDecoders[wname];
+                                if (dec) {
+                                    decodedCount = opus_decode(dec, payload, payloadLen, decodedSamples, AUDIO_BUF_SIZE / 2, 0);
+                                }
                                 
-                                if (g_jitterBuffers[wname].size() > 5) {
-                                    g_jitterBuffers[wname].pop();
+                                if (decodedCount > 0) {
+                                    JitterFrame frame;
+                                    frame.samples.assign(decodedSamples, decodedSamples + decodedCount);
+                                    g_jitterBuffers[wname].push(frame);
+                                    
+                                    if (g_jitterBuffers[wname].size() > 5) {
+                                        g_jitterBuffers[wname].pop();
+                                    }
                                 }
                             }
                             
-                            int maxAmp = 0;
-                            for (int i = 0; i < sampleCount; i++) {
-                                int amp = abs(samples[i]);
-                                if (amp > maxAmp) maxAmp = amp;
-                            }
-                            int volume = (maxAmp * 100) / 32767;
-                            volume = volume * 3;
-                            if (volume > 100) volume = 100;
-                            
-                            LogToFile("UDP AUDIO RECV: maxAmp=" + std::to_string(maxAmp) + " volume=" + std::to_string(volume) + " wname=" + w2a(wname.c_str()));
-                            
-                            bool newlySpeaking = false;
-                            {
-                                std::lock_guard<std::mutex> lock(g_voiceMutex);
-                                if (g_voiceUsers.find(wname) == g_voiceUsers.end() || (GetTickCount() - g_voiceUsers[wname] > 1000)) {
-                                    newlySpeaking = true;
+                            if (decodedCount > 0) {
+                                int maxAmp = 0;
+                                for (int i = 0; i < decodedCount; i++) {
+                                    int amp = abs(decodedSamples[i]);
+                                    if (amp > maxAmp) maxAmp = amp;
                                 }
-                                g_voiceUsers[wname] = GetTickCount();
-                                g_voiceVolumes[wname] = volume;
+                                int volume = (maxAmp * 100) / 32767;
+                                volume = volume * 3;
+                                if (volume > 100) volume = 100;
+                                
+                                LogToFile("UDP AUDIO RECV: maxAmp=" + std::to_string(maxAmp) + " volume=" + std::to_string(volume) + " wname=" + w2a(wname.c_str()));
+                                
+                                bool newlySpeaking = false;
+                                {
+                                    std::lock_guard<std::mutex> lock(g_voiceMutex);
+                                    if (g_voiceUsers.find(wname) == g_voiceUsers.end() || (GetTickCount() - g_voiceUsers[wname] > 1000)) {
+                                        newlySpeaking = true;
+                                    }
+                                    g_voiceUsers[wname] = GetTickCount();
+                                    g_voiceVolumes[wname] = volume;
+                                }
+                                if (newlySpeaking && g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
                             }
-                            if (newlySpeaking && g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
                         }
                         else if (mhdr->payloadType == 4) {
                             std::wstring wname = mhdr->userId;
@@ -6946,20 +7044,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         DWORD dwBytesReturned = 0;
         WSAIoctl(g_sock, SIO_UDP_CONNRESET, &bNewBehavior, sizeof(bNewBehavior), NULL, 0, &dwBytesReturned, NULL, NULL);
 
-        u_long mode = 1;
-        ioctlsocket(g_sock, FIONBIO, &mode);
 
-        g_tcpSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-        sockaddr_in serverAddr = { 0 };
-        serverAddr.sin_family = AF_INET;
-        serverAddr.sin_port = htons(4000);
-        ResolveIP(g_serverIp, serverAddr.sin_addr);
-        
-        bool isConnected = true;
-        if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-            MessageBoxW(hWnd, GetString(IDS_ERROR_NETWORK).c_str(), GetString(IDS_ERROR_TITLE).c_str(), MB_OK | MB_ICONERROR);
-            isConnected = false;
-        }
 
         LoadSettings();
         if (g_username.empty()) {
@@ -7126,38 +7211,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 //        }
 
 
-        MsgData sysMsg;
-        sysMsg.user = L"";
-        if (isConnected) {
-            std::wstring dispName = g_username;
-            size_t pos = dispName.find(L'#');
-            if (pos != std::wstring::npos) dispName = dispName.substr(0, pos);
-            sysMsg.msg = GetString(IDS_JOINED_NETWORK) + L" (" + dispName + L")";
-            sysMsg.color = RGB(128,128,128);
-            sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
-            sysMsg.size = 9;
-            AppendLog(sysMsg);
-            
-            wchar_t moveBuf[1024];
-            swprintf_s(moveBuf, GetString(IDS_MOVED_TO).c_str(), g_currentRoom.c_str());
-            sysMsg.msg = moveBuf;
-            AppendLog(sysMsg);
-        } else {
-            sysMsg.msg = GetString(IDS_SERVER_NOT_FOUND);
-            sysMsg.color = RGB(255,0,0);
-            sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
-            sysMsg.size = 9;
-            AppendLog(sysMsg);
-        }
 
-        // Send initial join after all UI controls are fully created
-        EnableWindow(g_hSendBtn, FALSE);
-        SendJoinRequest(g_currentRoom, g_isPrivateRoom);
-        g_hRecvThread = CreateThread(0, 0, RecvThread, hWnd, 0, 0);
-        g_hDecodeThread = CreateThread(0, 0, DecodeWorkerThread, 0, 0, 0);
-        SetTimer(hWnd, 1, 3000, NULL);
-        SetTimer(hWnd, 2, 100, NULL);
-        InitVolumeSync(hWnd);
 
         return 0;
     }
@@ -7784,7 +7838,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int maintenanceY = bottomY + inputHeight + maintenanceMargin + Scale(1);
         if (!g_maintenanceMsg.empty() && g_hMaintenanceText) {
             ShowWindow(g_hMaintenanceText, SW_SHOW);
-            hdwp = DeferWindowPos(hdwp, g_hMaintenanceText, NULL, margin, maintenanceY, width - margin * 2, maintenanceHeight, SWP_NOZORDER);
+            hdwp = DeferWindowPos(hdwp, g_hMaintenanceText, NULL, margin, maintenanceY + 2, width - margin * 2, maintenanceHeight, SWP_NOZORDER);
         } else if (g_hMaintenanceText) {
             ShowWindow(g_hMaintenanceText, SW_HIDE);
         }
@@ -7955,6 +8009,56 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         break;
     }
 
+    case WM_APP_CONNECT_SERVER: {
+        u_long mode = 1;
+        ioctlsocket(g_sock, FIONBIO, &mode);
+
+        g_tcpSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        sockaddr_in serverAddr = { 0 };
+        serverAddr.sin_family = AF_INET;
+        serverAddr.sin_port = htons(4000);
+        ResolveIP(g_serverIp, serverAddr.sin_addr);
+        
+        bool isConnected = true;
+        if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
+            MessageBoxW(hWnd, GetString(IDS_ERROR_NETWORK).c_str(), GetString(IDS_ERROR_TITLE).c_str(), MB_OK | MB_ICONERROR);
+            isConnected = false;
+        }
+
+        MsgData sysMsg;
+        sysMsg.user = L"";
+        if (isConnected) {
+            std::wstring dispName = g_username;
+            size_t pos = dispName.find(L'#');
+            if (pos != std::wstring::npos) dispName = dispName.substr(0, pos);
+            sysMsg.msg = GetString(IDS_JOINED_NETWORK) + L" (" + dispName + L")";
+            sysMsg.color = RGB(128,128,128);
+            sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
+            sysMsg.size = 9;
+            AppendLog(sysMsg);
+            
+            wchar_t moveBuf[1024];
+            swprintf_s(moveBuf, GetString(IDS_MOVED_TO).c_str(), g_currentRoom.c_str());
+            sysMsg.msg = moveBuf;
+            AppendLog(sysMsg);
+        } else {
+            sysMsg.msg = GetString(IDS_SERVER_NOT_FOUND);
+            sysMsg.color = RGB(255,0,0);
+            sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
+            sysMsg.size = 9;
+            AppendLog(sysMsg);
+        }
+
+        // Send initial join after all UI controls are fully created
+        EnableWindow(g_hSendBtn, FALSE);
+        SendJoinRequest(g_currentRoom, g_isPrivateRoom);
+        g_hRecvThread = CreateThread(0, 0, RecvThread, hWnd, 0, 0);
+        g_hDecodeThread = CreateThread(0, 0, DecodeWorkerThread, 0, 0, 0);
+        SetTimer(hWnd, 1, 3000, NULL);
+        SetTimer(hWnd, 2, 100, NULL);
+        InitVolumeSync(hWnd);
+        return 0;
+    }
     case WM_TIMER: {
         if (wParam == 1002) {
             std::thread(FetchMaintenanceMessageThread, hWnd).detach();
@@ -8150,7 +8254,154 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return DefWindowProc(hWnd, msg, wParam, lParam);
 }
 
+bool g_tosResult = false;
+
+LRESULT CALLBACK ToSWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    LRESULT classicResult = 0;
+    if (HandleClassicStyle(hWnd, msg, wParam, lParam, &classicResult, false)) return classicResult;
+
+    static HWND hEdit, hBtnOK, hBtnCancel;
+
+    if (msg == WM_CREATE) {
+        int margin = Scale(5);
+        int btnW = Scale(80);
+        int btnH = Scale(24);
+        
+        RECT rc;
+        GetClientRect(hWnd, &rc);
+        
+        int w = rc.right;
+        int h = rc.bottom;
+        
+        hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, MSFTEDIT_CLASS, L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_MULTILINE | ES_READONLY | WS_VSCROLL | WS_CLIPSIBLINGS,
+            margin, margin, w - margin * 2, h - margin * 3 - btnH, hWnd, (HMENU)101, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+            
+        int totalBtnBlockW = btnW * 2 + margin;
+        int startX = (w - totalBtnBlockW) / 2;
+        
+        hBtnOK = CreateWindowEx(0, L"BUTTON", GetString(IDS_AGREE).c_str(), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            startX, h - margin - btnH, btnW, btnH, hWnd, (HMENU)IDOK, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+            
+        hBtnCancel = CreateWindowEx(0, L"BUTTON", GetString(IDS_DISAGREE).c_str(), WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            startX + btnW + margin, h - margin - btnH, btnW, btnH, hWnd, (HMENU)IDCANCEL, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+
+        SendMessage(hEdit, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        SendMessage(hBtnOK, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        SendMessage(hBtnCancel, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        
+        SetWindowTheme(hEdit, L" ", L" ");
+        SetWindowTheme(hBtnOK, L" ", L" ");
+        SetWindowTheme(hBtnCancel, L" ", L" ");
+        
+        SetWindowSubclass(hBtnOK, ClassicButtonProc, 0, 0);
+        SetWindowSubclass(hBtnCancel, ClassicButtonProc, 0, 0);
+        SetWindowSubclass(hEdit, ClientEdgeSubclassProc, 0, 0);
+        SetWindowSubclass(hEdit, ScrollbarColorProc, 0, 0);
+        
+        // Bold specific lines
+        std::wstring tosText = GetString(IDS_TOS_TEXT);
+        tosText.erase(std::remove(tosText.begin(), tosText.end(), L'\r'), tosText.end());
+        SetWindowTextW(hEdit, tosText.c_str());
+        
+        int startPos = 0;
+        while (startPos < tosText.length()) {
+            int endPos = tosText.find(L'\n', startPos);
+            if (endPos == std::wstring::npos) endPos = tosText.length();
+            
+            std::wstring line = tosText.substr(startPos, endPos - startPos);
+            if (line.find(L"第") == 0 || line.find(L"エンド") == 0 || line.find(L"Article") == 0) {
+                CHARFORMAT2W cf;
+                ZeroMemory(&cf, sizeof(cf));
+                cf.cbSize = sizeof(cf);
+                cf.dwMask = CFM_BOLD;
+                cf.dwEffects = CFE_BOLD;
+                SendMessage(hEdit, EM_SETSEL, startPos, endPos);
+                SendMessage(hEdit, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
+            }
+            startPos = endPos + 1;
+        }
+        SendMessage(hEdit, EM_SETSEL, 0, 0);
+        return 0;
+    }
+    
+    if (msg == WM_COMMAND) {
+        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) {
+            g_tosResult = (LOWORD(wParam) == IDOK);
+            HWND hParent = GetParent(hWnd);
+            if (hParent) EnableWindow(hParent, TRUE);
+            DestroyWindow(hWnd);
+            return 0;
+        }
+    }
+    
+    if (msg == WM_DESTROY) {
+        PostQuitMessage(0);
+        return 0;
+    }
+    
+    if (msg == WM_CLOSE) {
+        g_tosResult = false;
+        HWND hParent = GetParent(hWnd);
+        if (hParent) EnableWindow(hParent, TRUE);
+        DestroyWindow(hWnd);
+        return 0;
+    }
+    
+    return DefWindowProc(hWnd, msg, wParam, lParam);
+}
+
+bool ShowToSDialog(HWND hParent) {
+    WNDCLASS wc = { 0 };
+    wc.lpfnWndProc = ToSWindowProc;
+    wc.hInstance = GetModuleHandle(0);
+    wc.lpszClassName = L"ToSWindowClass";
+    wc.hbrBackground = (HBRUSH)CreateSolidBrush(RGB(192, 192, 192));
+    RegisterClass(&wc);
+
+    g_tosResult = false;
+
+    RECT rcParent;
+    if (hParent) {
+        GetWindowRect(hParent, &rcParent);
+    } else {
+        rcParent.left = 0; rcParent.top = 0;
+        rcParent.right = GetSystemMetrics(SM_CXSCREEN);
+        rcParent.bottom = GetSystemMetrics(SM_CYSCREEN);
+    }
+
+    int margin = Scale(5);
+    int totalWidth = margin * 2 + Scale(320); // 80% of 400
+    int totalHeight = margin * 3 + Scale(192) + Scale(24); // 80% of 240
+    
+    RECT rcDlg = { 0, 0, totalWidth, totalHeight };
+    AdjustWindowRectExForDpi(&rcDlg, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_DLGMODALFRAME, g_dpi);
+    int winW = rcDlg.right - rcDlg.left;
+    int winH = rcDlg.bottom - rcDlg.top;
+
+    HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"ToSWindowClass", GetString(IDS_TOS_TITLE).c_str(),
+        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE | WS_CLIPCHILDREN,
+        rcParent.left + (rcParent.right - rcParent.left - winW) / 2, 
+        rcParent.top + (rcParent.bottom - rcParent.top - winH) / 2, 
+        winW, winH, hParent, 0, GetModuleHandle(0), 0);
+    
+    ApplyClassicStyle(hWnd);
+    
+    if (hParent) EnableWindow(hParent, FALSE);
+    
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        if (!IsDialogMessage(hWnd, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+    }
+    
+    return g_tosResult;
+}
+
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
+    LoadLibraryW(L"Msftedit.dll");
     timeBeginPeriod(1);
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     winrt::init_apartment(winrt::apartment_type::single_threaded);
@@ -8158,8 +8409,17 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     InitHardwareAcceleration();
     SetThreadUILanguage(0);
     g_currentRoom = GetString(IDS_LOBBY);
-    LoadIgnoredUsers();
     
+    HKEY hKeyToS;
+    DWORD tosAccepted = 0;
+    DWORD cbDataToS = sizeof(DWORD);
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\chat.exe", 0, KEY_READ, &hKeyToS) == ERROR_SUCCESS) {
+        DWORD type = REG_DWORD;
+        RegQueryValueExW(hKeyToS, L"ToSAccepted", NULL, &type, (LPBYTE)&tosAccepted, &cbDataToS);
+        RegCloseKey(hKeyToS);
+    }
+
+    LoadIgnoredUsers();
     HDC hdcDpi = GetDC(NULL);
     g_dpi = GetDpiForSystem();
     ReleaseDC(NULL, hdcDpi);
@@ -8172,7 +8432,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         0,
         WndProc, 0, 0, hInstance,
         LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APP_ICON)), LoadCursor(0, IDC_ARROW), // hIcon is NULL
-        (HBRUSH)CreateSolidBrush(RGB(192, 192, 192)), 0, L"retcha"
+        (HBRUSH)CreateSolidBrush(RGB(192, 192, 192)), 0, L"chat"
     };
     RegisterClass(&wc);
     
@@ -8186,7 +8446,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     AdjustWindowRectExForDpi(&rcMin, WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, FALSE, 0, g_dpi);
 
     HWND hWnd = CreateWindow(
-        L"retcha", GetString(IDS_WINDOW_TITLE).c_str(),
+        L"chat", GetString(IDS_WINDOW_TITLE).c_str(),
         WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
         CW_USEDEFAULT, 0, rcMin.right - rcMin.left, rcMin.bottom - rcMin.top,
         0, 0, hInstance, 0);
@@ -8198,6 +8458,22 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
         
     ShowWindow(hWnd, SW_SHOWDEFAULT);
     UpdateWindow(hWnd);
+
+    if (tosAccepted == 0) {
+        if (ShowToSDialog(hWnd)) {
+            if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\chat.exe", 0, NULL, 0, KEY_WRITE, NULL, &hKeyToS, NULL) == ERROR_SUCCESS) {
+                tosAccepted = 1;
+                RegSetValueExW(hKeyToS, L"ToSAccepted", 0, REG_DWORD, (const BYTE*)&tosAccepted, sizeof(DWORD));
+                RegCloseKey(hKeyToS);
+            }
+            PostMessage(hWnd, WM_APP_CONNECT_SERVER, 0, 0);
+        } else {
+            DestroyWindow(hWnd);
+            return 0;
+        }
+    } else {
+        PostMessage(hWnd, WM_APP_CONNECT_SERVER, 0, 0);
+    }
 
     while (GetMessage(&msg, 0, 0, 0)) {
         if (msg.message == WM_KEYDOWN && msg.wParam == 'R' && (GetAsyncKeyState(VK_CONTROL) & 0x8000)) {
