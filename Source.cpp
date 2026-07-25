@@ -229,6 +229,8 @@ uint32_t g_sessionId = 0;
 std::wstring g_secretId = L"";
 std::wstring g_userId = L"";
 std::wstring g_username;
+std::wstring g_systemFontName = L"MS UI Gothic";
+std::wstring g_systemLocaleName = L"en-US";
 int g_dpi = 96;
 inline int Scale(int x) { return MulDiv(x, g_dpi, 96); }
 
@@ -620,6 +622,7 @@ bool g_lastInputFontI = false;
 #include <map>
 #include <thread>
 #include <wincrypt.h>
+#include <regex>
 #pragma comment(lib, "windowscodecs.lib")
 #pragma comment(lib, "mf.lib")
 #pragma comment(lib, "mfplat.lib")
@@ -681,6 +684,8 @@ std::map<std::wstring, std::map<uint16_t, VideoFrameBuffer>> g_videoBuffers;
 
 std::set<std::wstring> g_ignoredUsers;
 std::mutex g_ignoredMutex;
+std::map<std::wstring, int> g_userViolations;
+std::map<std::wstring, std::vector<DWORD>> g_userMessageTimes;
 
 std::wstring GetIgnoredUsersFilePath() {
     wchar_t appData[MAX_PATH];
@@ -755,32 +760,56 @@ void SortUserList() {
     InvalidateRect(g_hUserList, NULL, TRUE);
 }
 
-std::wstring FilterProfanity(std::wstring text) {
-    std::wstring ng_words = GetString(IDS_NG_WORDS);
-    size_t start = 0;
-    size_t end = ng_words.find(L',');
-    while (end != std::wstring::npos) {
-        std::wstring word = ng_words.substr(start, end - start);
-        if (!word.empty()) {
-            size_t pos = 0;
-            while ((pos = text.find(word, pos)) != std::wstring::npos) {
-                text.replace(pos, word.length(), L"***");
-                pos += 3;
+std::wstring FilterProfanity(std::wstring text, const std::wstring& username) {
+    if (text.empty()) return text;
+    bool needsSave = false;
+
+    try {
+        static const std::wregex level1_regex(
+            L"(死|氏|4|ﾀﾋ)(ね|んじまえ|ばいい)|(殺|56)(す|して)|キチ[ガガイ〇]イ|ガイジ|池沼|土人|チョン|チャンコロ|カタワ|メクラ|エタ|ヒニン|円交|援助交際|パパ活|売春|レイプ|自殺しろ"
+            L"|fuck|bitch|cunt|nigger|nigga|faggot"
+            L"|操你妈|傻逼|干你娘|肏你妈"
+            L"|씨발|개새끼|애미야",
+            std::regex_constants::icase | std::regex_constants::optimize);
+            
+        if (std::regex_search(text, level1_regex)) {
+            if (!username.empty()) {
+                std::lock_guard<std::mutex> lock(g_ignoredMutex);
+                if (g_ignoredUsers.find(username) == g_ignoredUsers.end()) {
+                    g_ignoredUsers.insert(username);
+                    needsSave = true;
+                }
             }
+            if (needsSave) SaveIgnoredUsers();
+            return L"";
         }
-        start = end + 1;
-        end = ng_words.find(L',', start);
-    }
-    if (start < ng_words.length()) {
-        std::wstring word = ng_words.substr(start);
-        if (!word.empty()) {
-            size_t pos = 0;
-            while ((pos = text.find(word, pos)) != std::wstring::npos) {
-                text.replace(pos, word.length(), L"***");
-                pos += 3;
+    } catch (...) {}
+
+    try {
+        static const std::wregex level2_regex(
+            L"まんこ|ちんこ|マンコ|チンコ|おめこ|ペニス|うんこ|ウンコ|クソ|糞|カス|アホ|バカ|クズ|ゴミ|ボケ|マヌケ|キモイ|ウザい"
+            L"|shit|slut|whore|asshole|dick|cock|pussy"
+            L"|靠北|智障|脑残|鸡巴|牛逼"
+            L"|존나|병신|좆|지랄",
+            std::regex_constants::icase | std::regex_constants::optimize);
+            
+        std::wstring filteredText = std::regex_replace(text, level2_regex, L"***");
+        if (filteredText != text) {
+            if (!username.empty()) {
+                std::lock_guard<std::mutex> lock(g_ignoredMutex);
+                g_userViolations[username]++;
+                if (g_userViolations[username] >= 3) {
+                    if (g_ignoredUsers.find(username) == g_ignoredUsers.end()) {
+                        g_ignoredUsers.insert(username);
+                        needsSave = true;
+                    }
+                }
             }
+            if (needsSave) SaveIgnoredUsers();
         }
-    }
+        text = filteredText;
+    } catch (...) {}
+
     return text;
 }
 
@@ -1948,6 +1977,7 @@ struct MsgData {
 struct LogEntry {
     MsgData data;
     IDWriteTextLayout* pLayout = nullptr;
+    std::vector<std::pair<DWRITE_TEXT_RANGE, std::wstring>> urls;
     float height = 0;
 };
 std::vector<LogEntry> g_logEntries;
@@ -2121,8 +2151,8 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (!entry.pLayout) {
                     if (!g_pLogTextFormat) {
                         g_pDWriteFactory->CreateTextFormat(
-                            L"MS UI Gothic", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-                            9.0f * 1.5f, L"ja-JP", &g_pLogTextFormat);
+                            g_systemFontName.c_str(), NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+                            9.0f * 1.5f, g_systemLocaleName.c_str(), &g_pLogTextFormat);
                     }
                         
                     if (g_pLogTextFormat) {
@@ -2186,6 +2216,24 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                                     pUserBrush->Release();
                                 }
                             }
+                            
+                            try {
+                                std::wregex url_regex(L"https?://[\\w/:%#\\$&\\?\\(\\)~\\.=\\+\\-]+");
+                                auto words_begin = std::wsregex_iterator(fullText.begin(), fullText.end(), url_regex);
+                                auto words_end = std::wsregex_iterator();
+                                
+                                ID2D1SolidColorBrush* pLinkBrush = nullptr;
+                                pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 1.0f), &pLinkBrush);
+                                
+                                for (std::wsregex_iterator i = words_begin; i != words_end; ++i) {
+                                    std::wsmatch match = *i;
+                                    DWRITE_TEXT_RANGE urlRange = {(UINT32)match.position(), (UINT32)match.length()};
+                                    entry.urls.push_back({urlRange, match.str()});
+                                    entry.pLayout->SetUnderline(TRUE, urlRange);
+                                    if (pLinkBrush) entry.pLayout->SetDrawingEffect(pLinkBrush, urlRange);
+                                }
+                                if (pLinkBrush) pLinkBrush->Release();
+                            } catch (...) {}
                             
                             DWRITE_TEXT_METRICS metrics;
                             entry.pLayout->GetMetrics(&metrics);
@@ -2412,6 +2460,15 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         float y = (float)GET_Y_LPARAM(lParam) * 96.0f / g_dpi;
         int entryIndex, charIndex;
         if (GetTextPositionFromPoint(x, y, entryIndex, charIndex)) {
+            if (entryIndex >= 0 && (size_t)entryIndex < g_logEntries.size()) {
+                auto& entry = g_logEntries[entryIndex];
+                for (const auto& url : entry.urls) {
+                    if (charIndex >= (int)url.first.startPosition && charIndex < (int)(url.first.startPosition + url.first.length)) {
+                        ShellExecute(NULL, L"open", url.second.c_str(), NULL, NULL, SW_SHOWNORMAL);
+                        return 0; // Prevent selection start when clicking URL
+                    }
+                }
+            }
             g_logSelection.startEntryIndex = entryIndex;
             g_logSelection.startCharIndex = charIndex;
             g_logSelection.endEntryIndex = entryIndex;
@@ -2427,15 +2484,30 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
     case WM_MOUSEMOVE: {
-        if (g_logSelection.isSelecting) {
-            float x = (float)GET_X_LPARAM(lParam) * 96.0f / g_dpi;
-            float y = (float)GET_Y_LPARAM(lParam) * 96.0f / g_dpi;
-            int entryIndex, charIndex;
-            if (GetTextPositionFromPoint(x, y, entryIndex, charIndex)) {
+        float x = (float)GET_X_LPARAM(lParam) * 96.0f / g_dpi;
+        float y = (float)GET_Y_LPARAM(lParam) * 96.0f / g_dpi;
+        int entryIndex, charIndex;
+        bool isHoveringUrl = false;
+        if (GetTextPositionFromPoint(x, y, entryIndex, charIndex)) {
+            if (entryIndex >= 0 && (size_t)entryIndex < g_logEntries.size()) {
+                auto& entry = g_logEntries[entryIndex];
+                for (const auto& url : entry.urls) {
+                    if (charIndex >= (int)url.first.startPosition && charIndex < (int)(url.first.startPosition + url.first.length)) {
+                        isHoveringUrl = true;
+                        break;
+                    }
+                }
+            }
+            if (g_logSelection.isSelecting) {
                 g_logSelection.endEntryIndex = entryIndex;
                 g_logSelection.endCharIndex = charIndex;
                 InvalidateRect(hWnd, NULL, FALSE);
             }
+        }
+        if (isHoveringUrl) {
+            SetCursor(LoadCursor(NULL, IDC_HAND));
+        } else {
+            SetCursor(LoadCursor(NULL, IDC_ARROW));
         }
         return 0;
     }
@@ -2555,8 +2627,8 @@ IDWriteTextLayout* CreateInputLayout(HWND hWnd) {
         DWRITE_FONT_WEIGHT weight = b ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL;
         DWRITE_FONT_STYLE style = i ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL;
         g_pDWriteFactory->CreateTextFormat(
-            L"MS UI Gothic", NULL, weight, style, DWRITE_FONT_STRETCH_NORMAL,
-            (float)tsize * 1.5f, L"ja-JP", &g_pInputTextFormat);
+            g_systemFontName.c_str(), NULL, weight, style, DWRITE_FONT_STRETCH_NORMAL,
+            (float)tsize * 1.5f, g_systemLocaleName.c_str(), &g_pInputTextFormat);
             
         g_lastInputFontSize = tsize;
         g_lastInputFontB = b;
@@ -2609,7 +2681,7 @@ void UpdateImeWindowPos(HWND hWnd) {
 
         LOGFONTW lf = { 0 };
         lf.lfHeight = -Scale((LONG)(hm.height));
-        wcscpy_s(lf.lfFaceName, L"MS UI Gothic");
+        wcscpy_s(lf.lfFaceName, g_systemFontName.c_str());
         ImmSetCompositionFontW(hImc, &lf);
 
         pLayout->Release();
@@ -4933,13 +5005,32 @@ void SetWindowTitle(HWND hWnd) {
 
 void AppendLog(const MsgData& data) {
     if (!data.user.empty() && !data.isSystemEvent) {
+        bool needsSave = false;
         {
             std::lock_guard<std::mutex> lock(g_ignoredMutex);
             if (g_ignoredUsers.count(data.user) > 0) return;
+            
+            DWORD now = GetTickCount();
+            auto& times = g_userMessageTimes[data.user];
+            times.push_back(now);
+            while (!times.empty() && (now - times.front() > 3000)) {
+                times.erase(times.begin());
+            }
+            if (times.size() >= 5) {
+                if (g_ignoredUsers.find(data.user) == g_ignoredUsers.end()) {
+                    g_ignoredUsers.insert(data.user);
+                    needsSave = true;
+                }
+            }
+        }
+        if (needsSave) {
+            SaveIgnoredUsers();
+            return;
         }
     }
     MsgData filteredData = data;
-    filteredData.msg = FilterProfanity(filteredData.msg);
+    filteredData.msg = FilterProfanity(filteredData.msg, data.user);
+    if (filteredData.msg.empty()) return;
     LogEntry entry;
     entry.data = filteredData;
     g_logEntries.push_back(entry);
@@ -6447,7 +6538,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                                         ApplyClassicStyle(hVid);
                                         g_videoWindows[g_userId] = hVid;
                                     } else {
-                                        SetWindowTextW(g_videoWindows[g_userId], (g_username.substr(0, g_username.find(L'#')) + L" (Screen)").c_str());
+                                        SetWindowTextW(g_videoWindows[g_userId], (g_username.substr(0, g_username.find(L'#')) + GetString(IDS_SCREEN)).c_str());
                                         SetForegroundWindow(g_videoWindows[g_userId]);
                                     }
                                     g_isWebcamActive = true;
@@ -6480,7 +6571,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                                         ApplyClassicStyle(hVid);
                                         g_videoWindows[g_userId] = hVid;
                                     } else {
-                                        SetWindowTextW(g_videoWindows[g_userId], (g_username.substr(0, g_username.find(L'#')) + L" (Window)").c_str());
+                                        SetWindowTextW(g_videoWindows[g_userId], (g_username.substr(0, g_username.find(L'#')) + GetString(IDS_WINDOW)).c_str());
                                         SetForegroundWindow(g_videoWindows[g_userId]);
                                     }
                                     g_isWebcamActive = true;
@@ -6589,7 +6680,7 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                         if (g_tcpSocket != INVALID_SOCKET) {
                             send(g_tcpSocket, msg.c_str(), (int)msg.length(), 0);
                         }
-                        MessageBoxW(hwnd, GetString(IDS_REPORTED).c_str(), L"Report", MB_OK);
+                        MessageBoxW(hwnd, GetString(IDS_REPORTED).c_str(), GetString(IDS_REPORT_TITLE).c_str(), MB_OK);
                         InvalidateRect(hwnd, NULL, FALSE);
                     }
                 }
@@ -7502,9 +7593,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (g_userNames.count(user)) {
                 displayUser = g_userNames[user];
             }
-            if (user == g_userId) {
-                displayUser += L" (You)";
-            }
 
             bool isIgnored = false;
             {
@@ -7722,6 +7810,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             
             size_t hashPos = displayUser.find(L'#');
             if (hashPos != std::wstring::npos) displayUser = displayUser.substr(0, hashPos);
+            
+            if (user == g_userId) {
+                displayUser += GetString(IDS_YOU);
+            }
             
             DrawTextW(hdc, displayUser.c_str(), -1, &rcText, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
             if (hOldFont) {
@@ -8413,6 +8505,16 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     MFStartup(MF_VERSION);
     InitHardwareAcceleration();
     SetThreadUILanguage(0);
+    
+    WCHAR localeName[LOCALE_NAME_MAX_LENGTH];
+    if (GetUserDefaultLocaleName(localeName, LOCALE_NAME_MAX_LENGTH)) {
+        g_systemLocaleName = localeName;
+    }
+    NONCLIENTMETRICSW ncm = { sizeof(NONCLIENTMETRICSW) };
+    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICSW), &ncm, 0)) {
+        g_systemFontName = ncm.lfMessageFont.lfFaceName;
+    }
+    
     g_currentRoom = GetString(IDS_LOBBY);
     
     HKEY hKeyToS;

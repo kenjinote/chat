@@ -10,10 +10,10 @@
 	<Identity
 	  Name="18872KENJI.56470DC1F66C5"
 	  Publisher="CN=035A9AAC-915B-4CE1-AE39-1A101BED42F5"
-	  Version="1.0.2.0" />
+	  Version="1.0.3.0" />
 
 	<Properties>
-		<DisplayName>retcha</DisplayName>
+		<DisplayName>chat.exe</DisplayName>
 		<PublisherDisplayName>Kenji</PublisherDisplayName>
 		<Logo>Images\StoreLogo.png</Logo>
 	</Properties>
@@ -33,8 +33,8 @@
 		  EntryPoint="$targetentrypoint$">
 
 			<uap:VisualElements
-			  DisplayName="retcha"
-			  Description="retcha"
+			  DisplayName="chat.exe"
+			  Description="chat.exe"
 			  BackgroundColor="transparent"
 			  Square150x150Logo="Images\Square150x150Logo.png"
 			  Square44x44Logo="Images\Square44x44Logo.png">
