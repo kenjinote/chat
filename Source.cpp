@@ -780,7 +780,10 @@ std::wstring FilterProfanity(std::wstring text, const std::wstring& username) {
                     needsSave = true;
                 }
             }
-            if (needsSave) SaveIgnoredUsers();
+            if (needsSave) {
+                SaveIgnoredUsers();
+                if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
+            }
             return L"";
         }
     } catch (...) {}
@@ -805,7 +808,10 @@ std::wstring FilterProfanity(std::wstring text, const std::wstring& username) {
                     }
                 }
             }
-            if (needsSave) SaveIgnoredUsers();
+            if (needsSave) {
+                SaveIgnoredUsers();
+                if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
+            }
         }
         text = filteredText;
     } catch (...) {}
@@ -5025,6 +5031,7 @@ void AppendLog(const MsgData& data) {
         }
         if (needsSave) {
             SaveIgnoredUsers();
+            if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
             return;
         }
     }
