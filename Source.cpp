@@ -1507,8 +1507,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             }
 
             if (pEncoderInput) {
-                width &= ~15;
-                height &= ~15;
+                UINT32 encW = width & ~15;
+                UINT32 encH = height & ~15;
                 static UINT32 s_lastEncWidth = 0;
                 static UINT32 s_lastEncHeight = 0;
                 static ID3D11Device* s_lastDevice = nullptr;
@@ -1518,18 +1518,18 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                     bool isSharingScreen = (g_captureSourceType == 2 || g_captureSourceType == 3);
                     static bool s_lastIsScreenShare = false;
                     
-                    if (g_pH264Encoder && (s_lastEncWidth != width || s_lastEncHeight != height || s_lastDevice != currentDevice || s_lastIsScreenShare != isSharingScreen)) {
+                    if (g_pH264Encoder && (s_lastEncWidth != encW || s_lastEncHeight != encH || s_lastDevice != currentDevice || s_lastIsScreenShare != isSharingScreen)) {
                         delete g_pH264Encoder;
                         g_pH264Encoder = nullptr;
                     }
                     if (!g_pH264Encoder) {
                         g_pH264Encoder = new H264Encoder();
-                        if (!g_pH264Encoder->Initialize(width, height, isSharingScreen, currentDevice)) {
+                        if (!g_pH264Encoder->Initialize(encW, encH, isSharingScreen, currentDevice)) {
                             delete g_pH264Encoder;
                             g_pH264Encoder = nullptr;
                         }
-                        s_lastEncWidth = width;
-                        s_lastEncHeight = height;
+                        s_lastEncWidth = encW;
+                        s_lastEncHeight = encH;
                         s_lastDevice = currentDevice;
                         s_lastIsScreenShare = isSharingScreen;
                     }
@@ -5612,6 +5612,16 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             // Initialize expected sequence if this is the first frame
                             if (g_videoExpectedSeq.find(wname) == g_videoExpectedSeq.end()) {
                                 g_videoExpectedSeq[wname] = seq;
+                            } else {
+                                int16_t diffInit = (int16_t)(seq - g_videoExpectedSeq[wname]);
+                                if (diffInit < 0 && diffInit > -100) {
+                                    // An older frame packet arrived. If the current expected sequence 
+                                    // hasn't been processed yet (it's still in the buffer), move expectedSeq back 
+                                    // to include this older frame. This fixes out-of-order I-frame vs P-frame starts.
+                                    if (g_videoBuffers[wname].count(g_videoExpectedSeq[wname])) {
+                                        g_videoExpectedSeq[wname] = seq;
+                                    }
+                                }
                             }
                             
                             DWORD now = GetTickCount();
@@ -5644,20 +5654,24 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     }
                                     
                                     // Check if it's an I-frame
-                                    bool isSps = false;
+                                    bool isIFrame = false;
                                     if (isH264 && taskData->mediaData.size() >= 5) {
-                                        for (size_t i = 0; i + 4 < taskData->mediaData.size() && i < 100; ++i) {
-                                            if (taskData->mediaData[i] == 0 && taskData->mediaData[i+1] == 0 && taskData->mediaData[i+2] == 0 && taskData->mediaData[i+3] == 1) {
-                                                if ((taskData->mediaData[i+4] & 0x1F) == 7) { isSps = true; break; }
+                                        for (size_t i = 0; i + 3 < taskData->mediaData.size() && i < 200; ++i) {
+                                            uint8_t nalType = 0;
+                                            if (taskData->mediaData[i] == 0 && taskData->mediaData[i+1] == 0 && taskData->mediaData[i+2] == 1) {
+                                                nalType = taskData->mediaData[i+3] & 0x1F;
+                                            } else if (i + 4 < taskData->mediaData.size() && taskData->mediaData[i] == 0 && taskData->mediaData[i+1] == 0 && taskData->mediaData[i+2] == 0 && taskData->mediaData[i+3] == 1) {
+                                                nalType = taskData->mediaData[i+4] & 0x1F;
                                             }
+                                            if (nalType == 7 || nalType == 5) { isIFrame = true; break; }
                                         }
                                     }
                                     
-                                    if (isSps) {
+                                    if (isIFrame) {
                                         g_videoNeedsIFrame[wname] = false; // Recovered!
                                     }
                                     
-                                    if (isH264 && g_videoNeedsIFrame[wname] && !isSps) {
+                                    if (isH264 && g_videoNeedsIFrame[wname] && !isIFrame) {
                                         // Drop P-frame because reference state is broken
                                         delete taskData;
                                     } else {
