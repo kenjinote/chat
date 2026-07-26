@@ -1602,7 +1602,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             s_hadViewersH264 = hasViewers;
                         }
 
-                        if (!skipFrame) {
+                        if (!skipFrame && totalFragments > 0) {
                             g_videoSeq++;
                             if (hasViewers) {
                                 for (int i = 0; i < totalFragments; i++) {
@@ -5108,7 +5108,7 @@ DWORD WINAPI DecodeTaskProc(LPVOID lpParam) {
         {
             std::lock_guard<std::mutex> lock(g_decoderMutex);
             bool isSps = false;
-            for (size_t i = 0; i + 4 < data->mediaData.size() && i < 100; ++i) {
+            for (size_t i = 0; i + 4 < data->mediaData.size() && i < 2048; ++i) {
                 if (data->mediaData[i] == 0 && data->mediaData[i+1] == 0 && data->mediaData[i+2] == 0 && data->mediaData[i+3] == 1) {
                     if ((data->mediaData[i+4] & 0x1F) == 7) { isSps = true; break; }
                 }
