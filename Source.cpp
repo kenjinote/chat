@@ -1069,8 +1069,8 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
 }
 
 void ConvertRGB32ToNV12(const uint8_t* rgb32Data, int width, int height, std::vector<uint8_t>& nv12DataForEncoder, bool flip = false) {
-    int w = width & ~1;
-    int h = height & ~1;
+    int w = width & ~15;
+    int h = height & ~15;
     nv12DataForEncoder.resize(w * h * 1.5);
     uint8_t* yPlane = nv12DataForEncoder.data();
     uint8_t* uvPlane = nv12DataForEncoder.data() + w * h;
@@ -1504,6 +1504,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             }
 
             if (pEncoderInput) {
+                width &= ~15;
+                height &= ~15;
                 static UINT32 s_lastEncWidth = 0;
                 static UINT32 s_lastEncHeight = 0;
                 static ID3D11Device* s_lastDevice = nullptr;
