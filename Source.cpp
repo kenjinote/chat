@@ -5658,7 +5658,6 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 if (diff > 0 && it->second.isComplete) {
                                     if (now - it->second.lastUpdate > 200) {
                                         g_videoExpectedSeq[wname] = seqIt; // Skip missing frames
-                                        g_videoNeedsIFrame[wname] = true;  // Decoder state broken, need I-frame
                                         advanced = true;
                                         break;
                                     }
@@ -5677,32 +5676,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         taskData->mediaData.insert(taskData->mediaData.end(), completeBuf.fragments[i].begin(), completeBuf.fragments[i].end());
                                     }
                                     
-                                    // Check if it's an I-frame
-                                    bool isIFrame = false;
-                                    if (isH264 && taskData->mediaData.size() >= 5) {
-                                        for (size_t i = 0; i + 3 < taskData->mediaData.size() && i < 2048; ++i) {
-                                            uint8_t nalType = 0;
-                                            if (taskData->mediaData[i] == 0 && taskData->mediaData[i+1] == 0 && taskData->mediaData[i+2] == 1) {
-                                                nalType = taskData->mediaData[i+3] & 0x1F;
-                                            } else if (i + 4 < taskData->mediaData.size() && taskData->mediaData[i] == 0 && taskData->mediaData[i+1] == 0 && taskData->mediaData[i+2] == 0 && taskData->mediaData[i+3] == 1) {
-                                                nalType = taskData->mediaData[i+4] & 0x1F;
-                                            }
-                                            if (nalType == 7 || nalType == 5) { isIFrame = true; break; }
-                                        }
-                                    }
-                                    
-                                    if (isIFrame) {
-                                        g_videoNeedsIFrame[wname] = false; // Recovered!
-                                    }
-                                    
-                                    if (isH264 && g_videoNeedsIFrame[wname] && !isIFrame) {
-                                        // Drop P-frame because reference state is broken
-                                        delete taskData;
-                                    } else {
-                                        std::lock_guard<std::mutex> lock(g_decodeQueueMutex);
-                                        g_decodeQueue.push(taskData);
-                                        g_decodeQueueCV.notify_one();
-                                    }
+                                    std::lock_guard<std::mutex> lock(g_decodeQueueMutex);
+                                    g_decodeQueue.push(taskData);
+                                    g_decodeQueueCV.notify_one();
                                     
                                     g_videoBuffers[wname].erase(expSeq);
                                     g_videoExpectedSeq[wname] = expSeq + 1;
