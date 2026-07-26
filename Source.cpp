@@ -773,7 +773,7 @@ std::wstring FilterProfanity(std::wstring text, const std::wstring& username) {
             std::regex_constants::icase | std::regex_constants::optimize);
             
         if (std::regex_search(text, level1_regex)) {
-            if (!username.empty()) {
+            if (!username.empty() && username != g_userId) {
                 std::lock_guard<std::mutex> lock(g_ignoredMutex);
                 if (g_ignoredUsers.find(username) == g_ignoredUsers.end()) {
                     g_ignoredUsers.insert(username);
@@ -798,7 +798,7 @@ std::wstring FilterProfanity(std::wstring text, const std::wstring& username) {
             
         std::wstring filteredText = std::regex_replace(text, level2_regex, L"***");
         if (filteredText != text) {
-            if (!username.empty()) {
+            if (!username.empty() && username != g_userId) {
                 std::lock_guard<std::mutex> lock(g_ignoredMutex);
                 g_userViolations[username]++;
                 if (g_userViolations[username] >= 3) {
@@ -1970,6 +1970,7 @@ void AudioMixerLoop() {
 
 struct MsgData {
     std::wstring user;
+    std::wstring wuid;
     std::wstring msg;
     bool b;
     bool i;
@@ -5010,22 +5011,24 @@ void SetWindowTitle(HWND hWnd) {
 }
 
 void AppendLog(const MsgData& data) {
-    if (!data.user.empty() && !data.isSystemEvent) {
+    if (!data.wuid.empty() && !data.isSystemEvent) {
         bool needsSave = false;
         {
             std::lock_guard<std::mutex> lock(g_ignoredMutex);
-            if (g_ignoredUsers.count(data.user) > 0) return;
+            if (g_ignoredUsers.count(data.wuid) > 0) return;
             
-            DWORD now = GetTickCount();
-            auto& times = g_userMessageTimes[data.user];
-            times.push_back(now);
-            while (!times.empty() && (now - times.front() > 3000)) {
-                times.erase(times.begin());
-            }
-            if (times.size() >= 5) {
-                if (g_ignoredUsers.find(data.user) == g_ignoredUsers.end()) {
-                    g_ignoredUsers.insert(data.user);
-                    needsSave = true;
+            if (data.wuid != g_userId) {
+                DWORD now = GetTickCount();
+                auto& times = g_userMessageTimes[data.wuid];
+                times.push_back(now);
+                while (!times.empty() && (now - times.front() > 3000)) {
+                    times.erase(times.begin());
+                }
+                if (times.size() >= 5) {
+                    if (g_ignoredUsers.find(data.wuid) == g_ignoredUsers.end()) {
+                        g_ignoredUsers.insert(data.wuid);
+                        needsSave = true;
+                    }
                 }
             }
         }
@@ -5036,7 +5039,7 @@ void AppendLog(const MsgData& data) {
         }
     }
     MsgData filteredData = data;
-    filteredData.msg = FilterProfanity(filteredData.msg, data.user);
+    filteredData.msg = FilterProfanity(filteredData.msg, data.wuid);
     if (filteredData.msg.empty()) return;
     LogEntry entry;
     entry.data = filteredData;
@@ -5226,6 +5229,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 MsgData* pData = new MsgData();
                                 std::wstring wuid = a2w(json["userId"].string_value().c_str());
                                 pData->user = a2w(json["userName"].string_value().c_str());
+                                pData->wuid = wuid;
                                 pData->msg = a2w(json["msg"].string_value().c_str());
                                 pData->b = json["b"].bool_value();
                                 pData->i = json["i"].bool_value();
@@ -5800,6 +5804,7 @@ void SendChatMessage(const std::wstring& msg) {
     // Local Echo
     MsgData* pData = new MsgData();
     pData->user = g_username;
+    pData->wuid = g_userId;
     pData->msg = msg;
     pData->b = b;
     pData->i = i;
