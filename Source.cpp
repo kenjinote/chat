@@ -766,8 +766,8 @@ std::wstring FilterProfanity(std::wstring text, const std::wstring& username) {
 
     try {
         static const std::wregex level1_regex(
-            L"(死|氏|4|ﾀﾋ)(ね|んじまえ|ばいい)|(殺|56)(す|して)|キチ[ガガイ〇]イ|ガイジ|池沼|土人|チョン|チャンコロ|カタワ|メクラ|エタ|ヒニン|円交|援助交際|パパ活|売春|レイプ|自殺しろ"
-            L"|fuck|bitch|cunt|nigger|nigga|faggot"
+            L"(死|氏|ﾀﾋ)(ね|んじまえ|ばいい)|(殺|56)(す|して)|キチ[ガガイ〇]イ|池沼|土人|チャンコロ|カタワ|メクラ|援助交際|パパ活|売春|強姦|自殺しろ"
+            L"|\\b(fuck|bitch|cunt|nigger|nigga|faggot)\\b"
             L"|操你妈|傻逼|干你娘|肏你妈"
             L"|씨발|개새끼|애미야",
             std::regex_constants::icase | std::regex_constants::optimize);
@@ -790,8 +790,8 @@ std::wstring FilterProfanity(std::wstring text, const std::wstring& username) {
 
     try {
         static const std::wregex level2_regex(
-            L"まんこ|ちんこ|マンコ|チンコ|おめこ|ペニス|うんこ|ウンコ|クソ|糞|カス|アホ|バカ|クズ|ゴミ|ボケ|マヌケ|キモイ|ウザい"
-            L"|shit|slut|whore|asshole|dick|cock|pussy"
+            L"まんこ|マンコ|おめこ|ペニス|うんこ|ウンコ|糞|マヌケ|キモイ|ウザい"
+            L"|\\b(shit|slut|whore|asshole|dick|cock|pussy)\\b"
             L"|靠北|智障|脑残|鸡巴|牛逼"
             L"|존나|병신|좆|지랄",
             std::regex_constants::icase | std::regex_constants::optimize);
