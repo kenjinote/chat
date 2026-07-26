@@ -683,6 +683,7 @@ struct VideoFrameBuffer {
 };
 std::map<std::wstring, std::map<uint16_t, VideoFrameBuffer>> g_videoBuffers;
 std::map<std::wstring, uint16_t> g_videoExpectedSeq;
+std::map<std::wstring, uint16_t> g_videoLastProcessedSeq;
 std::map<std::wstring, bool> g_videoNeedsIFrame;
 
 std::set<std::wstring> g_ignoredUsers;
@@ -1605,25 +1606,28 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         if (!skipFrame && totalFragments > 0) {
                             g_videoSeq++;
                             if (hasViewers) {
-                                for (int i = 0; i < totalFragments; i++) {
-                                    int offset = i * MAX_PAYLOAD;
-                                    int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
-                                    
-                                    MediaHeader mhdr = {0};
-                                    mhdr.sessionId = g_sessionId;
-                                    mhdr.seqNum = g_videoSeq;
-                                    mhdr.payloadType = 5; 
-                                    mhdr.flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
-                                    mhdr.timestamp = i; 
-                                    wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
-                                    
-                                    std::vector<uint8_t> packet(sizeof(MediaHeader) + len);
-                                    memcpy(packet.data(), &mhdr, sizeof(MediaHeader));
-                                    memcpy(packet.data() + sizeof(MediaHeader), h264.data() + offset, len);
-                                    
-                                    std::unique_lock<std::mutex> lock(g_udpSendMutex);
-                                    g_udpSendQueue.push(std::move(packet));
-                                    g_udpSendCv.notify_one();
+                                for (int pass = 0; pass < 2; pass++) {
+                                    for (int i = 0; i < totalFragments; i++) {
+                                        int offset = i * MAX_PAYLOAD;
+                                        int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
+                                        
+                                        MediaHeader mhdr = {0};
+                                        mhdr.sessionId = g_sessionId;
+                                        mhdr.seqNum = g_videoSeq;
+                                        mhdr.payloadType = 5; 
+                                        mhdr.flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
+                                        mhdr.timestamp = i; 
+                                        wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
+                                        
+                                        std::vector<uint8_t> packet(sizeof(MediaHeader) + len);
+                                        memcpy(packet.data(), &mhdr, sizeof(MediaHeader));
+                                        memcpy(packet.data() + sizeof(MediaHeader), h264.data() + offset, len);
+                                        
+                                        std::unique_lock<std::mutex> lock(g_udpSendMutex);
+                                        g_udpSendQueue.push(std::move(packet));
+                                        g_udpSendCv.notify_one();
+                                    }
+                                    if (totalFragments <= 2) break; // Do not duplicate tiny frames
                                 }
                             }
                         } else if (!hasViewers) {
@@ -5636,7 +5640,12 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             // Initialize expected sequence if this is the first frame
                             if (g_videoExpectedSeq.find(wname) == g_videoExpectedSeq.end()) {
                                 g_videoExpectedSeq[wname] = seq;
+                                g_videoLastProcessedSeq[wname] = seq - 1;
                             } else {
+                                int16_t diffProcessed = (int16_t)(seq - g_videoLastProcessedSeq[wname]);
+                                if (diffProcessed <= 0 && diffProcessed > -100) {
+                                    continue; // We already processed this frame. Ignore duplicate!
+                                }
                                 int16_t diffInit = (int16_t)(seq - g_videoExpectedSeq[wname]);
                                 if (diffInit < 0 && diffInit > -100) {
                                     // An older frame packet arrived. If the current expected sequence 
@@ -5681,6 +5690,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     g_decodeQueueCV.notify_one();
                                     
                                     g_videoBuffers[wname].erase(expSeq);
+                                    g_videoLastProcessedSeq[wname] = expSeq;
                                     g_videoExpectedSeq[wname] = expSeq + 1;
                                 } else {
                                     break;
