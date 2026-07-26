@@ -1379,6 +1379,30 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             IMFMediaBuffer* pLockedBuffer = nullptr;
 
             if (isScreenShare) {
+                int targetW = width;
+                int targetH = height;
+                if (width > 1280 || height > 720) {
+                    float ratio = min(1280.0f / width, 720.0f / height);
+                    targetW = max(16, (int)(width * ratio) & ~15);
+                    targetH = max(16, (int)(height * ratio) & ~15);
+                    
+                    std::vector<uint8_t> scaledRgb;
+                    scaledRgb.resize(targetW * targetH * 4);
+                    const uint32_t* s = (const uint32_t*)rgb32Data.data();
+                    uint32_t* d = (uint32_t*)scaledRgb.data();
+                    for (int y = 0; y < targetH; y++) {
+                        int sy = min(y * height / targetH, height - 1);
+                        int dstOffset = y * targetW;
+                        int srcOffset = sy * width;
+                        for (int x = 0; x < targetW; x++) {
+                            d[dstOffset + x] = s[srcOffset + min(x * width / targetW, width - 1)];
+                        }
+                    }
+                    rgb32Data.swap(scaledRgb);
+                    width = targetW;
+                    height = targetH;
+                }
+                
                 ConvertRGB32ToNV12(rgb32Data.data(), width, height, nv12DataForEncoder, false);
                 pEncoderInput = nv12DataForEncoder.data();
                 cbEncoderInput = (DWORD)nv12DataForEncoder.size();
