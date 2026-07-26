@@ -197,9 +197,9 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
         var.ulVal = 0;
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);
         
-        // Force periodic I-frames to allow recovery from packet loss
+        // Force periodic I-frames to allow recovery from packet loss (now very infrequent due to 2x FEC)
         var.vt = VT_UI4;
-        var.ulVal = 60; // GOP size = 60 (I-frame every 2 seconds at 30fps)
+        var.ulVal = 900; // GOP size = 900 (I-frame every 30 seconds at 30fps)
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVGOPSize, &var);
         
         // Use CBR (Constant Bitrate) for both screen share and webcam
