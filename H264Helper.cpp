@@ -274,13 +274,35 @@ bool H264Encoder::EncodeFrame(const BYTE* pNv12Data, DWORD cbData, std::vector<u
     MFCreateSample(&pSample);
     
     IMFMediaBuffer* pBuffer = NULL;
-    MFCreateMemoryBuffer(cbData, &pBuffer);
-    
-    BYTE* pData = NULL;
-    pBuffer->Lock(&pData, NULL, NULL);
-    memcpy(pData, pNv12Data, cbData);
-    pBuffer->Unlock();
-    pBuffer->SetCurrentLength(cbData);
+    if (SUCCEEDED(MFCreate2DMediaBuffer(m_width, m_height, MFVideoFormat_NV12.Data1, FALSE, &pBuffer))) {
+        IMF2DBuffer* p2D = NULL;
+        if (SUCCEEDED(pBuffer->QueryInterface(IID_PPV_ARGS(&p2D)))) {
+            BYTE* pScanline0 = NULL;
+            LONG lPitch = 0;
+            if (SUCCEEDED(p2D->Lock2D(&pScanline0, &lPitch))) {
+                for (UINT32 y = 0; y < m_height; y++) {
+                    memcpy(pScanline0 + y * lPitch, pNv12Data + y * m_width, m_width);
+                }
+                BYTE* pUVScanline0 = pScanline0 + m_height * lPitch;
+                const uint8_t* pSrcUV = pNv12Data + m_width * m_height;
+                for (UINT32 y = 0; y < m_height / 2; y++) {
+                    memcpy(pUVScanline0 + y * lPitch, pSrcUV + y * m_width, m_width);
+                }
+                p2D->Unlock2D();
+            }
+            p2D->Release();
+        }
+        DWORD cbMaxLength = 0;
+        pBuffer->GetMaxLength(&cbMaxLength);
+        pBuffer->SetCurrentLength(cbMaxLength);
+    } else {
+        MFCreateMemoryBuffer(cbData, &pBuffer);
+        BYTE* pData = NULL;
+        pBuffer->Lock(&pData, NULL, NULL);
+        memcpy(pData, pNv12Data, cbData);
+        pBuffer->Unlock();
+        pBuffer->SetCurrentLength(cbData);
+    }
     
     pSample->AddBuffer(pBuffer);
     pBuffer->Release();

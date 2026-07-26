@@ -679,8 +679,11 @@ struct VideoFrameBuffer {
     std::map<int, std::vector<uint8_t>> fragments;
     int totalFragments = 0;
     DWORD lastUpdate = 0;
+    bool isComplete = false;
 };
 std::map<std::wstring, std::map<uint16_t, VideoFrameBuffer>> g_videoBuffers;
+std::map<std::wstring, uint16_t> g_videoExpectedSeq;
+std::map<std::wstring, bool> g_videoNeedsIFrame;
 
 std::set<std::wstring> g_ignoredUsers;
 std::mutex g_ignoredMutex;
@@ -1103,8 +1106,8 @@ DWORD WINAPI UdpSenderThread(LPVOID) {
     // Token Bucket Settings
     DWORD targetBitrate = 8000000; // 8 Mbps
     double targetBytesPerSec = targetBitrate / 8.0;
-    // Reduce burst size to 10ms (~10KB) to prevent cheap home router buffers from overflowing and dropping I-frame fragments
-    double maxTokens = targetBytesPerSec * 0.01; 
+    // Reduce burst size to 50ms (~50KB) to prevent cheap home router buffers from overflowing, but enough to absorb Sleep(1) inaccuracies
+    double maxTokens = targetBytesPerSec * 0.05; 
     double currentTokens = maxTokens;
     
     LARGE_INTEGER lastTime;
@@ -5603,23 +5606,76 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             }
                             
                             if (vbuf.totalFragments > 0 && vbuf.fragments.size() == (size_t)vbuf.totalFragments) {
-                                DecodeTaskData* taskData = new DecodeTaskData();
-                                taskData->username = wname;
-                                taskData->isH264 = isH264;
-                                for (int i = 0; i < vbuf.totalFragments; i++) {
-                                    taskData->mediaData.insert(taskData->mediaData.end(), vbuf.fragments[i].begin(), vbuf.fragments[i].end());
+                                vbuf.isComplete = true;
+                            }
+                            
+                            // Initialize expected sequence if this is the first frame
+                            if (g_videoExpectedSeq.find(wname) == g_videoExpectedSeq.end()) {
+                                g_videoExpectedSeq[wname] = seq;
+                            }
+                            
+                            DWORD now = GetTickCount();
+                            
+                            // Jitter buffer timeout: If expectedSeq is missing for 200ms, skip to the next available completed frame
+                            bool advanced = false;
+                            for (auto it = g_videoBuffers[wname].begin(); it != g_videoBuffers[wname].end(); ++it) {
+                                uint16_t seqIt = it->first;
+                                int16_t diff = (int16_t)(seqIt - g_videoExpectedSeq[wname]);
+                                if (diff > 0 && it->second.isComplete) {
+                                    if (now - it->second.lastUpdate > 200) {
+                                        g_videoExpectedSeq[wname] = seqIt; // Skip missing frames
+                                        g_videoNeedsIFrame[wname] = true;  // Decoder state broken, need I-frame
+                                        advanced = true;
+                                        break;
+                                    }
                                 }
-                                {
-                                    std::lock_guard<std::mutex> lock(g_decodeQueueMutex);
-                                    g_decodeQueue.push(taskData);
+                            }
+                            
+                            while (true) {
+                                uint16_t expSeq = g_videoExpectedSeq[wname];
+                                if (g_videoBuffers[wname].count(expSeq) && g_videoBuffers[wname][expSeq].isComplete) {
+                                    auto& completeBuf = g_videoBuffers[wname][expSeq];
+                                    
+                                    DecodeTaskData* taskData = new DecodeTaskData();
+                                    taskData->username = wname;
+                                    taskData->isH264 = isH264;
+                                    for (int i = 0; i < completeBuf.totalFragments; i++) {
+                                        taskData->mediaData.insert(taskData->mediaData.end(), completeBuf.fragments[i].begin(), completeBuf.fragments[i].end());
+                                    }
+                                    
+                                    // Check if it's an I-frame
+                                    bool isSps = false;
+                                    if (isH264 && taskData->mediaData.size() >= 5) {
+                                        for (size_t i = 0; i + 4 < taskData->mediaData.size() && i < 100; ++i) {
+                                            if (taskData->mediaData[i] == 0 && taskData->mediaData[i+1] == 0 && taskData->mediaData[i+2] == 0 && taskData->mediaData[i+3] == 1) {
+                                                if ((taskData->mediaData[i+4] & 0x1F) == 7) { isSps = true; break; }
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (isSps) {
+                                        g_videoNeedsIFrame[wname] = false; // Recovered!
+                                    }
+                                    
+                                    if (isH264 && g_videoNeedsIFrame[wname] && !isSps) {
+                                        // Drop P-frame because reference state is broken
+                                        delete taskData;
+                                    } else {
+                                        std::lock_guard<std::mutex> lock(g_decodeQueueMutex);
+                                        g_decodeQueue.push(taskData);
+                                        g_decodeQueueCV.notify_one();
+                                    }
+                                    
+                                    g_videoBuffers[wname].erase(expSeq);
+                                    g_videoExpectedSeq[wname] = expSeq + 1;
+                                } else {
+                                    break;
                                 }
-                                g_decodeQueueCV.notify_one();
-                                g_videoBuffers[wname].erase(seq);
                             }
                             
                             // Cleanup old incomplete frames (throttled to 1s)
                             static DWORD lastCleanup = 0;
-                            DWORD now = GetTickCount();
+                            now = GetTickCount();
                             if (now - lastCleanup > 1000) {
                                 lastCleanup = now;
                                 for (auto& pair : g_videoBuffers) {
