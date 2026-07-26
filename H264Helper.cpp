@@ -202,11 +202,10 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
         var.ulVal = 900; // GOP size = 900 (I-frame every 30 seconds at 30fps)
         pCodecAPI->SetValue(&CODECAPI_AVEncMPVGOPSize, &var);
         
-        // Use CBR (Constant Bitrate) for both screen share and webcam
-        // This strictly enforces the targetBitrate, preventing any single I-frame from spiking
-        // and overflowing our 8Mbps network UDP queue.
+        // Use VBR (Variable Bitrate) instead of CBR.
+        // CBR causes the hardware encoder to drop subsequent P-frames if an I-frame exceeds the bit budget, causing severe stuttering.
         var.vt = VT_UI4;
-        var.ulVal = eAVEncCommonRateControlMode_CBR;
+        var.ulVal = eAVEncCommonRateControlMode_UnconstrainedVBR;
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
         
         pCodecAPI->Release();

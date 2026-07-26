@@ -1105,10 +1105,10 @@ DWORD WINAPI UdpSenderThread(LPVOID) {
     QueryPerformanceFrequency(&freq);
     
     // Token Bucket Settings
-    DWORD targetBitrate = 8000000; // 8 Mbps
+    DWORD targetBitrate = 24000000; // 24 Mbps (increased to allow fast transmission of I-frames without pacing delays)
     double targetBytesPerSec = targetBitrate / 8.0;
-    // Reduce burst size to 20ms (~20KB) to prevent cheap home router buffers from overflowing, and to align with Windows Sleep(1) max resolution (~15.6ms)
-    double maxTokens = targetBytesPerSec * 0.02; 
+    // Reduce burst size to prevent cheap home router buffers from overflowing, and to align with Windows Sleep(1) max resolution (~15.6ms)
+    double maxTokens = targetBytesPerSec * 0.015; 
     double currentTokens = maxTokens;
     
     LARGE_INTEGER lastTime;
