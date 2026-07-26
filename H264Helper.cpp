@@ -154,8 +154,10 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
     else if (pixels >= 2560 * 1440) targetBitrate = 4000000; // 1440p -> 4Mbps
     else if (pixels >= 1920 * 1080) targetBitrate = 2500000; // 1080p -> 2.5Mbps
     else if (pixels >= 1280 * 720) targetBitrate = 1500000; // 720p -> 1.5Mbps
+    else if (pixels >= 800 * 450) targetBitrate = 800000; // 480p -> 800Kbps
+    else if (pixels >= 640 * 360) targetBitrate = 500000; // 360p -> 500Kbps
     else targetBitrate = (pixels * 30 * 2) / 10; // Dynamic fallback (~1.5-2.0 bits per pixel)
-    if (targetBitrate < 500000) targetBitrate = 500000; // Minimum 500Kbps
+    if (targetBitrate < 400000) targetBitrate = 400000; // Minimum 400Kbps
     
     pOutputType->SetUINT32(MF_MT_AVG_BITRATE, targetBitrate);
     MFSetAttributeSize(pOutputType, MF_MT_FRAME_SIZE, encWidth, encHeight);
@@ -206,12 +208,6 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
         var.vt = VT_UI4;
         var.ulVal = eAVEncCommonRateControlMode_CBR;
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
-        
-        // Force an I-frame every 300 frames (10 seconds) instead of 2 seconds
-        // Generating I-frames too frequently causes network congestion at 8Mbps
-        var.vt = VT_UI4;
-        var.ulVal = 300;
-        pCodecAPI->SetValue(&CODECAPI_AVEncMPVGOPSize, &var);
         
         pCodecAPI->Release();
     }

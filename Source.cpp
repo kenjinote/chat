@@ -1106,8 +1106,8 @@ DWORD WINAPI UdpSenderThread(LPVOID) {
     // Token Bucket Settings
     DWORD targetBitrate = 8000000; // 8 Mbps
     double targetBytesPerSec = targetBitrate / 8.0;
-    // Reduce burst size to 50ms (~50KB) to prevent cheap home router buffers from overflowing, but enough to absorb Sleep(1) inaccuracies
-    double maxTokens = targetBytesPerSec * 0.05; 
+    // Reduce burst size to 20ms (~20KB) to prevent cheap home router buffers from overflowing, and to align with Windows Sleep(1) max resolution (~15.6ms)
+    double maxTokens = targetBytesPerSec * 0.02; 
     double currentTokens = maxTokens;
     
     LARGE_INTEGER lastTime;
@@ -1381,8 +1381,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             if (isScreenShare) {
                 int targetW = width;
                 int targetH = height;
-                if (width > 1280 || height > 720) {
-                    float ratio = min(1280.0f / width, 720.0f / height);
+                if (width > 848 || height > 480) {
+                    float ratio = min(848.0f / width, 480.0f / height);
                     targetW = max(16, (int)(width * ratio) & ~15);
                     targetH = max(16, (int)(height * ratio) & ~15);
                     
@@ -5680,7 +5680,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     // Check if it's an I-frame
                                     bool isIFrame = false;
                                     if (isH264 && taskData->mediaData.size() >= 5) {
-                                        for (size_t i = 0; i + 3 < taskData->mediaData.size() && i < 200; ++i) {
+                                        for (size_t i = 0; i + 3 < taskData->mediaData.size() && i < 2048; ++i) {
                                             uint8_t nalType = 0;
                                             if (taskData->mediaData[i] == 0 && taskData->mediaData[i+1] == 0 && taskData->mediaData[i+2] == 1) {
                                                 nalType = taskData->mediaData[i+3] & 0x1F;
