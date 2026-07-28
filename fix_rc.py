@@ -1,0 +1,30 @@
+import sys
+
+lines = open('app.rc', encoding='utf-8').read().splitlines()
+idx = lines.index('VS_VERSION_INFO')
+lines = lines[:idx]
+lines.append('1 VERSIONINFO')
+lines.append(' FILEVERSION 1,0,0,0')
+lines.append(' PRODUCTVERSION 1,0,0,0')
+lines.append(' FILEFLAGSMASK 0x3fL')
+lines.append(' FILEFLAGS 0x0L')
+lines.append(' FILEOS 0x40004L')
+lines.append(' FILETYPE 0x1L')
+lines.append(' FILESUBTYPE 0x0L')
+lines.append('BEGIN')
+lines.append('    BLOCK "StringFileInfo"')
+lines.append('    BEGIN')
+lines.append('        BLOCK "040904b0"')
+lines.append('        BEGIN')
+lines.append('            VALUE "FileVersion", "1.0.0.0"')
+lines.append('            VALUE "ProductVersion", "1.0.0.0"')
+lines.append('        END')
+lines.append('    END')
+lines.append('    BLOCK "VarFileInfo"')
+lines.append('    BEGIN')
+lines.append('        VALUE "Translation", 0x409, 1200')
+lines.append('    END')
+lines.append('END')
+
+with open('app.rc', 'w', encoding='utf-8') as f:
+    f.write('\n'.join(lines) + '\n')

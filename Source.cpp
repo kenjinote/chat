@@ -96,6 +96,10 @@ HWND g_hBtnMoveRoom;
 HWND g_hBtnVoice, g_hBtnVideo, g_hVolumeIndicator, g_hSpeakerIcon, g_hVolumeSlider;
 HWND g_hMaintenanceText;
 std::wstring g_maintenanceMsg = L"";
+
+const std::string CLIENT_PLATFORM = "windows";
+std::string CLIENT_VERSION = "1.0.0";
+bool g_updateRequired = false;
 IAudioClient* g_pAudioClient = nullptr;
 ISimpleAudioVolume* g_pSimpleAudioVolume = nullptr;
 IAudioSessionControl* g_pAudioSessionControl = nullptr;
@@ -174,8 +178,49 @@ void SetMaintenanceMessage(const std::wstring& msg) {
     }
 }
 
+#include <sstream>
+
+int ParseVersionComponent(std::stringstream& ss) {
+    std::string comp;
+    std::getline(ss, comp, '.');
+    return comp.empty() ? 0 : std::stoi(comp);
+}
+
+bool IsVersionOutdated(const std::string& currentVer, const std::string& requiredVer) {
+    if (requiredVer.empty()) return false;
+    std::stringstream currSS(currentVer);
+    std::stringstream reqSS(requiredVer);
+    
+    for (int i = 0; i < 3; i++) {
+        int c = ParseVersionComponent(currSS);
+        int r = ParseVersionComponent(reqSS);
+        if (c < r) return true;
+        if (c > r) return false;
+    }
+    return false;
+}
+
+#pragma comment(lib, "version.lib")
+
+std::string GetAppVersion() {
+    char path[MAX_PATH];
+    if (GetModuleFileNameA(NULL, path, MAX_PATH) == 0) return "1.0.0";
+    DWORD dummy;
+    DWORD size = GetFileVersionInfoSizeA(path, &dummy);
+    if (size == 0) return "1.0.0";
+    std::vector<BYTE> data(size);
+    if (!GetFileVersionInfoA(path, dummy, size, data.data())) return "1.0.0";
+    VS_FIXEDFILEINFO* pFileInfo;
+    UINT len;
+    if (!VerQueryValueA(data.data(), "\\", (LPVOID*)&pFileInfo, &len)) return "1.0.0";
+    char ver[128];
+    sprintf_s(ver, "%d.%d.%d", HIWORD(pFileInfo->dwFileVersionMS), LOWORD(pFileInfo->dwFileVersionMS), HIWORD(pFileInfo->dwFileVersionLS));
+    return ver;
+}
+
 #include <wininet.h>
 #pragma comment(lib, "wininet.lib")
+#include <regex>
 
 void FetchMaintenanceMessageThread(HWND hWnd) {
     HINTERNET hInternet = InternetOpenW(L"ChatApp", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
@@ -186,6 +231,67 @@ void FetchMaintenanceMessageThread(HWND hWnd) {
     InternetSetOptionW(hInternet, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeout, sizeof(timeout));
     InternetSetOptionW(hInternet, INTERNET_OPTION_SEND_TIMEOUT, &timeout, sizeof(timeout));
     
+    LCID lcid = MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT);
+    wchar_t isoLang[9] = {0};
+    GetLocaleInfoW(lcid, LOCALE_SISO639LANGNAME, isoLang, 9);
+    
+    char langKeyBuf[9] = {0};
+    WideCharToMultiByte(CP_UTF8, 0, isoLang, -1, langKeyBuf, 9, NULL, NULL);
+    std::string langKey = langKeyBuf;
+    if (langKey.empty()) langKey = "en";
+    
+    // 1. Check versions.json
+    HINTERNET hUrlVersions = InternetOpenUrlW(hInternet, L"https://chatannounce2026b9x.blob.core.windows.net/public/versions.json", NULL, 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_SECURE, 0);
+    if (hUrlVersions) {
+        std::string jsonStr;
+        char buf[1024];
+        DWORD bytesRead = 0;
+        while (InternetReadFile(hUrlVersions, buf, sizeof(buf), &bytesRead) && bytesRead > 0) {
+            jsonStr.append(buf, bytesRead);
+        }
+        InternetCloseHandle(hUrlVersions);
+        
+        std::string err;
+        auto json = json11::Json::parse(jsonStr, err);
+        if (err.empty() && json.is_object()) {
+            std::string requiredVer = json[CLIENT_PLATFORM].string_value();
+            if (IsVersionOutdated(CLIENT_VERSION, requiredVer)) {
+                g_updateRequired = true;
+                
+                // Construct update message
+                std::string msgUtf8 = json["message"][langKey].string_value();
+                if (msgUtf8.empty()) msgUtf8 = json["message"]["en"].string_value();
+                if (msgUtf8.empty()) {
+                    if (langKey == "ja") msgUtf8 = "新しいバージョンが利用可能です。アップデートは https://chatexe.net/ をご参照ください。";
+                    else msgUtf8 = "A new version is available. Please visit https://chatexe.net/ to update.";
+                }
+                
+                // Wrap raw URLs with <a href="...">...</a> if they are not already wrapped
+                if (msgUtf8.find("<a ") == std::string::npos) {
+                    std::regex url_regex(R"(https?://[a-zA-Z0-9\-./?=&_]+)");
+                    msgUtf8 = std::regex_replace(msgUtf8, url_regex, "<a href=\"$&\">$&</a>");
+                }
+                
+                int wlen = MultiByteToWideChar(CP_UTF8, 0, msgUtf8.c_str(), -1, NULL, 0);
+                std::wstring* wmsg = new std::wstring(wlen, 0);
+                MultiByteToWideChar(CP_UTF8, 0, msgUtf8.c_str(), -1, &(*wmsg)[0], wlen);
+                if (!wmsg->empty() && wmsg->back() == L'\0') wmsg->pop_back();
+                
+                PostMessage(hWnd, WM_APP_MAINTENANCE_MSG, 0, (LPARAM)wmsg);
+                
+                // Force disconnect
+                if (g_tcpSocket != INVALID_SOCKET) {
+                    closesocket(g_tcpSocket);
+                    g_tcpSocket = INVALID_SOCKET;
+                }
+                
+                InternetCloseHandle(hInternet);
+                return; // Do not fetch announce.json if update is required
+            }
+        }
+    }
+    
+    // 2. Fetch announce.json if no update required
     HINTERNET hUrl = InternetOpenUrlW(hInternet, L"https://chatannounce2026b9x.blob.core.windows.net/public/announce.json", NULL, 0, INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_SECURE, 0);
     if (hUrl) {
         std::string jsonStr;
@@ -199,15 +305,13 @@ void FetchMaintenanceMessageThread(HWND hWnd) {
         std::string err;
         auto json = json11::Json::parse(jsonStr, err);
         if (err.empty() && json.is_object()) {
-            LANGID langId = GetUserDefaultUILanguage();
-            std::string langKey = (PRIMARYLANGID(langId) == LANG_JAPANESE) ? "ja" : "en";
-            
             std::string msgUtf8 = json[langKey].string_value();
-            if (msgUtf8.empty()) {
-                msgUtf8 = json["en"].string_value();
-            }
-            if (msgUtf8.empty()) {
-                msgUtf8 = json["ja"].string_value();
+            if (msgUtf8.empty()) msgUtf8 = json["en"].string_value();
+            
+            // Wrap raw URLs with <a href="...">...</a> if they are not already wrapped
+            if (msgUtf8.find("<a ") == std::string::npos) {
+                std::regex url_regex(R"(https?://[a-zA-Z0-9\-./?=&_]+)");
+                msgUtf8 = std::regex_replace(msgUtf8, url_regex, "<a href=\"$&\">$&</a>");
             }
             
             int wlen = MultiByteToWideChar(CP_UTF8, 0, msgUtf8.c_str(), -1, NULL, 0);
@@ -1075,7 +1179,7 @@ bool EncodeJPEG(UINT width, UINT height, BYTE* pData, DWORD cbData, std::vector<
 void ConvertRGB32ToNV12(const uint8_t* rgb32Data, int width, int height, std::vector<uint8_t>& nv12DataForEncoder, bool flip = false) {
     int w = width & ~15;
     int h = height & ~15;
-    nv12DataForEncoder.resize(w * h * 1.5);
+    nv12DataForEncoder.resize(w * h * 3 / 2);
     uint8_t* yPlane = nv12DataForEncoder.data();
     uint8_t* uvPlane = nv12DataForEncoder.data() + w * h;
     const uint32_t* src = (const uint32_t*)rgb32Data;
@@ -5737,6 +5841,8 @@ DWORD WINAPI RecvThread(LPVOID param) {
         }
 
         // Auto-reconnect logic
+        if (g_updateRequired) continue; // Block auto-reconnect if update is required
+        
         if (g_tcpSocket == INVALID_SOCKET && !g_username.empty()) {
             static DWORD lastReconnect = 0;
             DWORD now = GetTickCount();
@@ -7948,9 +8054,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         int toolHeight = Scale(24);
         int roomBtnHeight = Scale(30);
 
-        int maintenanceHeight = g_maintenanceMsg.empty() ? 0 : Scale(16);
+        int maintenanceHeight = 0;
+        if (!g_maintenanceMsg.empty()) {
+            if (g_hMaintenanceText) {
+                SIZE sz = {0};
+                int maxWidth = width - margin * 2;
+                SendMessage(g_hMaintenanceText, LM_GETIDEALSIZE, maxWidth, (LPARAM)&sz);
+                maintenanceHeight = sz.cy;
+            }
+            if (maintenanceHeight <= 0) {
+                maintenanceHeight = Scale(16);
+            }
+        }
         int maintenanceMargin = g_maintenanceMsg.empty() ? 0 : Scale(2);
-        int bottomMargin = g_maintenanceMsg.empty() ? margin : (margin - Scale(2));
+        int bottomMargin = g_maintenanceMsg.empty() ? margin : margin; // Increased bottom margin by 2px (Scale(2))
 
         int topHeight = height - inputHeight - toolHeight - maintenanceHeight - maintenanceMargin - margin * 3 - bottomMargin;
         int logWidth = width - listWidth - margin * 3;
@@ -8201,6 +8318,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     }
 
     case WM_APP_CONNECT_SERVER: {
+        if (g_updateRequired) break;
         u_long mode = 1;
         ioctlsocket(g_sock, FIONBIO, &mode);
 
@@ -8352,6 +8470,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         MsgData* pData = (MsgData*)lParam;
         if (pData) {
             AppendLog(*pData);
+            
+            if (!pData->isSystemEvent && (IsIconic(hWnd) || GetForegroundWindow() != hWnd)) {
+                FLASHWINFO fwi;
+                fwi.cbSize = sizeof(fwi);
+                fwi.hwnd = hWnd;
+                fwi.dwFlags = FLASHW_TRAY | FLASHW_TIMERNOFG;
+                fwi.uCount = 3;
+                fwi.dwTimeout = 0;
+                FlashWindowEx(&fwi);
+            }
+            
             delete pData;
         }
         return 0;
@@ -8494,9 +8623,9 @@ LRESULT CALLBACK ToSWindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam
         tosText.erase(std::remove(tosText.begin(), tosText.end(), L'\r'), tosText.end());
         SetWindowTextW(hEdit, tosText.c_str());
         
-        int startPos = 0;
+        size_t startPos = 0;
         while (startPos < tosText.length()) {
-            int endPos = tosText.find(L'\n', startPos);
+            size_t endPos = tosText.find(L'\n', startPos);
             if (endPos == std::wstring::npos) endPos = tosText.length();
             
             std::wstring line = tosText.substr(startPos, endPos - startPos);
@@ -8599,6 +8728,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int) {
     MFStartup(MF_VERSION);
     InitHardwareAcceleration();
     SetThreadUILanguage(0);
+    
+    CLIENT_VERSION = GetAppVersion();
     
     WCHAR localeName[LOCALE_NAME_MAX_LENGTH];
     if (GetUserDefaultLocaleName(localeName, LOCALE_NAME_MAX_LENGTH)) {
