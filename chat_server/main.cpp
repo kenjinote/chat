@@ -151,13 +151,18 @@ public:
     void disconnectUserId(const std::string& userId);
 
     std::shared_ptr<sw::redis::Redis> getRedis() { return m_redis; }
-    void initRedis(const std::string& uri, const std::string& myEndpoint) {
+    void initRedis(const std::string& uri, const std::string& myEndpoint, asio::io_context& io) {
         m_redis = std::make_shared<sw::redis::Redis>(uri);
         m_myEndpoint = myEndpoint;
+        m_timer = std::make_shared<asio::steady_timer>(io, std::chrono::seconds(5));
+        doTimer();
     }
     std::string getMyEndpoint() { return m_myEndpoint; }
+    
+    void sendRoomListTo(std::shared_ptr<ChatSession> session);
 
 private:
+    void doTimer();
     ServerManager() {}
     std::unordered_map<std::string, std::shared_ptr<Room>> m_rooms;
     std::unordered_map<uint32_t, std::shared_ptr<ChatSession>> m_sessions;
@@ -165,6 +170,7 @@ private:
     std::mutex m_mutex;
     std::shared_ptr<sw::redis::Redis> m_redis;
     std::string m_myEndpoint;
+    std::shared_ptr<asio::steady_timer> m_timer;
 };
 
 class ChatSession : public std::enable_shared_from_this<ChatSession> {
@@ -286,7 +292,7 @@ private:
                             ServerManager::get().removeRoom(m_roomName);
                             if (ServerManager::get().getRedis()) {
                                 try {
-                                    ServerManager::get().getRedis()->hdel("room_owner", m_roomName);
+                                    ServerManager::get().getRedis()->del("room_owner:" + m_roomName);
                                 } catch (const std::exception& e) {
                                     std::cerr << "Redis error: " << e.what() << std::endl;
                                 }
@@ -330,7 +336,7 @@ private:
                             ServerManager::get().removeRoom(m_roomName);
                             if (ServerManager::get().getRedis()) {
                                 try {
-                                    ServerManager::get().getRedis()->hdel("room_owner", m_roomName);
+                                    ServerManager::get().getRedis()->del("room_owner:" + m_roomName);
                                 } catch (const std::exception& e) {
                                     std::cerr << "Redis error during disconnect: " << e.what() << std::endl;
                                 }
@@ -389,12 +395,11 @@ private:
             int suffix = 1;
 
             while (true) {
-                // Room Affinity logic via Redis (Bypass for Lobbies to shard across servers)
-                bool isLobby = (roomName.find("\xE3\x83\xAD\xE3\x83\x93\xE3\x83\xBC") == 0); // "ロビー"
-                if (!isLobby && roomName != "Public" && ServerManager::get().getRedis()) {
+                // Room Affinity logic via Redis (All rooms centralized)
+                if (roomName != "Public" && ServerManager::get().getRedis()) {
                     auto redis = ServerManager::get().getRedis();
                     try {
-                        auto owner = redis->hget("room_owner", roomName);
+                        auto owner = redis->get("room_owner:" + roomName);
                         if (owner) {
                             if (*owner != ServerManager::get().getMyEndpoint()) {
                                 // Redirect client to the correct server
@@ -406,14 +411,15 @@ private:
                                 json11::Json redirectMsg = json11::Json::object {
                                     {"type", "redirect"},
                                     {"ip", ip},
-                                    {"port", port}
+                                    {"port", port},
+                                    {"roomName", roomName}
                                 };
                                 deliver(redirectMsg.dump() + "\n");
                                 return; // DO NOT process join locally
                             }
                         } else {
                             // Claim the room
-                            redis->hset("room_owner", roomName, ServerManager::get().getMyEndpoint());
+                            redis->setex("room_owner:" + roomName, 15, ServerManager::get().getMyEndpoint());
                         }
                     } catch (const std::exception& e) {
                         std::cerr << "Redis error during join: " << e.what() << std::endl;
@@ -460,7 +466,7 @@ private:
                             ServerManager::get().removeRoom(m_roomName);
                             if (ServerManager::get().getRedis()) {
                                 try {
-                                    ServerManager::get().getRedis()->hdel("room_owner", m_roomName);
+                                    ServerManager::get().getRedis()->del("room_owner:" + m_roomName);
                                 } catch (const std::exception& e) {
                                     std::cerr << "Redis error: " << e.what() << std::endl;
                                 }
@@ -473,15 +479,24 @@ private:
                     }
                     m_roomName = roomName;
 
-                    ServerManager::get().notifyRoomListChanged();
+                    
 
                     std::cout << "User " << m_userId << " (Session: " << m_sessionId << ") joined room " << roomName << std::endl;
                     break;
                 }
 
-                // Room is full, increment suffix and try again
+                // Room is full, redirect client to LB with incremented suffix
                 suffix++;
-                roomName = originalRoomName + ":" + std::to_string(suffix);
+                std::string newRoomName = originalRoomName + ":" + std::to_string(suffix);
+                
+                json11::Json redirectMsg = json11::Json::object {
+                    {"type", "redirect"},
+                    {"ip", "chat-lb-2026.japaneast.cloudapp.azure.com"},
+                    {"port", 4000},
+                    {"roomName", newRoomName}
+                };
+                deliver(redirectMsg.dump() + "\n");
+                return;
             }
 
 
@@ -533,7 +548,8 @@ private:
             }
         } else if (type == "get_rooms") {
             ServerManager::get().subscribeRoomList(m_sessionId);
-            ServerManager::get().notifyRoomListChanged();
+            ServerManager::get().sendRoomListTo(shared_from_this());
+            
         } else if (type == "close_rooms") {
             ServerManager::get().unsubscribeRoomList(m_sessionId);
         } else if (type == "subscribe_video") {
@@ -565,7 +581,7 @@ private:
                     ServerManager::get().removeRoom(m_roomName);
                     if (ServerManager::get().getRedis()) {
                         try {
-                            ServerManager::get().getRedis()->hdel("room_owner", m_roomName);
+                            ServerManager::get().getRedis()->del("room_owner:" + m_roomName);
                         } catch (const std::exception& e) {
                             std::cerr << "Redis error: " << e.what() << std::endl;
                         }
@@ -576,7 +592,7 @@ private:
                     m_room.reset();
                 }
                 m_roomName = "";
-                ServerManager::get().notifyRoomListChanged();
+                
             }
         } else if (type == "report") {
             std::string target = json["target"].string_value();
@@ -650,36 +666,97 @@ private:
     mutable std::mutex m_stateMutex;
 };
 
-void ServerManager::notifyRoomListChanged() {
-    std::vector<std::shared_ptr<ChatSession>> subs;
+void ServerManager::doTimer() {
     std::string msgStr;
+    std::vector<std::shared_ptr<ChatSession>> subs;
     {
         std::lock_guard<std::mutex> lock(m_mutex);
-        if (m_roomListSubscribers.empty()) return;
-        std::vector<std::pair<std::string, int>> list;
-        for (const auto& pair : m_rooms) {
-            if (pair.second->isPrivate()) continue;
-            list.push_back({pair.first, (int)pair.second->getUsers().size()});
-        }
-        json11::Json::array rmArray;
-        for (const auto& r : list) {
-            rmArray.push_back(json11::Json::object {
-                {"name", r.first},
-                {"count", r.second}
-            });
-        }
-        json11::Json roomsMsg = json11::Json::object {
-            {"type", "room_list"},
-            {"rooms", rmArray}
-        };
-        msgStr = roomsMsg.dump() + "\n";
-        for (uint32_t sid : m_roomListSubscribers) {
-            auto it = m_sessions.find(sid);
-            if (it != m_sessions.end()) subs.push_back(it->second);
+        if (m_redis) {
+            try {
+                auto pipe = m_redis->pipeline();
+                for (const auto& pair : m_rooms) {
+                    if (!pair.second->isPrivate()) {
+                        pipe.setex("room_owner:" + pair.first, 15, m_myEndpoint);
+                        pipe.setex("room_count:" + pair.first, 15, std::to_string(pair.second->getUsers().size()));
+                    }
+                }
+                pipe.exec();
+                
+                if (!m_roomListSubscribers.empty()) {
+                    std::vector<std::string> keys;
+                    m_redis->keys("room_count:*", std::back_inserter(keys));
+                    
+                    json11::Json::array rmArray;
+                    for (const auto& key : keys) {
+                        auto val = m_redis->get(key);
+                        if (val) {
+                            std::string roomName = key.substr(11); // remove "room_count:"
+                            rmArray.push_back(json11::Json::object {
+                                {"name", roomName},
+                                {"count", std::stoi(*val)}
+                            });
+                        }
+                    }
+                    json11::Json roomsMsg = json11::Json::object {
+                        {"type", "room_list"},
+                        {"rooms", rmArray}
+                    };
+                    msgStr = roomsMsg.dump() + "\n";
+                    
+                    for (uint32_t sid : m_roomListSubscribers) {
+                        auto it = m_sessions.find(sid);
+                        if (it != m_sessions.end()) subs.push_back(it->second);
+                    }
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "Redis error in doTimer: " << e.what() << std::endl;
+            }
         }
     }
     for (auto& s : subs) {
         s->deliver(msgStr);
+    }
+    
+    if (m_timer) {
+        m_timer->expires_after(std::chrono::seconds(5));
+        m_timer->async_wait([this](std::error_code ec) {
+            if (!ec) {
+                doTimer();
+            }
+        });
+    }
+}
+
+void ServerManager::sendRoomListTo(std::shared_ptr<ChatSession> session) {
+    std::string msgStr;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_redis) {
+            try {
+                std::vector<std::string> keys;
+                m_redis->keys("room_count:*", std::back_inserter(keys));
+                
+                json11::Json::array rmArray;
+                for (const auto& key : keys) {
+                    auto val = m_redis->get(key);
+                    if (val) {
+                        std::string roomName = key.substr(11);
+                        rmArray.push_back(json11::Json::object {
+                            {"name", roomName},
+                            {"count", std::stoi(*val)}
+                        });
+                    }
+                }
+                json11::Json roomsMsg = json11::Json::object {
+                    {"type", "room_list"},
+                    {"rooms", rmArray}
+                };
+                msgStr = roomsMsg.dump() + "\n";
+            } catch (...) {}
+        }
+    }
+    if (!msgStr.empty() && session) {
+        session->deliver(msgStr);
     }
 }
 
@@ -845,7 +922,9 @@ int main(int argc, char* argv[]) {
         std::cout << "Endpoint: " << my_endpoint << std::endl;
         std::cout << "Redis: " << redis_uri << std::endl;
         
-        ServerManager::get().initRedis(redis_uri, my_endpoint);
+        asio::io_context tcp_io;
+        asio::io_context udp_io;
+        ServerManager::get().initRedis(redis_uri, my_endpoint, tcp_io);
 
         // Parse local port from endpoint
         short tcp_port = 4000;
@@ -859,8 +938,6 @@ int main(int argc, char* argv[]) {
         std::cout << "TCP Signaling: Port " << tcp_port << std::endl;
         std::cout << "UDP Media: Port " << udp_port << std::endl;
         
-        asio::io_context tcp_io;
-        asio::io_context udp_io;
         ChatServer tcp_server(tcp_io, tcp_port);
         UdpMediaServer udp_server(udp_io, udp_port);
 
