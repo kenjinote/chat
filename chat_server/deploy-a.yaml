@@ -5,7 +5,7 @@ properties:
   containers:
   - name: chat-server-a
     properties:
-      image: your-registry.azurecr.io/chat-server:v10
+      image: your-registry.azurecr.io/chat-server:v11
       command:
         - ./chat_server
         - chat-sfu-a-2026.japaneast.azurecontainer.io:4000

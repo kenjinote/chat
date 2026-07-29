@@ -4408,6 +4408,7 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             
         SetWindowSubclass(hBtnOK, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hBtnCancel, ClassicButtonProc, 0, 0);
+        SetWindowSubclass(hEdit, ClientEdgeSubclassProc, 0, 0);
         SetWindowSubclass(hEdit, EditSelectionColorProc, 0, 0);
         SetWindowSubclass(hEdit, EditContextMenuProc, 0, 0);
         
@@ -4510,7 +4511,7 @@ bool ShowChangeNameDialog(HWND hParent, std::wstring& outResult) {
     int winH = rcDlg.bottom - rcDlg.top;
 
     HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"ChangeNameClass", GetString(IDS_CHANGE_NAME_TITLE).c_str(),
-        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE | WS_CLIPCHILDREN,
         rcParent.left + (rcParent.right - rcParent.left - winW) / 2, 
         rcParent.top + (rcParent.bottom - rcParent.top - winH) / 2, 
         winW, winH, hParent, 0, GetModuleHandle(0), 0);
@@ -4840,20 +4841,29 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             
         SetWindowSubclass(hBtnOK, ClassicButtonProc, 0, 0);
         SetWindowSubclass(hBtnCancel, ClassicButtonProc, 0, 0);
+        SetWindowSubclass(hEdit, ClientEdgeSubclassProc, 0, 0);
         SetWindowSubclass(hEdit, EditSelectionColorProc, 0, 0);
         SetWindowSubclass(hEdit, EditContextMenuProc, 0, 0);
+        SetWindowSubclass(hList, ClientEdgeSubclassProc, 0, 0);
         SetWindowSubclass(hList, ScrollbarColorProc, 0, 0);
         
         SendMessage(hList, LB_SETITEMHEIGHT, 0, Scale(16));
         
         s_roomNames.clear();
+        
+        // Ensure Lobby exists
+        std::wstring defaultRoom = GetString(IDS_LOBBY);
+        if (g_publicRooms.find(defaultRoom) == g_publicRooms.end()) {
+            g_publicRooms[defaultRoom] = 0;
+        }
+
         std::vector<std::pair<std::wstring, int>> sortedRooms(g_publicRooms.begin(), g_publicRooms.end());
         std::sort(sortedRooms.begin(), sortedRooms.end(), [](const auto& a, const auto& b) {
             if (a.second != b.second) return a.second > b.second;
             return a.first < b.first;
         });
         for (const auto& r : sortedRooms) {
-            if (r.second <= 0) continue;
+            if (r.second <= 0 && r.first != defaultRoom) continue;
             std::wstring display = r.first + L" (" + std::to_wstring(r.second) + L")";
             int idx = (int)SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)display.c_str());
             s_roomNames.push_back(r.first);
@@ -4989,13 +4999,19 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         
         SendMessage(hList, LB_RESETCONTENT, 0, 0);
         s_roomNames.clear();
+        // Ensure Lobby exists
+        std::wstring defaultRoom = GetString(IDS_LOBBY);
+        if (g_publicRooms.find(defaultRoom) == g_publicRooms.end()) {
+            g_publicRooms[defaultRoom] = 0;
+        }
+
         std::vector<std::pair<std::wstring, int>> sortedRooms(g_publicRooms.begin(), g_publicRooms.end());
         std::sort(sortedRooms.begin(), sortedRooms.end(), [](const auto& a, const auto& b) {
             if (a.second != b.second) return a.second > b.second;
             return a.first < b.first;
         });
         for (const auto& r : sortedRooms) {
-            if (r.second <= 0) continue;
+            if (r.second <= 0 && r.first != defaultRoom) continue;
             if (search.empty() || r.first.find(search) != std::wstring::npos) {
                 std::wstring display = r.first + L" (" + std::to_wstring(r.second) + L")";
                 int idx = (int)SendMessage(hList, LB_ADDSTRING, 0, (LPARAM)display.c_str());
@@ -5032,7 +5048,7 @@ bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult, bool& outPrivate)
     int winH = rcDlg.bottom - rcDlg.top;
 
     HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"MoveRoomClass", GetString(IDS_MOVE_ROOM_TITLE).c_str(),
-        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE | WS_CLIPCHILDREN,
         rcParent.left + (rcParent.right - rcParent.left - winW) / 2, 
         rcParent.top + (rcParent.bottom - rcParent.top - winH) / 2, 
         winW, winH, hParent, 0, GetModuleHandle(0), 0);
@@ -5540,6 +5556,12 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     LogToFile("Redirect resolving " + newIp + " result: " + (ok ? "OK" : "FAILED"));
                                     g_serverIp = newIp; // Update global server IP
                                     g_isServerUdpAddrResolved = false; // Force re-resolve for UDP
+                                    
+                                    if (json["roomName"].is_string()) {
+                                        std::string rName = json["roomName"].string_value();
+                                        std::wstring wrName = a2w(rName.c_str());
+                                        g_currentRoom = wrName;
+                                    }
     
                                     if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
                                         LogToFile("Redirect TCP connect OK");
@@ -5562,6 +5584,10 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         };
                                         std::string joinStr = joinMsg.dump() + "\n";
                                         send(g_tcpSocket, joinStr.c_str(), (int)joinStr.length(), 0);
+                                    } else {
+                                        LogToFile("Redirect TCP connect FAILED");
+                                        closesocket(g_tcpSocket);
+                                        g_tcpSocket = INVALID_SOCKET;
                                     }
                                 }
                             }
