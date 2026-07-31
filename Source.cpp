@@ -4534,97 +4534,85 @@ bool ShowChangeNameDialog(HWND hParent, std::wstring& outResult) {
 static HWND g_sbPressedWnd = NULL;
 static int g_sbPressedHit = 0;
 
+void DrawCustomScrollbar(HWND hWnd);
+
 LRESULT CALLBACK ScrollbarColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    if (msg == WM_NCPAINT) {
-        LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
-        if ((GetWindowLong(hWnd, GWL_STYLE) & WS_VSCROLL) == 0) return res;
-        
-        HDC hdc = GetWindowDC(hWnd);
-        RECT rcWin;
-        GetWindowRect(hWnd, &rcWin);
+    auto getSbRects = [&](RECT& rcTop, RECT& rcBot, RECT& rcThumb, RECT& rcPgUp, RECT& rcPgDn) {
+        RECT rcWin; GetWindowRect(hWnd, &rcWin);
+        SCROLLBARINFO sbiClip = { sizeof(sbiClip) };
+        if (!GetScrollBarInfo(hWnd, OBJID_VSCROLL, &sbiClip) || (sbiClip.rgstate[0] & STATE_SYSTEM_INVISIBLE)) {
+            rcTop = rcBot = rcThumb = rcPgUp = rcPgDn = {0,0,0,0};
+            return;
+        }
+
         int width = rcWin.right - rcWin.left;
         int height = rcWin.bottom - rcWin.top;
+        int dpiY = g_dpi;
+        int bw = (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_CLIENTEDGE) ? max(2, MulDiv(2, dpiY, 96)) : 0;
+        int cxVScroll = GetSystemMetricsForDpi(SM_CXVSCROLL, dpiY);
+        int offsetX = width - bw - cxVScroll;
+        int offsetY = bw;
+        int sbHeight = height - bw * 2;
+        int arrS = cxVScroll;
         
-        int cxVScroll = GetSystemMetricsForDpi(SM_CXVSCROLL, g_dpi);
-        if (width <= cxVScroll) {
-            ReleaseDC(hWnd, hdc);
-            return res;
-        }
-
-        SCROLLBARINFO sbi = { sizeof(sbi) };
-        if (GetScrollBarInfo(hWnd, OBJID_VSCROLL, &sbi)) {
-            int sbWidth = sbi.rcScrollBar.right - sbi.rcScrollBar.left;
-            int sbHeight = sbi.rcScrollBar.bottom - sbi.rcScrollBar.top;
-            
-            RECT rcWin; GetWindowRect(hWnd, &rcWin);
-            int offsetX = sbi.rcScrollBar.left - rcWin.left;
-            int offsetY = sbi.rcScrollBar.top - rcWin.top;
-
-            HBRUSH hFace = CreateSolidBrush(RGB(192, 192, 192));
-            HPEN hBlack = (HPEN)GetStockObject(BLACK_PEN);
-
-            WORD pat[8] = { 0xAAAA, 0x5555, 0xAAAA, 0x5555, 0xAAAA, 0x5555, 0xAAAA, 0x5555 };
-            HBITMAP hBmp = CreateBitmap(8, 8, 1, 1, pat);
-            HBRUSH hTrackBrush = CreatePatternBrush(hBmp);
-
-            auto drawArrow = [&](RECT rc, bool isUp, bool isPressed) {
-                FillRect(hdc, &rc, hFace);
-                DrawScaledButtonBorder(hdc, rc, isPressed ? EDGE_SUNKEN : EDGE_RAISED);
-                
-                int dpiY = g_dpi;
-                int s = MulDiv(1, dpiY, 96); if (s < 1) s = 1;
-
-                int cx = rc.left + (rc.right - rc.left) / 2;
-                int cy = rc.top + (rc.bottom - rc.top) / 2;
-                if (isPressed) { cx += s; cy += s; }
-                SelectObject(hdc, hBlack);
-                HBRUSH hBlackBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
-                HBRUSH hOldB = (HBRUSH)SelectObject(hdc, hBlackBrush);
-                if (isUp) {
-                    POINT pts[3] = { {cx, cy - 2*s}, {cx - 3*s, cy + 1*s}, {cx + 3*s, cy + 1*s} };
-                    Polygon(hdc, pts, 3);
-                } else {
-                    POINT pts[3] = { {cx - 3*s, cy - 1*s}, {cx + 3*s, cy - 1*s}, {cx, cy + 2*s} };
-                    Polygon(hdc, pts, 3);
-                }
-                SelectObject(hdc, hOldB);
-            };
-
-            RECT rcTop = { offsetX, offsetY, offsetX + sbWidth, offsetY + sbi.dxyLineButton };
-            bool isTopPressed = (sbi.rgstate[1] & STATE_SYSTEM_PRESSED) != 0 || (g_sbPressedWnd == hWnd && g_sbPressedHit == 1);
-            drawArrow(rcTop, true, isTopPressed);
-
-            RECT rcBot = { offsetX, offsetY + sbHeight - sbi.dxyLineButton, offsetX + sbWidth, offsetY + sbHeight };
-            bool isBotPressed = (sbi.rgstate[5] & STATE_SYSTEM_PRESSED) != 0 || (g_sbPressedWnd == hWnd && g_sbPressedHit == 2);
-            drawArrow(rcBot, false, isBotPressed);
-
-            SetTextColor(hdc, RGB(255, 255, 255));
-            SetBkColor(hdc, RGB(192, 192, 192));
-
-            if (sbi.xyThumbBottom > sbi.xyThumbTop && !(sbi.rgstate[0] & STATE_SYSTEM_UNAVAILABLE)) {
-                RECT rcPgUp = { offsetX, rcTop.bottom, offsetX + sbWidth, offsetY + sbi.xyThumbTop };
-                FillRect(hdc, &rcPgUp, hTrackBrush);
-
-                RECT rcPgDn = { offsetX, offsetY + sbi.xyThumbBottom, offsetX + sbWidth, rcBot.top };
-                FillRect(hdc, &rcPgDn, hTrackBrush);
-
-                RECT rcThumb = { offsetX, offsetY + sbi.xyThumbTop, offsetX + sbWidth, offsetY + sbi.xyThumbBottom };
-                FillRect(hdc, &rcThumb, hFace);
-                DrawScaledButtonBorder(hdc, rcThumb, EDGE_RAISED);
-            } else {
-                RECT rcTrack = { offsetX, rcTop.bottom, offsetX + sbWidth, rcBot.top };
-                FillRect(hdc, &rcTrack, hTrackBrush);
+        rcTop = { offsetX, offsetY, offsetX + cxVScroll, offsetY + arrS };
+        rcBot = { offsetX, offsetY + sbHeight - arrS, offsetX + cxVScroll, offsetY + sbHeight };
+        
+        SCROLLINFO si = { sizeof(si), SIF_ALL };
+        GetScrollInfo(hWnd, SB_VERT, &si);
+        int scrollMax = si.nMax - max((int)si.nPage - 1, 0);
+        int trackLen = sbHeight - arrS * 2;
+        int thumbLen = trackLen;
+        int thumbTop = offsetY + arrS;
+        
+        if (scrollMax > 0 && si.nPage > 0) {
+            long long page = si.nPage;
+            long long range = (long long)si.nMax - si.nMin + 1;
+            thumbLen = (int)(trackLen * page / range);
+            int minThumb = MulDiv(8, dpiY, 96);
+            if (thumbLen < minThumb) thumbLen = minThumb;
+            if (thumbLen > trackLen) thumbLen = trackLen;
+            if (thumbLen < trackLen) {
+                thumbTop = offsetY + arrS + (si.nPos - si.nMin) * (trackLen - thumbLen) / scrollMax;
             }
+        }
+        rcThumb = { offsetX, thumbTop, offsetX + cxVScroll, thumbTop + thumbLen };
+        rcPgUp = { offsetX, rcTop.bottom, offsetX + cxVScroll, rcThumb.top };
+        rcPgDn = { offsetX, rcThumb.bottom, offsetX + cxVScroll, rcBot.top };
+    };
 
-            DeleteObject(hFace);
-            DeleteObject(hTrackBrush);
-            DeleteObject(hBmp);
-            ReleaseDC(hWnd, hdc);
-            return res;
+    if (msg == WM_NCPAINT) {
+        if ((GetWindowLong(hWnd, GWL_STYLE) & WS_VSCROLL) == 0) {
+            return DefSubclassProc(hWnd, msg, wParam, lParam);
         }
 
-        ReleaseDC(hWnd, hdc);
+        SCROLLBARINFO sbiClip = { sizeof(sbiClip) };
+        if (!GetScrollBarInfo(hWnd, OBJID_VSCROLL, &sbiClip) || (sbiClip.rgstate[0] & STATE_SYSTEM_INVISIBLE)) {
+            return DefSubclassProc(hWnd, msg, wParam, lParam);
+        }
+
+        HRGN hUpdateRgn = (HRGN)wParam;
+        HRGN hClippedRgn = NULL;
+        if (hUpdateRgn == (HRGN)1 || hUpdateRgn == NULL) {
+            RECT rcWinClip; GetWindowRect(hWnd, &rcWinClip);
+            hClippedRgn = CreateRectRgnIndirect(&rcWinClip);
+        } else {
+            hClippedRgn = CreateRectRgn(0,0,0,0);
+            CombineRgn(hClippedRgn, hUpdateRgn, NULL, RGN_COPY);
+        }
+        RECT rcTop, rcBot, rcThumb, rcPgUp, rcPgDn;
+        getSbRects(rcTop, rcBot, rcThumb, rcPgUp, rcPgDn);
+
+        RECT rcWin; GetWindowRect(hWnd, &rcWin);
+        RECT rcExclude = { rcTop.left + rcWin.left, rcTop.top + rcWin.top, rcBot.right + rcWin.left, rcBot.bottom + rcWin.top };
+        HRGN hExclude = CreateRectRgnIndirect(&rcExclude);
+        CombineRgn(hClippedRgn, hClippedRgn, hExclude, RGN_DIFF);
+        DeleteObject(hExclude);
+
+        LRESULT res = DefSubclassProc(hWnd, msg, (WPARAM)hClippedRgn, lParam);
+        DeleteObject(hClippedRgn);
         
+        DrawCustomScrollbar(hWnd);
         return res;
     }
     else if (msg == WM_NCMOUSEMOVE || msg == WM_NCMOUSELEAVE) {
@@ -4632,96 +4620,99 @@ LRESULT CALLBACK ScrollbarColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
     }
     else if (msg == WM_NCLBUTTONDBLCLK || msg == WM_NCLBUTTONDOWN) {
         if (wParam == HTVSCROLL) {
-            SCROLLBARINFO sbi = { sizeof(sbi) };
-            if (GetScrollBarInfo(hWnd, OBJID_VSCROLL, &sbi)) {
-                POINT pt; GetCursorPos(&pt);
-                RECT rcTop = { sbi.rcScrollBar.left, sbi.rcScrollBar.top, sbi.rcScrollBar.right, sbi.rcScrollBar.top + sbi.dxyLineButton };
-                RECT rcBot = { sbi.rcScrollBar.left, sbi.rcScrollBar.bottom - sbi.dxyLineButton, sbi.rcScrollBar.right, sbi.rcScrollBar.bottom };
-                RECT rcThumb = { sbi.rcScrollBar.left, sbi.rcScrollBar.top + sbi.xyThumbTop, sbi.rcScrollBar.right, sbi.rcScrollBar.top + sbi.xyThumbBottom };
-                RECT rcPgUp = { sbi.rcScrollBar.left, rcTop.bottom, sbi.rcScrollBar.right, rcThumb.top };
-                RECT rcPgDn = { sbi.rcScrollBar.left, rcThumb.bottom, sbi.rcScrollBar.right, rcBot.top };
+            SCROLLBARINFO sbiClip = { sizeof(sbiClip) };
+            if (!GetScrollBarInfo(hWnd, OBJID_VSCROLL, &sbiClip) || (sbiClip.rgstate[0] & STATE_SYSTEM_INVISIBLE)) return 0;
 
-                int hit = 0;
-                if (PtInRect(&rcTop, pt)) hit = 1;
-                else if (PtInRect(&rcBot, pt)) hit = 2;
-                else if (PtInRect(&rcThumb, pt)) hit = 3;
-                else if (PtInRect(&rcPgUp, pt)) hit = 4;
-                else if (PtInRect(&rcPgDn, pt)) hit = 5;
+            RECT rcTop, rcBot, rcThumb, rcPgUp, rcPgDn;
+            getSbRects(rcTop, rcBot, rcThumb, rcPgUp, rcPgDn);
 
-                if (hit != 0) {
-                    SetCapture(hWnd);
-                    int startY = pt.y;
-                    SCROLLINFO si = { sizeof(si), SIF_ALL };
-                    GetScrollInfo(hWnd, SB_VERT, &si);
-                    int startPos = si.nPos;
+            POINT pt; GetCursorPos(&pt);
+            RECT rcWin; GetWindowRect(hWnd, &rcWin);
+            POINT localPt = { pt.x - rcWin.left, pt.y - rcWin.top };
 
-                    auto sendScroll = [&](int action) { SendMessage(hWnd, WM_VSCROLL, MAKEWPARAM(action, 0), 0); };
-                    if (hit == 1) sendScroll(SB_LINEUP);
-                    if (hit == 2) sendScroll(SB_LINEDOWN);
-                    if (hit == 4) sendScroll(SB_PAGEUP);
-                    if (hit == 5) sendScroll(SB_PAGEDOWN);
+            int hit = 0;
+            if (PtInRect(&rcTop, localPt)) hit = 1;
+            else if (PtInRect(&rcBot, localPt)) hit = 2;
+            else if (PtInRect(&rcThumb, localPt)) hit = 3;
+            else if (PtInRect(&rcPgUp, localPt)) hit = 4;
+            else if (PtInRect(&rcPgDn, localPt)) hit = 5;
 
-                    if (hit != 3) SetTimer(hWnd, 9998, 250, NULL);
-                    
-                    g_sbPressedWnd = hWnd;
-                    g_sbPressedHit = hit;
-                    RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+            if (hit != 0) {
+                SetCapture(hWnd);
+                int startY = pt.y;
+                SCROLLINFO si = { sizeof(si), SIF_ALL };
+                GetScrollInfo(hWnd, SB_VERT, &si);
+                int startPos = si.nPos;
 
-                    MSG msgLoop;
-                    while (GetCapture() == hWnd && GetMessage(&msgLoop, NULL, 0, 0)) {
-                        if (msgLoop.message == WM_LBUTTONUP) {
-                            ReleaseCapture();
-                            break;
-                        } else if (msgLoop.message == WM_MOUSEMOVE) {
-                            if (hit == 3) {
-                                POINT scrPt; GetCursorPos(&scrPt);
-                                int trackLen = (sbi.rcScrollBar.bottom - sbi.dxyLineButton) - (sbi.rcScrollBar.top + sbi.dxyLineButton);
-                                int thumbLen = sbi.xyThumbBottom - sbi.xyThumbTop;
-                                int scrollMax = si.nMax - max((int)si.nPage - 1, 0);
-                                if (trackLen > thumbLen && scrollMax > 0) {
-                                    int dy = scrPt.y - startY;
-                                    int newPos = startPos + dy * scrollMax / (trackLen - thumbLen);
-                                    if (newPos < si.nMin) newPos = si.nMin;
-                                    if (newPos > scrollMax) newPos = scrollMax;
-                                    SendMessage(hWnd, WM_VSCROLL, MAKEWPARAM(SB_THUMBTRACK, newPos), 0);
-                                    SetScrollPos(hWnd, SB_VERT, newPos, TRUE);
-                                    RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
-                                }
-                            } else if (hit == 1 || hit == 2) {
-                                POINT scrPt; GetCursorPos(&scrPt);
-                                bool isInside = (hit == 1 && PtInRect(&rcTop, scrPt)) || (hit == 2 && PtInRect(&rcBot, scrPt));
-                                int newHit = isInside ? hit : 0;
-                                if (g_sbPressedHit != newHit) {
-                                    g_sbPressedHit = newHit;
-                                    RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
-                                }
-                            }
-                        } else if (msgLoop.message == WM_TIMER && msgLoop.wParam == 9998) {
-                            SetTimer(hWnd, 9998, 50, NULL);
+                auto sendScroll = [&](int action) { SendMessage(hWnd, WM_VSCROLL, MAKEWPARAM(action, 0), 0); };
+                if (hit == 1) sendScroll(SB_LINEUP);
+                if (hit == 2) sendScroll(SB_LINEDOWN);
+                if (hit == 4) sendScroll(SB_PAGEUP);
+                if (hit == 5) sendScroll(SB_PAGEDOWN);
+
+                if (hit != 3) SetTimer(hWnd, 9998, 250, NULL);
+                
+                g_sbPressedWnd = hWnd;
+                g_sbPressedHit = hit;
+                RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_UPDATENOW);
+
+                MSG msgLoop;
+                while (GetCapture() == hWnd && GetMessage(&msgLoop, NULL, 0, 0)) {
+                    if (msgLoop.message == WM_LBUTTONUP) {
+                        ReleaseCapture();
+                        break;
+                    } else if (msgLoop.message == WM_MOUSEMOVE) {
+                        if (hit == 3) {
                             POINT scrPt; GetCursorPos(&scrPt);
-                            if (hit == 1 && PtInRect(&rcTop, scrPt)) sendScroll(SB_LINEUP);
-                            if (hit == 2 && PtInRect(&rcBot, scrPt)) sendScroll(SB_LINEDOWN);
-                            if (hit == 4 && PtInRect(&rcPgUp, scrPt)) sendScroll(SB_PAGEUP);
-                            if (hit == 5 && PtInRect(&rcPgDn, scrPt)) sendScroll(SB_PAGEDOWN);
-                        } else {
-                            TranslateMessage(&msgLoop);
-                            DispatchMessage(&msgLoop);
+                            int trackLen = rcBot.top - rcTop.bottom;
+                            int thumbLen = rcThumb.bottom - rcThumb.top;
+                            SCROLLINFO si2 = { sizeof(si2), SIF_ALL };
+                            GetScrollInfo(hWnd, SB_VERT, &si2);
+                            int scrollMax = si2.nMax - max((int)si2.nPage - 1, 0);
+                            if (trackLen > thumbLen && scrollMax > 0) {
+                                int dy = scrPt.y - startY;
+                                int newPos = startPos + dy * scrollMax / (trackLen - thumbLen);
+                                if (newPos < si2.nMin) newPos = si2.nMin;
+                                if (newPos > scrollMax) newPos = scrollMax;
+                                SendMessage(hWnd, WM_VSCROLL, MAKEWPARAM(SB_THUMBTRACK, newPos), 0);
+                                SetScrollPos(hWnd, SB_VERT, newPos, FALSE);
+                                RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_UPDATENOW);
+                            }
+                        } else if (hit == 1 || hit == 2) {
+                            POINT scrPt; GetCursorPos(&scrPt);
+                            POINT scrLocal = { scrPt.x - rcWin.left, scrPt.y - rcWin.top };
+                            bool isInside = (hit == 1 && PtInRect(&rcTop, scrLocal)) || (hit == 2 && PtInRect(&rcBot, scrLocal));
+                            int newHit = isInside ? hit : 0;
+                            if (g_sbPressedHit != newHit) {
+                                g_sbPressedHit = newHit;
+                                RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_UPDATENOW);
+                            }
                         }
+                    } else if (msgLoop.message == WM_TIMER && msgLoop.wParam == 9998) {
+                        SetTimer(hWnd, 9998, 50, NULL);
+                        POINT scrPt; GetCursorPos(&scrPt);
+                        POINT scrLocal = { scrPt.x - rcWin.left, scrPt.y - rcWin.top };
+                        if (hit == 1 && PtInRect(&rcTop, scrLocal)) sendScroll(SB_LINEUP);
+                        if (hit == 2 && PtInRect(&rcBot, scrLocal)) sendScroll(SB_LINEDOWN);
+                        if (hit == 4 && PtInRect(&rcPgUp, scrLocal)) sendScroll(SB_PAGEUP);
+                        if (hit == 5 && PtInRect(&rcPgDn, scrLocal)) sendScroll(SB_PAGEDOWN);
+                    } else {
+                        TranslateMessage(&msgLoop);
+                        DispatchMessage(&msgLoop);
                     }
-                    g_sbPressedWnd = NULL;
-                    g_sbPressedHit = 0;
-                    if (hit != 3) KillTimer(hWnd, 9998);
-                    sendScroll(SB_ENDSCROLL);
-                    RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
-                    return 0;
                 }
+                g_sbPressedWnd = NULL;
+                g_sbPressedHit = 0;
+                if (hit != 3) KillTimer(hWnd, 9998);
+                sendScroll(SB_ENDSCROLL);
+                RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_UPDATENOW);
+                return 0;
             }
         }
-    }
-    else if (msg == WM_MOUSEWHEEL || msg == WM_KEYDOWN || msg == WM_KEYUP || msg == WM_VSCROLL) {
+    } else if (msg == WM_MOUSEWHEEL || msg == WM_KEYDOWN || msg == WM_KEYUP || msg == WM_VSCROLL) {
         wchar_t className[256];
         GetClassNameW(hWnd, className, 256);
-        if (wcscmp(className, MSFTEDIT_CLASS) == 0) {
+        if (wcscmp(className, L"RICHEDIT50W") == 0) {
             if (msg == WM_MOUSEWHEEL) {
                 int delta = (short)HIWORD(wParam);
                 int lines = (delta > 0 ? 3 : -3);
@@ -4730,7 +4721,7 @@ LRESULT CALLBACK ScrollbarColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                 } else {
                     for (int i = 0; i < -lines; i++) SendMessage(hWnd, WM_VSCROLL, MAKEWPARAM(SB_LINEDOWN, 0), 0);
                 }
-                RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+                RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_UPDATENOW);
                 return 0;
             } else if (msg == WM_KEYDOWN) {
                 int action = -1;
@@ -4741,16 +4732,108 @@ LRESULT CALLBACK ScrollbarColorProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM l
                 
                 if (action != -1) {
                     SendMessage(hWnd, WM_VSCROLL, MAKEWPARAM(action, 0), 0);
-                    RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+                    RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_UPDATENOW);
                     return 0;
                 }
             }
         }
         LRESULT res = DefSubclassProc(hWnd, msg, wParam, lParam);
-        RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+        RedrawWindow(hWnd, NULL, NULL, RDW_FRAME | RDW_UPDATENOW);
         return res;
     }
     return DefSubclassProc(hWnd, msg, wParam, lParam);
+}
+
+void DrawCustomScrollbar(HWND hWnd) {
+    if ((GetWindowLong(hWnd, GWL_STYLE) & WS_VSCROLL) == 0) return;
+    SCROLLBARINFO sbiClip = { sizeof(sbiClip) };
+    if (!GetScrollBarInfo(hWnd, OBJID_VSCROLL, &sbiClip) || (sbiClip.rgstate[0] & STATE_SYSTEM_INVISIBLE)) return;
+
+    RECT rcWin; GetWindowRect(hWnd, &rcWin);
+    int width = rcWin.right - rcWin.left;
+    int height = rcWin.bottom - rcWin.top;
+    int dpiY = g_dpi;
+    int bw = (GetWindowLong(hWnd, GWL_EXSTYLE) & WS_EX_CLIENTEDGE) ? max(2, MulDiv(2, dpiY, 96)) : 0;
+    int cxVScroll = GetSystemMetricsForDpi(SM_CXVSCROLL, dpiY);
+    int offsetX = width - bw - cxVScroll;
+    int offsetY = bw;
+    int sbHeight = height - bw * 2;
+    int arrS = cxVScroll;
+    RECT rcTop = { offsetX, offsetY, offsetX + cxVScroll, offsetY + arrS };
+    RECT rcBot = { offsetX, offsetY + sbHeight - arrS, offsetX + cxVScroll, offsetY + sbHeight };
+    
+    SCROLLINFO si = { sizeof(si), SIF_ALL };
+    GetScrollInfo(hWnd, SB_VERT, &si);
+    int scrollMax = si.nMax - max((int)si.nPage - 1, 0);
+    int trackLen = sbHeight - arrS * 2;
+    int thumbLen = trackLen;
+    int thumbTop = offsetY + arrS;
+    if (scrollMax > 0 && si.nPage > 0) {
+        long long page = si.nPage;
+        long long range = (long long)si.nMax - si.nMin + 1;
+        thumbLen = (int)(trackLen * page / range);
+        int minThumb = MulDiv(8, dpiY, 96);
+        if (thumbLen < minThumb) thumbLen = minThumb;
+        if (thumbLen > trackLen) thumbLen = trackLen;
+        if (thumbLen < trackLen) {
+            thumbTop = offsetY + arrS + (si.nPos - si.nMin) * (trackLen - thumbLen) / scrollMax;
+        }
+    }
+    RECT rcThumb = { offsetX, thumbTop, offsetX + cxVScroll, thumbTop + thumbLen };
+    RECT rcPgUp = { offsetX, rcTop.bottom, offsetX + cxVScroll, rcThumb.top };
+    RECT rcPgDn = { offsetX, rcThumb.bottom, offsetX + cxVScroll, rcBot.top };
+
+    HDC hdc = GetWindowDC(hWnd);
+
+    HBRUSH hFace = CreateSolidBrush(RGB(192, 192, 192));
+    HPEN hBlack = (HPEN)GetStockObject(BLACK_PEN);
+    WORD pat[8] = { 0xAAAA, 0x5555, 0xAAAA, 0x5555, 0xAAAA, 0x5555, 0xAAAA, 0x5555 };
+    HBITMAP hBmp = CreateBitmap(8, 8, 1, 1, pat);
+    HBRUSH hTrackBrush = CreatePatternBrush(hBmp);
+
+    auto drawArrow = [&](RECT rc, bool isUp, bool isPressed) {
+        FillRect(hdc, &rc, hFace);
+        DrawScaledButtonBorder(hdc, rc, isPressed ? EDGE_SUNKEN : EDGE_RAISED);
+        int s = MulDiv(1, dpiY, 96); if (s < 1) s = 1;
+        int cx = rc.left + (rc.right - rc.left) / 2;
+        int cy = rc.top + (rc.bottom - rc.top) / 2;
+        if (isPressed) { cx += s; cy += s; }
+        SelectObject(hdc, hBlack);
+        HBRUSH hBlackBrush = (HBRUSH)GetStockObject(BLACK_BRUSH);
+        HBRUSH hOldB = (HBRUSH)SelectObject(hdc, hBlackBrush);
+        if (isUp) {
+            POINT pts[3] = { {cx, cy - 2*s}, {cx - 3*s, cy + 1*s}, {cx + 3*s, cy + 1*s} };
+            Polygon(hdc, pts, 3);
+        } else {
+            POINT pts[3] = { {cx - 3*s, cy - 1*s}, {cx + 3*s, cy - 1*s}, {cx, cy + 2*s} };
+            Polygon(hdc, pts, 3);
+        }
+        SelectObject(hdc, hOldB);
+    };
+
+    bool isTopPressed = (g_sbPressedWnd == hWnd && g_sbPressedHit == 1);
+    drawArrow(rcTop, true, isTopPressed);
+
+    bool isBotPressed = (g_sbPressedWnd == hWnd && g_sbPressedHit == 2);
+    drawArrow(rcBot, false, isBotPressed);
+
+    SetTextColor(hdc, RGB(255, 255, 255));
+    SetBkColor(hdc, RGB(192, 192, 192));
+
+    if (rcThumb.bottom > rcThumb.top && !(sbiClip.rgstate[0] & STATE_SYSTEM_UNAVAILABLE)) {
+        FillRect(hdc, &rcPgUp, hTrackBrush);
+        FillRect(hdc, &rcPgDn, hTrackBrush);
+        FillRect(hdc, &rcThumb, hFace);
+        DrawScaledButtonBorder(hdc, rcThumb, EDGE_RAISED);
+    } else {
+        RECT rcTrack = { rcTop.left, rcTop.bottom, rcBot.right, rcBot.top };
+        FillRect(hdc, &rcTrack, hTrackBrush);
+    }
+
+    DeleteObject(hFace);
+    DeleteObject(hTrackBrush);
+    DeleteObject(hBmp);
+    ReleaseDC(hWnd, hdc);
 }
 
 std::wstring g_moveBoxResult;
@@ -6678,6 +6761,79 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
         if (HandleMenuDrawItem(hwnd, (LPDRAWITEMSTRUCT)lParam)) return TRUE;
     }
     
+    if (msg == WM_MOUSEWHEEL || msg == WM_VSCROLL || msg == WM_KEYDOWN) {
+        SendMessage(hwnd, WM_SETREDRAW, FALSE, 0);
+        LRESULT res = CallWindowProc(g_oldListProc, hwnd, msg, wParam, lParam);
+        SendMessage(hwnd, WM_SETREDRAW, TRUE, 0);
+        RedrawWindow(hwnd, NULL, NULL, RDW_ERASE | RDW_FRAME | RDW_INVALIDATE | RDW_ALLCHILDREN | RDW_UPDATENOW);
+        return res;
+    }
+
+    if (msg == WM_ERASEBKGND) {
+        return 1;
+    }
+
+    if (msg == WM_PAINT) {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        
+        int cx = ps.rcPaint.right - ps.rcPaint.left;
+        int cy = ps.rcPaint.bottom - ps.rcPaint.top;
+        if (cx > 0 && cy > 0) {
+            HDC memDC = CreateCompatibleDC(hdc);
+            HBITMAP memBM = CreateCompatibleBitmap(hdc, cx, cy);
+            HBITMAP oldBM = (HBITMAP)SelectObject(memDC, memBM);
+            
+            SetWindowOrgEx(memDC, ps.rcPaint.left, ps.rcPaint.top, NULL);
+            
+            HBRUSH hBrush = (HBRUSH)SendMessage(GetParent(hwnd), WM_CTLCOLORLISTBOX, (WPARAM)memDC, (LPARAM)hwnd);
+            if (!hBrush) hBrush = GetSysColorBrush(COLOR_WINDOW);
+            FillRect(memDC, &ps.rcPaint, hBrush);
+            
+            CallWindowProc(g_oldListProc, hwnd, WM_PRINTCLIENT, (WPARAM)memDC, PRF_CLIENT);
+            
+            BitBlt(hdc, ps.rcPaint.left, ps.rcPaint.top, cx, cy, memDC, ps.rcPaint.left, ps.rcPaint.top, SRCCOPY);
+            
+            SelectObject(memDC, oldBM);
+            DeleteObject(memBM);
+            DeleteDC(memDC);
+        }
+        EndPaint(hwnd, &ps);
+        
+        static SCROLLINFO lastSI = { sizeof(lastSI), SIF_ALL };
+        SCROLLINFO si = { sizeof(si), SIF_ALL };
+        if (GetScrollInfo(hwnd, SB_VERT, &si)) {
+            if (si.nPos != lastSI.nPos || si.nMax != lastSI.nMax || si.nPage != lastSI.nPage || si.nMin != lastSI.nMin) {
+                lastSI = si;
+                DrawCustomScrollbar(hwnd);
+            }
+        }
+        return 0;
+    }
+    
+    if (msg == WM_MOUSEMOVE || msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP || msg == WM_TIMER) {
+        LRESULT res = CallWindowProc(g_oldListProc, hwnd, msg, wParam, lParam);
+        
+        bool shouldDraw = false;
+        if (msg == WM_TIMER || (GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+            shouldDraw = true;
+        } else {
+            static SCROLLINFO lastSI = { sizeof(lastSI), SIF_ALL };
+            SCROLLINFO si = { sizeof(si), SIF_ALL };
+            if (GetScrollInfo(hwnd, SB_VERT, &si)) {
+                if (si.nPos != lastSI.nPos || si.nMax != lastSI.nMax || si.nPage != lastSI.nPage || si.nMin != lastSI.nMin) {
+                    lastSI = si;
+                    shouldDraw = true;
+                }
+            }
+        }
+        
+        if (shouldDraw) {
+            DrawCustomScrollbar(hwnd);
+        }
+        return res;
+    }
+
     if (msg == WM_RBUTTONDOWN) {
         POINT pt = { LOWORD(lParam), HIWORD(lParam) };
         LRESULT res = SendMessage(hwnd, LB_ITEMFROMPOINT, 0, MAKELPARAM(pt.x, pt.y));
