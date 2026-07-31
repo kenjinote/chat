@@ -268,7 +268,7 @@ void FetchMaintenanceMessageThread(HWND hWnd) {
                 
                 // Wrap raw URLs with <a href="...">...</a> if they are not already wrapped
                 if (msgUtf8.find("<a ") == std::string::npos) {
-                    std::regex url_regex(R"(https?://[a-zA-Z0-9\-./?=&_]+)");
+                    std::regex url_regex(R"(https?://[a-zA-Z0-9\-./?=&_@]+)");
                     msgUtf8 = std::regex_replace(msgUtf8, url_regex, "<a href=\"$&\">$&</a>");
                 }
                 
@@ -310,7 +310,7 @@ void FetchMaintenanceMessageThread(HWND hWnd) {
             
             // Wrap raw URLs with <a href="...">...</a> if they are not already wrapped
             if (msgUtf8.find("<a ") == std::string::npos) {
-                std::regex url_regex(R"(https?://[a-zA-Z0-9\-./?=&_]+)");
+                std::regex url_regex(R"(https?://[a-zA-Z0-9\-./?=&_@]+)");
                 msgUtf8 = std::regex_replace(msgUtf8, url_regex, "<a href=\"$&\">$&</a>");
             }
             
@@ -2362,7 +2362,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                             }
                             
                             try {
-                                std::wregex url_regex(L"https?://[\\w/:%#\\$&\\?\\(\\)~\\.=\\+\\-]+");
+                                std::wregex url_regex(L"https?://[\\w/:%#\\$&\\?\\(\\)~\\.=\\+\\-@]+");
                                 auto words_begin = std::wsregex_iterator(fullText.begin(), fullText.end(), url_regex);
                                 auto words_end = std::wsregex_iterator();
                                 
