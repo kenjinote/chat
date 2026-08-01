@@ -6121,6 +6121,46 @@ std::map<HWND, ID2D1HwndRenderTarget*> g_videoRts;
 std::map<HWND, ID2D1Bitmap*> g_videoBitmaps;
 std::map<HWND, std::pair<int, int>> g_videoBitmapSizes;
 
+void EnsureWindowIsVisible(HWND hWnd) {
+    RECT rc;
+    GetWindowRect(hWnd, &rc);
+    HMONITOR hMonitor = MonitorFromRect(&rc, MONITOR_DEFAULTTONULL);
+    if (!hMonitor) {
+        hMonitor = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
+        if (hMonitor) {
+            MONITORINFO mi = { sizeof(mi) };
+            if (GetMonitorInfo(hMonitor, &mi)) {
+                int w = rc.right - rc.left;
+                int h = rc.bottom - rc.top;
+                int x = rc.left;
+                int y = rc.top;
+                if (x < mi.rcWork.left) x = mi.rcWork.left;
+                if (x + w > mi.rcWork.right) x = mi.rcWork.right - w;
+                if (y < mi.rcWork.top) y = mi.rcWork.top;
+                if (y + h > mi.rcWork.bottom) y = mi.rcWork.bottom - h;
+                SetWindowPos(hWnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+    } else {
+        MONITORINFO mi = { sizeof(mi) };
+        if (GetMonitorInfo(hMonitor, &mi)) {
+            int w = rc.right - rc.left;
+            int h = rc.bottom - rc.top;
+            int x = rc.left;
+            int y = rc.top;
+            int minVisible = MulDiv(40, g_dpi, 96);
+            bool adjusted = false;
+            if (x > mi.rcWork.right - minVisible) { x = mi.rcWork.right - minVisible; adjusted = true; }
+            if (x + w < mi.rcWork.left + minVisible) { x = mi.rcWork.left - w + minVisible; adjusted = true; }
+            if (y > mi.rcWork.bottom - minVisible) { y = mi.rcWork.bottom - minVisible; adjusted = true; }
+            if (y < mi.rcWork.top) { y = mi.rcWork.top; adjusted = true; }
+            if (adjusted) {
+                SetWindowPos(hWnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+        }
+    }
+}
+
 LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
     LRESULT classicResult = 0;
     if (HandleClassicStyle(hwnd, message, wParam, lParam, &classicResult, true, false)) return classicResult;
@@ -6138,6 +6178,10 @@ LRESULT CALLBACK VideoViewProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
         LPRECT prc = (LPRECT)lParam;
         SnapWindow(hwnd, prc);
         return TRUE;
+    }
+    case WM_EXITSIZEMOVE: {
+        EnsureWindowIsVisible(hwnd);
+        break;
     }
     case WM_NCCREATE: {
         CREATESTRUCT* pcs = (CREATESTRUCT*)lParam;
@@ -7431,6 +7475,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         LPRECT prc = (LPRECT)lParam;
         SnapWindow(hWnd, prc);
         return TRUE;
+    }
+    case WM_EXITSIZEMOVE: {
+        EnsureWindowIsVisible(hWnd);
+        break;
     }
     case WM_GETMINMAXINFO: {
         MINMAXINFO* pmmi = (MINMAXINFO*)lParam;
