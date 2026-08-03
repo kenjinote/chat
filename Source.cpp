@@ -3467,9 +3467,9 @@ void ApplyClassicStyle(HWND hWnd) {
     int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
     int bw3 = bw1 * 3;
 
-    int cxCrop = -rcFrame.left - bw3;
-    int cyCropTop = -rcFrame.top - GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi) - bw3;
-    int cyCropBottom = rcFrame.bottom - bw3;
+    int cxCrop = -rcFrame.left;
+    int cyCropTop = 0;
+    int cyCropBottom = rcFrame.bottom;
     if (cxCrop < 0) cxCrop = 0;
     if (cyCropTop < 0) cyCropTop = 0;
     if (cyCropBottom < 0) cyCropBottom = 0;
@@ -3706,21 +3706,7 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 bool isTopEdge = (pwp->y == mi.rcWork.top);
                 bool isBottomEdge = (pwp->y + pwp->cy == mi.rcWork.bottom);
 
-                if (isLeftEdge || isRightEdge || isTopEdge || isBottomEdge) {
-                    RECT rcFrame = { 0, 0, 0, 0 };
-                    AdjustWindowRectExForDpi(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE), g_dpi);
-                    int cxCrop = -rcFrame.left - 3;
-                    int cyCropTop = -rcFrame.top - GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi) - 3;
-                    int cyCropBottom = rcFrame.bottom - 3;
-                    if (cxCrop < 0) cxCrop = 0;
-                    if (cyCropTop < 0) cyCropTop = 0;
-                    if (cyCropBottom < 0) cyCropBottom = 0;
-
-                    pwp->x -= cxCrop;
-                    pwp->y -= cyCropTop;
-                    pwp->cx += cxCrop * 2;
-                    pwp->cy += cyCropTop + cyCropBottom;
-                }
+                // Edge logic removed (fixed crops handle it natively)
             }
         }
         return false;
@@ -3895,9 +3881,9 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
 
             RECT rcFrame = { 0, 0, 0, 0 };
             AdjustWindowRectExForDpi(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE), g_dpi);
-            int cxCrop = -rcFrame.left - bw3;
-            int cyCropTop = -rcFrame.top - GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi) - bw3;
-            int cyCropBottom = rcFrame.bottom - bw3;
+            int cxCrop = -rcFrame.left;
+            int cyCropTop = 0;
+            int cyCropBottom = rcFrame.bottom;
             if (cxCrop < 0) cxCrop = 0;
             if (cyCropTop < 0) cyCropTop = 0;
             if (cyCropBottom < 0) cyCropBottom = 0;
@@ -3913,22 +3899,6 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         pt.y = (int)(short)HIWORD(lParam);
         RECT rc;
         GetWindowRect(hWnd, &rc);
-        
-        int grab = 4;
-        
-        bool bLeft = (pt.x >= rc.left && pt.x < rc.left + grab);
-        bool bRight = (pt.x < rc.right && pt.x >= rc.right - grab);
-        bool bTop = (pt.y >= rc.top && pt.y < rc.top + grab);
-        bool bBottom = (pt.y < rc.bottom && pt.y >= rc.bottom - grab);
-        
-        if (bTop && bLeft) { *pResult = HTTOPLEFT; return true; }
-        if (bTop && bRight) { *pResult = HTTOPRIGHT; return true; }
-        if (bBottom && bLeft) { *pResult = HTBOTTOMLEFT; return true; }
-        if (bBottom && bRight) { *pResult = HTBOTTOMRIGHT; return true; }
-        if (bLeft) { *pResult = HTLEFT; return true; }
-        if (bRight) { *pResult = HTRIGHT; return true; }
-        if (bTop) { *pResult = HTTOP; return true; }
-        if (bBottom) { *pResult = HTBOTTOM; return true; }
 
         int dpiY = 96;
         HDC hdc = GetDC(hWnd);
@@ -3941,10 +3911,30 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
 
         RECT rcFrame = { 0, 0, 0, 0 };
         AdjustWindowRectExForDpi(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE), g_dpi);
-        int cxCrop = -rcFrame.left - bw3;
-        int cyCropTop = -rcFrame.top - GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi) - bw3;
+        int cxCrop = -rcFrame.left;
+        int cyCropTop = 0;
+        int cyCropBottom = rcFrame.bottom;
         if (cxCrop < 0) cxCrop = 0;
         if (cyCropTop < 0) cyCropTop = 0;
+        if (cyCropBottom < 0) cyCropBottom = 0;
+        
+        int grab = bw3 + Scale(2); // Provide a generous grab margin (3D border + 2px)
+        
+        bool bLeft = (pt.x >= rc.left + cxCrop && pt.x < rc.left + cxCrop + grab);
+        bool bRight = (pt.x < rc.right - cxCrop && pt.x >= rc.right - cxCrop - grab);
+        bool bTop = (pt.y >= rc.top + cyCropTop && pt.y < rc.top + cyCropTop + grab);
+        bool bBottom = (pt.y < rc.bottom - cyCropBottom && pt.y >= rc.bottom - cyCropBottom - grab);
+        
+        if (bTop && bLeft) { *pResult = HTTOPLEFT; return true; }
+        if (bTop && bRight) { *pResult = HTTOPRIGHT; return true; }
+        if (bBottom && bLeft) { *pResult = HTBOTTOMLEFT; return true; }
+        if (bBottom && bRight) { *pResult = HTBOTTOMRIGHT; return true; }
+        if (bLeft) { *pResult = HTLEFT; return true; }
+        if (bRight) { *pResult = HTRIGHT; return true; }
+        if (bTop) { *pResult = HTTOP; return true; }
+        if (bBottom) { *pResult = HTBOTTOM; return true; }
+
+
 
         int visLeft = cxCrop;
         int visRight = (rc.right - rc.left) - cxCrop;
@@ -4004,6 +3994,33 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         }
         return true;
     }
+    case WM_NCCALCSIZE: {
+        if (wParam == TRUE) {
+            NCCALCSIZE_PARAMS* pncsp = (NCCALCSIZE_PARAMS*)lParam;
+            DefWindowProc(hWnd, WM_NCCALCSIZE, wParam, lParam);
+            
+            int dpiY = 96;
+            HDC hdc = GetDC(hWnd);
+            if (hdc) { dpiY = GetDpiForWindow(hWnd); ReleaseDC(hWnd, hdc); }
+            int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
+            int bw3 = bw1 * 3;
+            
+            pncsp->rgrc[0].left += bw3;
+            pncsp->rgrc[0].right -= bw3;
+            pncsp->rgrc[0].bottom -= bw3;
+            
+            int captionHeight = GetSystemMetricsForDpi(SM_CYCAPTION, dpiY);
+            RECT rcFrame = {0};
+            AdjustWindowRectExForDpi(&rcFrame, GetWindowLong(hWnd, GWL_STYLE), FALSE, GetWindowLong(hWnd, GWL_EXSTYLE), dpiY);
+            int targetTop = captionHeight + bw3;
+            int currentTop = -rcFrame.top;
+            pncsp->rgrc[0].top -= (currentTop - targetTop);
+            
+            *pResult = 0;
+            return true;
+        }
+        break;
+    }
     case WM_NCPAINT:
     case WM_NCACTIVATE: {
         if (msg == WM_NCACTIVATE) {
@@ -4031,9 +4048,9 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
                 int bw2 = bw1 * 2;
                 int bw3 = bw1 * 3;
 
-                int cxCrop = -rcFrame.left - bw3;
-                int cyCropTop = -rcFrame.top - GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi) - bw3;
-                int cyCropBottom = rcFrame.bottom - bw3;
+                int cxCrop = -rcFrame.left;
+                int cyCropTop = 0;
+                int cyCropBottom = rcFrame.bottom;
                 if (cxCrop < 0) cxCrop = 0;
                 if (cyCropTop < 0) cyCropTop = 0;
                 if (cyCropBottom < 0) cyCropBottom = 0;
@@ -6461,9 +6478,9 @@ RECT GetWindowMargin(HWND hwnd) {
     int bw1 = MulDiv(1, dpiY, 96); if (bw1 < 1) bw1 = 1;
     int bw3 = bw1 * 3;
 
-    int cxCrop = -rcFrame.left - bw3;
-    int cyCropTop = -rcFrame.top - GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi) - bw3;
-    int cyCropBottom = rcFrame.bottom - bw3;
+    int cxCrop = -rcFrame.left;
+    int cyCropTop = 0;
+    int cyCropBottom = rcFrame.bottom;
     if (cxCrop < 0) cxCrop = 0;
     if (cyCropTop < 0) cyCropTop = 0;
     if (cyCropBottom < 0) cyCropBottom = 0;
