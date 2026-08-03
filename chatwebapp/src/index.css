@@ -44,7 +44,7 @@ body {
 
 /* Title Bar */
 .title-bar {
-  background: linear-gradient(90deg, #000080, #1084d0);
+  background: #000080;
   padding: 3px 2px;
   display: flex;
   justify-content: space-between;

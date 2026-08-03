@@ -348,6 +348,11 @@ const App: React.FC = () => {
   }, [ignoredUsers]);
   
   const [roomId, setRoomId] = useState(featureFlags.room);
+  
+  useEffect(() => {
+    document.title = `chat.exe - [${roomId}]`;
+  }, [roomId]);
+  
   const [users, setUsers] = useState<User[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageInput, setMessageInput] = useState('');
@@ -362,6 +367,7 @@ const App: React.FC = () => {
 
   const [streamingUsers, setStreamingUsers] = useState<Record<string, number>>({});
   const [watchingUsers, setWatchingUsers] = useState<Record<string, boolean>>({});
+  const [videoPositions, setVideoPositions] = useState<Record<string, {x: number, y: number}>>({});
 
   // Formatting states
   const [isBold, setIsBold] = useState(false);
@@ -1088,6 +1094,34 @@ const App: React.FC = () => {
     }
   };
 
+  const handleVideoDragStart = (e: React.PointerEvent, userId: string) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const initialPos = videoPositions[userId] || { x: 0, y: 0 };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      moveEvent.preventDefault();
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      setVideoPositions(prev => ({
+        ...prev,
+        [userId]: {
+          x: initialPos.x + dx,
+          y: initialPos.y + dy
+        }
+      }));
+    };
+
+    const handlePointerUp = () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+  };
+
   return (
     <div className={`window ${featureFlags.showFrame ? '' : 'no-frame'}`}>
       {/* Title Bar */}
@@ -1431,13 +1465,13 @@ const App: React.FC = () => {
                   className="sunken-panel"
                   onChange={(e) => setNewRoomName(e.target.value)}
                 >
-                  {publicRooms.map(r => (
+                  {[...publicRooms].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)).map(r => (
                     <option key={r.name} value={r.name}>{r.name} ({r.count}{t.people})</option>
                   ))}
                 </select>
 
                 <div className="dialog-buttons">
-                  <button type="submit" className="sys-btn" style={{ minWidth: '60px' }}>{t.move}</button>
+                  <button type="submit" className="sys-btn" style={{ minWidth: '60px' }}>{t.move.replace(/\(&.\)/g, '')}</button>
                   <button type="button" className="sys-btn" style={{ minWidth: '80px' }} onClick={closeMoveRoom}>{t.cancel}</button>
                 </div>
               </form>
@@ -1503,12 +1537,25 @@ const App: React.FC = () => {
         const u = users.find(u => u.userId === userId);
         const cleanName = u ? u.userName.split('#')[0] : 'User';
         const hasFrame = !!videoFrames[userId];
+        const pos = videoPositions[userId] || { x: 0, y: 0 };
         return (
-          <div key={userId} className="window" style={{ position: 'fixed', top: '50px', right: '20px', width: '320px', zIndex: 1000, boxShadow: '2px 2px 5px rgba(0,0,0,0.5)' }}>
-            <div className="title-bar">
+          <div key={userId} className="window" style={{ position: 'fixed', top: '50px', right: '20px', width: '324px', height: 'auto', zIndex: 1000, boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', transform: `translate(${pos.x}px, ${pos.y}px)` }}>
+            <div className="title-bar" onPointerDown={(e) => handleVideoDragStart(e, userId)} style={{ cursor: 'move' }}>
               <div className="title-bar-text">{cleanName} - Video</div>
               <div className="title-bar-controls">
-                <button className="title-btn close-btn" aria-label="Close" onClick={() => setWatchingUsers(prev => ({ ...prev, [userId]: false }))}></button>
+                <button className="title-btn close-btn" aria-label="Close" onClick={() => {
+                  setWatchingUsers(prev => ({ ...prev, [userId]: false }));
+                  const jmuxer = jmuxersRef.current.get(userId);
+                  if (jmuxer) {
+                    try { jmuxer.destroy(); } catch (e) {}
+                    jmuxersRef.current.delete(userId);
+                  }
+                  setVideoFrames(prev => {
+                    const newFrames = { ...prev };
+                    delete newFrames[userId];
+                    return newFrames;
+                  });
+                }}></button>
               </div>
             </div>
             <div className="window-body" style={{ margin: 0, padding: 0, background: '#000', height: '180px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>

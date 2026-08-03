@@ -827,6 +827,51 @@ void SaveIgnoredUsers() {
     }
 }
 
+
+class CUserListUpdate {
+    HWND m_hwnd;
+    int m_topIndex;
+    int m_curSel;
+    std::wstring m_selString;
+    static int s_refCount;
+public:
+    CUserListUpdate(HWND hwnd) : m_hwnd(hwnd) {
+        if (m_hwnd) {
+            if (s_refCount == 0) {
+                m_topIndex = (int)SendMessage(m_hwnd, LB_GETTOPINDEX, 0, 0);
+                m_curSel = (int)SendMessage(m_hwnd, LB_GETCURSEL, 0, 0);
+                if (m_curSel != LB_ERR) {
+                    int len = (int)SendMessage(m_hwnd, LB_GETTEXTLEN, m_curSel, 0);
+                    if (len > 0) {
+                        std::vector<WCHAR> buf(len + 1, 0);
+                        SendMessage(m_hwnd, LB_GETTEXT, m_curSel, (LPARAM)buf.data());
+                        m_selString = buf.data();
+                    }
+                }
+                SendMessage(m_hwnd, WM_SETREDRAW, FALSE, 0);
+            }
+            s_refCount++;
+        }
+    }
+    ~CUserListUpdate() {
+        if (m_hwnd) {
+            s_refCount--;
+            if (s_refCount == 0) {
+                SendMessage(m_hwnd, WM_SETREDRAW, TRUE, 0);
+                if (m_curSel != LB_ERR && !m_selString.empty()) {
+                    int newIdx = (int)SendMessage(m_hwnd, LB_FINDSTRINGEXACT, -1, (LPARAM)m_selString.c_str());
+                    if (newIdx != LB_ERR) SendMessage(m_hwnd, LB_SETCURSEL, newIdx, 0);
+                }
+                if (m_topIndex != LB_ERR) {
+                    SendMessage(m_hwnd, LB_SETTOPINDEX, m_topIndex, 0);
+                }
+                InvalidateRect(m_hwnd, NULL, FALSE);
+            }
+        }
+    }
+};
+int CUserListUpdate::s_refCount = 0;
+
 void SortUserList() {
     extern HWND g_hUserList;
     if (!g_hUserList) return;
@@ -859,13 +904,11 @@ void SortUserList() {
         });
     }
 
-    SendMessage(g_hUserList, WM_SETREDRAW, FALSE, 0);
+    CUserListUpdate updater(g_hUserList);
     SendMessage(g_hUserList, LB_RESETCONTENT, 0, 0);
     for (const auto& u : users) {
         SendMessage(g_hUserList, LB_ADDSTRING, 0, (LPARAM)u.c_str());
     }
-    SendMessage(g_hUserList, WM_SETREDRAW, TRUE, 0);
-    InvalidateRect(g_hUserList, NULL, TRUE);
 }
 
 std::wstring FilterProfanity(std::wstring text, const std::wstring& username) {
@@ -3453,6 +3496,8 @@ int g_hoverBtn = 0;
 
 void ApplyClassicStyle(HWND hWnd) {
     SetWindowTheme(hWnd, L" ", L" ");
+    DWMNCRENDERINGPOLICY policy = DWMNCRP_DISABLED;
+    DwmSetWindowAttribute(hWnd, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
     SetWindowPos(hWnd, NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
     RECT rc;
     GetWindowRect(hWnd, &rc);
@@ -3925,14 +3970,23 @@ bool HandleClassicStyle(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam, LRESU
         bool bTop = (pt.y >= rc.top + cyCropTop && pt.y < rc.top + cyCropTop + grab);
         bool bBottom = (pt.y < rc.bottom - cyCropBottom && pt.y >= rc.bottom - cyCropBottom - grab);
         
-        if (bTop && bLeft) { *pResult = HTTOPLEFT; return true; }
-        if (bTop && bRight) { *pResult = HTTOPRIGHT; return true; }
-        if (bBottom && bLeft) { *pResult = HTBOTTOMLEFT; return true; }
-        if (bBottom && bRight) { *pResult = HTBOTTOMRIGHT; return true; }
-        if (bLeft) { *pResult = HTLEFT; return true; }
-        if (bRight) { *pResult = HTRIGHT; return true; }
-        if (bTop) { *pResult = HTTOP; return true; }
-        if (bBottom) { *pResult = HTBOTTOM; return true; }
+        DWORD wStyle = GetWindowLong(hWnd, GWL_STYLE);
+        bool hasSizeBox = (wStyle & WS_THICKFRAME) != 0;
+        if (hasSizeBox) {
+            if (bTop && bLeft) { *pResult = HTTOPLEFT; return true; }
+            if (bTop && bRight) { *pResult = HTTOPRIGHT; return true; }
+            if (bBottom && bLeft) { *pResult = HTBOTTOMLEFT; return true; }
+            if (bBottom && bRight) { *pResult = HTBOTTOMRIGHT; return true; }
+            if (bLeft) { *pResult = HTLEFT; return true; }
+            if (bRight) { *pResult = HTRIGHT; return true; }
+            if (bTop) { *pResult = HTTOP; return true; }
+            if (bBottom) { *pResult = HTBOTTOM; return true; }
+        } else {
+            if (bTop || bBottom || bLeft || bRight) {
+                *pResult = HTBORDER;
+                return true;
+            }
+        }
 
 
 
@@ -4403,15 +4457,15 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         int inputHeight = Scale(24);
         int btnHeight = Scale(24);
         int btnWidth = Scale(80);
-        int totalWidth = margin * 2 + Scale(260);
+        int clientW = Scale(270);
         
         int y = margin;
         hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-            margin, y, totalWidth - margin * 2, inputHeight, hWnd, 0, GetModuleHandle(0), 0);
+            margin, y, clientW - margin * 2, inputHeight, hWnd, 0, GetModuleHandle(0), 0);
         
         y += inputHeight + margin;
         
-        int cancelX = totalWidth - margin - btnWidth;
+        int cancelX = clientW - margin - btnWidth;
         int okX = cancelX - margin - btnWidth;
         
         hBtnOK = CreateWindow(L"BUTTON", L"OK", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
@@ -4519,13 +4573,20 @@ bool ShowChangeNameDialog(HWND hParent, std::wstring& outResult) {
     GetWindowRect(hParent, &rcParent);
 
     int margin = Scale(5);
-    int totalWidth = margin * 2 + Scale(260);
-    int totalHeight = margin * 3 + Scale(24) + Scale(24);
+    int clientW = Scale(270);
+    int clientH = margin * 3 + Scale(24) + Scale(24);
     
-    RECT rcDlg = { 0, 0, totalWidth, totalHeight };
+    RECT rcDlg = { 0, 0, clientW, clientH };
     AdjustWindowRectExForDpi(&rcDlg, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_DLGMODALFRAME, g_dpi);
-    int winW = rcDlg.right - rcDlg.left;
-    int winH = rcDlg.bottom - rcDlg.top;
+    
+    int bw1 = MulDiv(1, g_dpi, 96); if (bw1 < 1) bw1 = 1;
+    int bw3 = bw1 * 3;
+    int captionHeight = GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi);
+    int targetTop = captionHeight + bw3;
+    int currentTop = -rcDlg.top;
+    
+    int winW = (rcDlg.right - rcDlg.left) + bw3 * 2;
+    int winH = (rcDlg.bottom - rcDlg.top) + bw3 - (currentTop - targetTop);
 
     HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"ChangeNameClass", GetString(IDS_CHANGE_NAME_TITLE).c_str(),
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE | WS_CLIPCHILDREN,
@@ -4915,18 +4976,18 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         int btnHeight = Scale(24);
         int btnWidth = Scale(80);
         int chkWidth = Scale(80);
-        int totalWidth = margin * 2 + Scale(260); // 270
+        int clientW = Scale(270);
         
         int y = margin;
         hEdit = CreateWindowEx(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
-            margin, y, totalWidth - margin * 2, inputHeight, hWnd, (HMENU)101, GetModuleHandle(0), 0);
+            margin, y, clientW - margin * 2, inputHeight, hWnd, (HMENU)101, GetModuleHandle(0), 0);
         y += inputHeight + margin;
         
         hList = CreateWindowEx(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | LBS_NOTIFY | LBS_HASSTRINGS | LBS_OWNERDRAWFIXED | LBS_NOINTEGRALHEIGHT,
-            margin, y, totalWidth - margin * 2, listHeight, hWnd, (HMENU)102, GetModuleHandle(0), 0);
+            margin, y, clientW - margin * 2, listHeight, hWnd, (HMENU)102, GetModuleHandle(0), 0);
         y += listHeight + margin;
 
-        int cancelX = totalWidth - margin - btnWidth;
+        int cancelX = clientW - margin - btnWidth;
         int okX = cancelX - margin - btnWidth;
         
         hChk = CreateWindow(L"BUTTON", GetString(IDS_PRIVATE).c_str(), 
@@ -5140,12 +5201,20 @@ bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult, bool& outPrivate)
     RECT rcParent;
     GetWindowRect(hParent, &rcParent);
 
+    int margin = Scale(5);
     int clientW = Scale(270);
-    int clientH = Scale(168);
+    int clientH = margin * 4 + Scale(24) + Scale(100) + Scale(24);
     RECT rcDlg = { 0, 0, clientW, clientH };
     AdjustWindowRectExForDpi(&rcDlg, WS_POPUP | WS_CAPTION | WS_SYSMENU, FALSE, WS_EX_DLGMODALFRAME, g_dpi);
-    int winW = rcDlg.right - rcDlg.left;
-    int winH = rcDlg.bottom - rcDlg.top;
+    
+    int bw1 = MulDiv(1, g_dpi, 96); if (bw1 < 1) bw1 = 1;
+    int bw3 = bw1 * 3;
+    int captionHeight = GetSystemMetricsForDpi(SM_CYCAPTION, g_dpi);
+    int targetTop = captionHeight + bw3;
+    int currentTop = -rcDlg.top;
+    
+    int winW = (rcDlg.right - rcDlg.left) + bw3 * 2;
+    int winH = (rcDlg.bottom - rcDlg.top) + bw3 - (currentTop - targetTop);
 
     HWND hWnd = CreateWindowEx(WS_EX_DLGMODALFRAME, L"MoveRoomClass", GetString(IDS_MOVE_ROOM_TITLE).c_str(),
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE | WS_CLIPCHILDREN,
@@ -5510,6 +5579,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 PostMessage(hWndParent, WM_REVERT_ROOM, 0, 0);
                             }
                             else if (type == "users") {
+                                CUserListUpdate updater(g_hUserList);
                                 SendMessage(g_hUserList, LB_RESETCONTENT, 0, 0);
                                 auto arr = json["users"].array_items();
                                 std::map<std::wstring, std::wstring> nameToUid;
@@ -5595,6 +5665,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 }
                             }
                             else if (type == "join") {
+                                CUserListUpdate updater(g_hUserList);
                                 std::string uid = json["userId"].string_value();
                                 std::wstring wuid = a2w(uid.c_str());
                                 std::wstring wname = a2w(json["userName"].string_value().c_str());
@@ -5692,6 +5763,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 }
                             }
                             else if (type == "leave") {
+                                CUserListUpdate updater(g_hUserList);
                                 std::string uid = json["userId"].string_value();
                                 std::wstring wuid = a2w(uid.c_str());
                                 int idx = (int)SendMessage(g_hUserList, LB_FINDSTRINGEXACT, -1, (LPARAM)wuid.c_str());
