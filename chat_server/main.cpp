@@ -532,6 +532,14 @@ private:
                 chatObj["userId"] = m_userId;
                 chatObj["userName"] = m_userName;
                 chatObj["nclr"] = m_nclr;
+                
+                if (chatObj["sz"].is_number()) {
+                    int sz = chatObj["sz"].int_value();
+                    if (sz > 32) sz = 32;
+                    if (sz < 6) sz = 6;
+                    chatObj["sz"] = sz;
+                }
+                
                 m_room->deliver(json11::Json(chatObj).dump() + "\n", shared_from_this());
             }
         } else if (type == "rename") {

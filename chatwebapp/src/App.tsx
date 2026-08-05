@@ -304,6 +304,32 @@ const safeColors = [
   '#80C800', '#FF0080', '#00C880'
 ];
 
+const userViolations: Record<string, number> = {};
+const userMessageTimes: Record<string, number[]> = {};
+
+function filterProfanity(text: string, userId: string, onIgnore: (uid: string) => void): string {
+  if (!text) return text;
+  
+  const level1_regex = /(死|氏|し)(ね|んじまえ|ばいい)|(殺|56)(す|して)|キチ[ガガイ〇]イ|池沼|土人|チャンコロ|カタワ|メクラ|援助交際|パパ活|売春|強姦|自殺しろ|\b(fuck|bitch|cunt|nigger|nigga|faggot)\b|操你妈|傻逼|干你娘|肏你妈|씨발|개새끼|지랄|병신/i;
+  
+  if (level1_regex.test(text)) {
+    onIgnore(userId);
+    return "";
+  }
+  
+  const level2_regex = /まんこ|マンコ|おめこ|ペニス|ちんこ|ウンコ|糞|マヌケ|キモイ|ウザい|\b(shit|slut|whore|asshole|dick|cock|pussy)\b|靠北|智障|脑残|鸡巴|牛逼|좆|병신|씨발|년/gi;
+  
+  const filteredText = text.replace(level2_regex, "***");
+  if (filteredText !== text) {
+    userViolations[userId] = (userViolations[userId] || 0) + 1;
+    if (userViolations[userId] >= 3) {
+      onIgnore(userId);
+    }
+  }
+  
+  return filteredText;
+}
+
 const App: React.FC = () => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [localUserId, setLocalUserId] = useState<string>('');
@@ -346,7 +372,7 @@ const App: React.FC = () => {
     ignoredUsersRef.current = ignoredUsers;
     localStorage.setItem('chat_ignored_users', JSON.stringify(ignoredUsers));
   }, [ignoredUsers]);
-  
+
   const [roomId, setRoomId] = useState(featureFlags.room);
   
   useEffect(() => {
@@ -354,6 +380,10 @@ const App: React.FC = () => {
   }, [roomId]);
   
   const [users, setUsers] = useState<User[]>([]);
+  const usersRef = useRef<User[]>(users);
+  useEffect(() => {
+    usersRef.current = users;
+  }, [users]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageInput, setMessageInput] = useState('');
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
@@ -602,12 +632,54 @@ const App: React.FC = () => {
       });
     });
 
+    socket.on('rename', (data: { userId: string; userName: string; nclr: number }) => {
+      setUsers(prev => {
+        const next = [...prev];
+        const idx = next.findIndex(u => u.userId === data.userId);
+        if (idx !== -1) {
+          next[idx] = { ...next[idx], userName: data.userName, nclr: data.nclr };
+        }
+        return next;
+      });
+    });
+
     socket.on('chat', (data: any) => {
+      const senderUserId = data.userId || 'sys';
+      if (ignoredUsersRef.current.includes(senderUserId)) return;
+      
+      let finalMsg = data.msg;
+      if (senderUserId !== 'sys' && senderUserId !== localUserIdRef.current) {
+        const now = Date.now();
+        const times = userMessageTimes[senderUserId] || [];
+        times.push(now);
+        while (times.length > 0 && now - times[0] > 3000) {
+          times.shift();
+        }
+        userMessageTimes[senderUserId] = times;
+        
+        if (times.length >= 5) {
+          setIgnoredUsers(prev => {
+            if (prev.includes(senderUserId)) return prev;
+            return [...prev, senderUserId];
+          });
+          return;
+        }
+
+        finalMsg = filterProfanity(data.msg, senderUserId, (uid) => {
+          setIgnoredUsers(prev => {
+            if (prev.includes(uid)) return prev;
+            return [...prev, uid];
+          });
+        });
+      }
+      
+      if (finalMsg === "") return;
+
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(),
-        userId: data.userId || 'sys',
+        userId: senderUserId,
         userName: data.userName || 'System',
-        msg: data.msg,
+        msg: finalMsg,
         clr: data.clr !== undefined ? data.clr : 0,
         nclr: data.nclr !== undefined ? data.nclr : 0,
         b: data.b,
@@ -875,7 +947,12 @@ const App: React.FC = () => {
       setNclr(newColorInput);
       localStorage.setItem('chat_user_name', finalName);
       localStorage.setItem('chat_user_color', newColorInput.toString());
-      connectToRoom(roomId, finalName, newColorInput);
+      if (socket) {
+        socket.emit('rename', {
+          userName: finalName,
+          nclr: newColorInput
+        });
+      }
       setShowChangeName(false);
       setNewNameInput('');
       setTimeout(() => chatInputRef.current?.focus(), 0);

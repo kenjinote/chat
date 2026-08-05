@@ -42,6 +42,8 @@ const connectedClients = new Map<string, Socket>();
 // Key: `${userId}_${seq}`, Value: { fragments: Buffer[], total: number, lastUpdate: number, payloadType: number }
 const videoBuffers = new Map<string, { fragments: Buffer[], total: number, lastUpdate: number, payloadType: number }>();
 
+const seenUdpPackets = new Set<string>();
+
 // Cleanup stale video buffers every 2 seconds
 setInterval(() => {
   const now = Date.now();
@@ -50,15 +52,21 @@ setInterval(() => {
       videoBuffers.delete(key);
     }
   }
+  seenUdpPackets.clear();
 }, 2000);
 
 // Handle incoming UDP from Azure Server
 udpSocket.on('message', (msg, rinfo) => {
   if (msg.length >= 92) {
     const payloadType = msg.readUInt8(6);
-    console.log(`[UDP] Rcvd type ${payloadType} len ${msg.length} from ${rinfo.address}:${rinfo.port}`);
+    const seq = msg.readUInt16LE(4);
     const userIdBuf = msg.subarray(12, 92);
     const senderUserId = userIdBuf.toString('utf16le').replace(/\0/g, '');
+    
+    const fragIdx = (payloadType === 2 || payloadType === 5 || payloadType === 4) ? msg.readUInt32LE(8) : 0;
+    const packetKey = `${senderUserId}_${payloadType}_${seq}_${fragIdx}`;
+    if (seenUdpPackets.has(packetKey)) return;
+    seenUdpPackets.add(packetKey);
 
     if (payloadType === 1) { // Audio
       const opusData = msg.subarray(92);
@@ -69,18 +77,26 @@ udpSocket.on('message', (msg, rinfo) => {
       // or we decode per sender. Let's do a quick global decoder for all incoming.
       try {
         const decodedPcm = globalDecoder.decode(opusData);
-        // Broadcast to all sockets
+        // Broadcast to specific sockets
         const outBuf = Buffer.alloc(decodedPcm.length + 80); // Include sender name
         Buffer.from(senderUserId, 'utf8').copy(outBuf, 0); // up to 80 bytes for username
         decodedPcm.copy(outBuf, 80);
         
-        io.sockets.emit('audio-receive', outBuf);
+        for (const [id, clientSocket] of connectedClients.entries()) {
+          if (clientSocket.data.userId !== senderUserId && clientSocket.data.roomUsers && clientSocket.data.roomUsers.has(senderUserId)) {
+            clientSocket.emit('audio-receive', outBuf);
+          }
+        }
       } catch(e) {
         // Decode error
       }
     } else if (payloadType === 4) { // Stream Status
       // Just forward to clients to show "📹" icon
-      io.sockets.emit('stream-status', { userId: senderUserId });
+      for (const [id, clientSocket] of connectedClients.entries()) {
+        if (clientSocket.data.userId !== senderUserId && clientSocket.data.roomUsers && clientSocket.data.roomUsers.has(senderUserId)) {
+          clientSocket.emit('stream-status', { userId: senderUserId });
+        }
+      }
     } else if (payloadType === 2 || payloadType === 5) { // JPEG or H264
       const seq = msg.readUInt16LE(4);
       const flags = msg.readUInt8(7);
@@ -121,10 +137,14 @@ udpSocket.on('message', (msg, rinfo) => {
           Buffer.from(senderUserId, 'utf8').copy(outBuf, 0);
           fullFrame.copy(outBuf, 80);
           
-          if (payloadType === 2) {
-            io.sockets.emit('video-receive-jpeg', outBuf);
-          } else if (payloadType === 5) {
-            io.sockets.emit('video-receive-h264', outBuf);
+          for (const [id, clientSocket] of connectedClients.entries()) {
+            if (clientSocket.data.userId !== senderUserId && clientSocket.data.roomUsers && clientSocket.data.roomUsers.has(senderUserId)) {
+              if (payloadType === 2) {
+                clientSocket.emit('video-receive-jpeg', outBuf);
+              } else if (payloadType === 5) {
+                clientSocket.emit('video-receive-h264', outBuf);
+              }
+            }
           }
         }
       }
@@ -178,6 +198,21 @@ io.on('connection', (socket: Socket) => {
             const type = json.type;
             
             if (type) {
+              if (type === 'room_users' || type === 'users') {
+                const users = new Set<string>();
+                if (Array.isArray(json.users)) {
+                  for (const u of json.users) {
+                    users.add(u.userId);
+                  }
+                }
+                socket.data.roomUsers = users;
+              } else if (type === 'join') {
+                if (!socket.data.roomUsers) socket.data.roomUsers = new Set<string>();
+                socket.data.roomUsers.add(json.userId);
+              } else if (type === 'leave') {
+                if (socket.data.roomUsers) socket.data.roomUsers.delete(json.userId);
+              }
+              
               if (type === 'redirect') {
                 console.log(`[TCP] Redirecting client ${socket.id} to ${json.ip}:${json.port}`);
                 currentTcpIp = json.ip;
@@ -253,6 +288,14 @@ io.on('connection', (socket: Socket) => {
   socket.on('leave', (data: any) => {
     const payload = {
       type: 'leave',
+      ...data
+    };
+    tcpClient.write(JSON.stringify(payload) + '\n');
+  });
+
+  socket.on('rename', (data: any) => {
+    const payload = {
+      type: 'rename',
       ...data
     };
     tcpClient.write(JSON.stringify(payload) + '\n');

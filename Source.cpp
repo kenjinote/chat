@@ -5557,6 +5557,8 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 pData->i = json["i"].bool_value();
                                 pData->u = json["u"].bool_value();
                                 pData->size = json["sz"].is_number() ? json["sz"].int_value() : 10;
+                                if (pData->size > 32) pData->size = 32;
+                                if (pData->size < 6) pData->size = 6;
                                 pData->color = json["clr"].is_number() ? json["clr"].int_value() : RGB(0,0,0);
                                 pData->nameColor = json["nclr"].is_number() ? json["nclr"].int_value() : 0xFFFFFFFF;
                                 if (pData->nameColor != 0xFFFFFFFF) {
@@ -6169,6 +6171,8 @@ void SendChatMessage(const std::wstring& msg) {
         SendMessage(g_hComboSize, CB_GETLBTEXT, sizeIndex, (LPARAM)szText);
         size = _wtoi(szText);
     }
+    if (size > 32) size = 32;
+    if (size < 6) size = 6;
     
     json11::Json json = json11::Json::object {
         {"type", "chat"},

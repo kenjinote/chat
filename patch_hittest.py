@@ -3,37 +3,39 @@ import re
 with open('Source.cpp', 'r', encoding='utf-8') as f:
     content = f.read()
 
-hit_old = r'''        if (bTop && bLeft) { *pResult = HTTOPLEFT; return true; }
-        if (bTop && bRight) { *pResult = HTTOPRIGHT; return true; }
-        if (bBottom && bLeft) { *pResult = HTBOTTOMLEFT; return true; }
-        if (bBottom && bRight) { *pResult = HTBOTTOMRIGHT; return true; }
-        if (bLeft) { *pResult = HTLEFT; return true; }
-        if (bRight) { *pResult = HTRIGHT; return true; }
-        if (bTop) { *pResult = HTTOP; return true; }
-        if (bBottom) { *pResult = HTBOTTOM; return true; }'''
+old_code = r'''                entry.pLayout->HitTestPoint(x, y - currentY, &isTrailingHit, &isInside, &metrics);
+                outCharIndex = metrics.textPosition + (isTrailingHit ? metrics.length : 0);
+                return true;'''
 
-hit_new = r'''        DWORD wStyle = GetWindowLong(hWnd, GWL_STYLE);
-        bool hasSizeBox = (wStyle & WS_THICKFRAME) != 0;
-        if (hasSizeBox) {
-            if (bTop && bLeft) { *pResult = HTTOPLEFT; return true; }
-            if (bTop && bRight) { *pResult = HTTOPRIGHT; return true; }
-            if (bBottom && bLeft) { *pResult = HTBOTTOMLEFT; return true; }
-            if (bBottom && bRight) { *pResult = HTBOTTOMRIGHT; return true; }
-            if (bLeft) { *pResult = HTLEFT; return true; }
-            if (bRight) { *pResult = HTRIGHT; return true; }
-            if (bTop) { *pResult = HTTOP; return true; }
-            if (bBottom) { *pResult = HTBOTTOM; return true; }
-        } else {
-            if (bTop || bBottom || bLeft || bRight) {
-                *pResult = HTBORDER;
-                return true;
-            }
-        }'''
+new_code = r'''                entry.pLayout->HitTestPoint(x, y - currentY, &isTrailingHit, &isInside, &metrics);
+                outCharIndex = metrics.textPosition + (isTrailingHit ? metrics.length : 0);
+                std::wstring displayUser = entry.data.user;
+                size_t hashPos = displayUser.find(L'#');
+                if (hashPos != std::wstring::npos) displayUser = displayUser.substr(0, hashPos);
+                int actualLen = (int)displayUser.length() + (int)entry.data.msg.length() + (entry.data.isSystemEvent ? 0 : 2);
+                if (actualLen == 0) actualLen = 1;
+                if (outCharIndex > actualLen) outCharIndex = actualLen;
+                return true;'''
 
-if hit_old in content:
-    content = content.replace(hit_old, hit_new)
-    with open('Source.cpp', 'w', encoding='utf-8') as f:
-        f.write(content)
-    print("Successfully patched WM_NCHITTEST in HandleClassicStyle.")
-else:
-    print("Could not find hit_old block in Source.cpp.")
+content = content.replace(old_code, new_code)
+
+old_code2 = r'''            entry.pLayout->HitTestPoint(9999.0f, 9999.0f, &isTrailingHit, &isInside, &metrics);
+            outCharIndex = metrics.textPosition + (isTrailingHit ? metrics.length : 0);
+            return true;'''
+
+new_code2 = r'''            entry.pLayout->HitTestPoint(9999.0f, 9999.0f, &isTrailingHit, &isInside, &metrics);
+            outCharIndex = metrics.textPosition + (isTrailingHit ? metrics.length : 0);
+            std::wstring displayUser = entry.data.user;
+            size_t hashPos = displayUser.find(L'#');
+            if (hashPos != std::wstring::npos) displayUser = displayUser.substr(0, hashPos);
+            int actualLen = (int)displayUser.length() + (int)entry.data.msg.length() + (entry.data.isSystemEvent ? 0 : 2);
+            if (actualLen == 0) actualLen = 1;
+            if (outCharIndex > actualLen) outCharIndex = actualLen;
+            return true;'''
+
+content = content.replace(old_code2, new_code2)
+
+with open('Source.cpp', 'w', encoding='utf-8') as f:
+    f.write(content)
+
+print("Patched GetTextPositionFromPoint successfully")
