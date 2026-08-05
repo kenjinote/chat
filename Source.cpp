@@ -202,6 +202,36 @@ bool IsVersionOutdated(const std::string& currentVer, const std::string& require
 
 #pragma comment(lib, "version.lib")
 
+
+void ApplyBoldToText(IDWriteTextLayout* pLayout, const std::wstring& text, UINT32 startPos, UINT32 length, bool isItalic) {
+    if (!isItalic) {
+        DWRITE_TEXT_RANGE r = { startPos, length };
+        pLayout->SetFontWeight(DWRITE_FONT_WEIGHT_BOLD, r);
+        return;
+    }
+
+    UINT32 runStart = startPos;
+    UINT32 runLen = 0;
+    for (UINT32 j = startPos; j < startPos + length; ++j) {
+        wchar_t c = text[j];
+        bool isEmoji = (c >= 0xD800 && c <= 0xDFFF) || (c >= 0x2600 && c <= 0x27BF);
+        if (isEmoji) {
+            if (runLen > 0) {
+                DWRITE_TEXT_RANGE r = { runStart, runLen };
+                pLayout->SetFontWeight(DWRITE_FONT_WEIGHT_BOLD, r);
+            }
+            runStart = j + 1;
+            runLen = 0;
+        } else {
+            runLen++;
+        }
+    }
+    if (runLen > 0) {
+        DWRITE_TEXT_RANGE r = { runStart, runLen };
+        pLayout->SetFontWeight(DWRITE_FONT_WEIGHT_BOLD, r);
+    }
+}
+
 std::string GetAppVersion() {
     char path[MAX_PATH];
     if (GetModuleFileNameA(NULL, path, MAX_PATH) == 0) return "1.0.0";
@@ -2369,7 +2399,7 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         if (SUCCEEDED(hr) && entry.pLayout) {
                             DWRITE_TEXT_RANGE range = {(UINT32)msgStart, (UINT32)entry.data.msg.length()};
                             
-                            if (entry.data.b) entry.pLayout->SetFontWeight(DWRITE_FONT_WEIGHT_BOLD, range);
+                            if (entry.data.b) ApplyBoldToText(entry.pLayout, fullText, msgStart, (UINT32)entry.data.msg.length(), entry.data.i);
                             if (entry.data.i) entry.pLayout->SetFontStyle(DWRITE_FONT_STYLE_ITALIC, range);
                             if (entry.data.u) entry.pLayout->SetUnderline(TRUE, range);
                             
@@ -2811,7 +2841,7 @@ IDWriteTextLayout* CreateInputLayout(HWND hWnd) {
     if (!g_pInputTextFormat || g_lastInputFontSize != tsize || g_lastInputFontB != b || g_lastInputFontI != i) {
         if (g_pInputTextFormat) { g_pInputTextFormat->Release(); g_pInputTextFormat = nullptr; }
         
-        DWRITE_FONT_WEIGHT weight = b ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL;
+        DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL;
         DWRITE_FONT_STYLE style = i ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL;
         g_pDWriteFactory->CreateTextFormat(
             g_systemFontName.c_str(), NULL, weight, style, DWRITE_FONT_STRETCH_NORMAL,
@@ -2827,6 +2857,9 @@ IDWriteTextLayout* CreateInputLayout(HWND hWnd) {
         std::wstring safeText = g_inputText.empty() ? L" " : g_inputText;
         g_pDWriteFactory->CreateTextLayout(
             safeText.c_str(), (UINT32)safeText.length(), g_pInputTextFormat, width, height, &pLayout);
+        if (pLayout && b) {
+            ApplyBoldToText(pLayout, safeText, 0, (UINT32)safeText.length(), i);
+        }
     }
     return pLayout;
 }
