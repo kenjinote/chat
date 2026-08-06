@@ -1085,6 +1085,7 @@ HWAVEIN g_hWaveIn = NULL;
 #include <map>
 
 std::mutex g_audioMixerMutex;
+std::mutex g_tcpMutex;
 HANDLE g_hAudioEvent = NULL;
 bool g_audioMixerRunning = false;
 std::thread g_audioMixerThread;
@@ -5580,6 +5581,34 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     PostMessage(hWndParent, WM_UPDATE_TITLE, 0, 0);
                                 }
                             }
+                            else if (type == "sysmsg") {
+                                std::string id = json["id"].string_value();
+                                if (id == "room_overflow") {
+                                    bool isPrivate = json["isPrivate"].bool_value();
+                                    std::wstring origW = a2w(json["orig"].string_value().c_str());
+                                    std::wstring newW = a2w(json["new"].string_value().c_str());
+                                    std::wstring msg;
+                                    if (isPrivate) {
+                                        msg = GetString(IDS_SYSMSG_ROOM_OVERFLOW);
+                                    } else {
+                                        wchar_t buf[256];
+                                        swprintf_s(buf, GetString(IDS_SYSMSG_ROOM_OVERFLOW_FMT).c_str(), origW.c_str(), newW.c_str());
+                                        msg = buf;
+                                    }
+                                    MsgData* pData = new MsgData();
+                                    pData->user = L"";
+                                    pData->wuid = L"";
+                                    pData->msg = msg;
+                                    pData->b = false;
+                                    pData->i = false;
+                                    pData->u = false;
+                                    pData->size = 12;
+                                    pData->color = RGB(255, 0, 0);
+                                    pData->nameColor = 0xFFFFFFFF;
+                                    pData->isSystemEvent = false;
+                                    PostMessage(hWndParent, WM_USER_MSG, 0, (LPARAM)pData);
+                                }
+                            }
                             else if (type == "chat") {
                                 MsgData* pData = new MsgData();
                                 std::wstring wuid = a2w(json["userId"].string_value().c_str());
@@ -5763,21 +5792,24 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     g_serverIp = newIp; // Update global server IP
                                     g_isServerUdpAddrResolved = false; // Force re-resolve for UDP
                                     
+                                    std::string redirectRoomName = "";
                                     if (json["roomName"].is_string()) {
-                                        std::string rName = json["roomName"].string_value();
-                                        std::wstring wrName = a2w(rName.c_str());
-                                        g_currentRoom = wrName;
+                                        redirectRoomName = json["roomName"].string_value();
                                     }
     
                                     if (connect(g_tcpSocket, (sockaddr*)&serverAddr, sizeof(serverAddr)) != SOCKET_ERROR) {
                                         LogToFile("Redirect TCP connect OK");
                                         std::string finalRoomName;
-                                        if (g_isPrivateRoom) {
-                                            finalRoomName = HashRoomName(g_currentRoom);
+                                        if (!redirectRoomName.empty()) {
+                                            finalRoomName = redirectRoomName;
                                         } else {
-                                            LPSTR roomA_ptr = w2a(g_currentRoom.c_str());
-                                            finalRoomName = roomA_ptr;
-                                            GlobalFree(roomA_ptr);
+                                            if (g_isPrivateRoom) {
+                                                finalRoomName = HashRoomName(g_currentRoom);
+                                            } else {
+                                                LPSTR roomA_ptr = w2a(g_currentRoom.c_str());
+                                                finalRoomName = roomA_ptr;
+                                                GlobalFree(roomA_ptr);
+                                            }
                                         }
 
                                         json11::Json joinMsg = json11::Json::object {
@@ -8652,6 +8684,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
                 g_videoWindows.clear();
 
+                if (g_tcpSocket != INVALID_SOCKET) {
+                    SOCKET old = g_tcpSocket;
+                    g_tcpSocket = INVALID_SOCKET;
+                    closesocket(old);
+                }
+                g_tcpSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+                sockaddr_in lbAddr;
+                lbAddr.sin_family = AF_INET;
+                lbAddr.sin_port = htons(4000);
+                ResolveIP("chat-lb-2026.japaneast.cloudapp.azure.com", lbAddr.sin_addr);
+                if (connect(g_tcpSocket, (sockaddr*)&lbAddr, sizeof(lbAddr)) != SOCKET_ERROR) {
+                    g_serverIp = "chat-lb-2026.japaneast.cloudapp.azure.com";
+                    g_isServerUdpAddrResolved = false;
+                }
+
                 SendJoinRequest(newRoom, isPrivate);
                 g_currentRoom = newRoom;
                 g_isPrivateRoom = isPrivate;
@@ -8859,6 +8906,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         SendLeaveRequest(g_currentRoom);
         g_currentRoom = GetString(IDS_LOBBY);
         g_isPrivateRoom = false;
+
+        if (g_tcpSocket != INVALID_SOCKET) {
+            SOCKET old = g_tcpSocket;
+            g_tcpSocket = INVALID_SOCKET;
+            closesocket(old);
+        }
+        g_tcpSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+        sockaddr_in lbAddr;
+        lbAddr.sin_family = AF_INET;
+        lbAddr.sin_port = htons(4000);
+        ResolveIP("chat-lb-2026.japaneast.cloudapp.azure.com", lbAddr.sin_addr);
+        if (connect(g_tcpSocket, (sockaddr*)&lbAddr, sizeof(lbAddr)) != SOCKET_ERROR) {
+            g_serverIp = "chat-lb-2026.japaneast.cloudapp.azure.com";
+            g_isServerUdpAddrResolved = false;
+        }
+
         SendJoinRequest(g_currentRoom, g_isPrivateRoom);
         ClearLogAndUsers();
         {

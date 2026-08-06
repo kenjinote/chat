@@ -166,7 +166,8 @@ const dict = {
     people: '人',
     selectColor: '色の選択',
     custom: 'カスタム',
-    lobby: 'ロビー'
+    lobby: 'ロビー',
+    privateRoom: '非公開'
   },
   en: {
     joinedNetwork: (name: string) => `Joined network (${name})`,
@@ -211,7 +212,8 @@ const dict = {
     people: '',
     selectColor: 'Select Color',
     custom: 'Custom',
-    lobby: 'Lobby'
+    lobby: 'Lobby',
+    privateRoom: 'Private'
   }
 };
 
@@ -373,11 +375,12 @@ const App: React.FC = () => {
     localStorage.setItem('chat_ignored_users', JSON.stringify(ignoredUsers));
   }, [ignoredUsers]);
 
+  const [isPrivateRoom, setIsPrivateRoom] = useState(false);
   const [roomId, setRoomId] = useState(featureFlags.room);
   
   useEffect(() => {
-    document.title = `chat.exe - [${roomId}]`;
-  }, [roomId]);
+    document.title = `chat.exe - [${roomId}]${isPrivateRoom ? ' (非公開)' : ''}`;
+  }, [roomId, isPrivateRoom]);
   
   const [users, setUsers] = useState<User[]>([]);
   const usersRef = useRef<User[]>(users);
@@ -498,7 +501,7 @@ const App: React.FC = () => {
 
   const [isJoined, setIsJoined] = useState(false);
 
-  const connectToRoom = (targetRoom: string, targetName?: string, targetColor?: number) => {
+  const connectToRoom = async (targetRoom: string, targetName?: string, targetColor?: number, isPrivate = false) => {
     initAudio();
     const finalName = targetName || name;
     const finalColor = targetColor !== undefined ? targetColor : nclr;
@@ -530,7 +533,8 @@ const App: React.FC = () => {
         userName: finalName,
         roomName: targetRoom,
         nclr: toColorRef(finalColor),
-        pub: true
+        pub: !isPrivate,
+        hashRoomName: isPrivate
       });
     });
   };
@@ -576,6 +580,7 @@ const App: React.FC = () => {
       if (data.userId) {
         setLocalUserId(data.userId);
         localUserIdRef.current = data.userId;
+        setIsPrivateRoom(data.pub === false);
         socket.emit('get_users');
         
         setIsJoined(true);
@@ -929,10 +934,10 @@ const App: React.FC = () => {
 
   const outBufferRef = useRef<Float32Array>(new Float32Array(0));
   const resamplePhaseRef = useRef<number>(0);
-  const handleMoveRoomSubmit = (e: React.FormEvent) => {
+  const handleMoveRoomSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newRoomName.trim()) {
-      connectToRoom(newRoomName.trim());
+      await connectToRoom(newRoomName.trim(), undefined, undefined, isPrivateRoom);
       closeMoveRoom();
       setNewRoomName('');
       setTimeout(() => chatInputRef.current?.focus(), 0);
@@ -953,6 +958,14 @@ const App: React.FC = () => {
           nclr: newColorInput
         });
       }
+      setUsers(prev => {
+        const next = [...prev];
+        const idx = next.findIndex(u => u.userId === localUserIdRef.current);
+        if (idx !== -1) {
+          next[idx] = { ...next[idx], userName: finalName, nclr: newColorInput };
+        }
+        return next;
+      });
       setShowChangeName(false);
       setNewNameInput('');
       setTimeout(() => chatInputRef.current?.focus(), 0);
@@ -1207,7 +1220,7 @@ const App: React.FC = () => {
           <div className="title-bar-text">
             <img src="/favicon.ico" 
                  style={{width: '14px', height: '14px', verticalAlign: 'middle', marginRight: '4px', imageRendering: 'pixelated'}} />
-            chat.exe - [{roomId}]
+            chat.exe - [{roomId}]{isPrivateRoom ? ' (非公開)' : ''}
           </div>
           <div className="title-bar-controls">
             <button className="title-btn min-btn" aria-label="Minimize"></button>
@@ -1533,6 +1546,15 @@ const App: React.FC = () => {
                     onChange={(e) => setNewRoomName(e.target.value)}
                     autoFocus
                   />
+                  <div style={{ marginTop: '4px' }}>
+                    <label>
+                      <input 
+                        type="checkbox" 
+                        checked={isPrivateRoom} 
+                        onChange={(e) => setIsPrivateRoom(e.target.checked)} 
+                      /> {t.privateRoom}
+                    </label>
+                  </div>
                 </div>
                 
                 <div style={{ marginBottom: '4px' }}>{t.publicRooms}:</div>

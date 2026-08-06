@@ -5,6 +5,7 @@ import cors from 'cors';
 import * as net from 'net';
 import * as dgram from 'dgram';
 import * as path from 'path';
+import * as crypto from 'crypto';
 // @ts-ignore
 import OpusScript from 'opusscript';
 
@@ -64,19 +65,26 @@ udpSocket.on('message', (msg, rinfo) => {
     const senderUserId = userIdBuf.toString('utf16le').replace(/\0/g, '');
     
     const fragIdx = (payloadType === 2 || payloadType === 5 || payloadType === 4) ? msg.readUInt32LE(8) : 0;
-    const packetKey = `${senderUserId}_${payloadType}_${seq}_${fragIdx}`;
-    if (seenUdpPackets.has(packetKey)) return;
-    seenUdpPackets.add(packetKey);
+    
+    // Deduplicate packets (skip audio since C++ server may not increment seq for audio)
+    if (payloadType !== 1) {
+      const packetKey = `${senderUserId}_${payloadType}_${seq}_${fragIdx}`;
+      if (seenUdpPackets.has(packetKey)) return;
+      seenUdpPackets.add(packetKey);
+    }
 
     if (payloadType === 1) { // Audio
       const opusData = msg.subarray(92);
       
-      // Decode Opus
-      // We need a decoder. For simplicity in a proxy, if we decode without state it might have minor artifacts,
-      // but let's instantiate a global decoder for incoming audio since it's a prototype, 
-      // or we decode per sender. Let's do a quick global decoder for all incoming.
+      // Decode Opus per sender to preserve predictive state
+      let decoder = decoders.get(senderUserId);
+      if (!decoder) {
+        decoder = new OpusScript(16000, 1, OpusScript.Application.VOIP);
+        decoders.set(senderUserId, decoder);
+      }
+      
       try {
-        const decodedPcm = globalDecoder.decode(opusData);
+        const decodedPcm = decoder.decode(opusData);
         // Broadcast to specific sockets
         const outBuf = Buffer.alloc(decodedPcm.length + 80); // Include sender name
         Buffer.from(senderUserId, 'utf8').copy(outBuf, 0); // up to 80 bytes for username
@@ -152,7 +160,7 @@ udpSocket.on('message', (msg, rinfo) => {
   }
 });
 
-const globalDecoder = new OpusScript(16000, 1, OpusScript.Application.VOIP);
+const decoders = new Map<string, any>();
 
 
 io.on('connection', (socket: Socket) => {
@@ -272,6 +280,12 @@ io.on('connection', (socket: Socket) => {
       pub: true,
       ...data
     };
+    
+    if (data.hashRoomName && typeof payload.roomName === 'string') {
+      payload.roomName = 'private_' + crypto.createHash('sha256').update(payload.roomName).digest('hex');
+    }
+    delete payload.hashRoomName;
+
     socket.data.lastJoinPayload = payload;
     console.log(`[TCP SEND] ${JSON.stringify(payload)}`);
     tcpClient.write(JSON.stringify(payload) + '\n');
@@ -330,12 +344,12 @@ io.on('connection', (socket: Socket) => {
         // Build MediaHeader
         const header = Buffer.alloc(92);
         header.writeUInt32LE(socket.data.sessionId, 0);
-        header.writeUInt16LE(seqNum++, 4);
+        header.writeUInt16LE((seqNum++) & 0xFFFF, 4);
         header.writeUInt8(1, 6); // PayloadType Audio
         header.writeUInt8(0, 7); // flags
         header.writeUInt32LE((Date.now() & 0xFFFFFFFF) >>> 0, 8); // timestamp
         
-        const userIdBuf = Buffer.from(socket.data.userId + '\0', 'utf16le');
+        const userIdBuf = Buffer.from(socket.data.userId + ' ', 'utf16le');
         userIdBuf.copy(header, 12, 0, Math.min(userIdBuf.length, 80));
 
         const udpPacket = Buffer.concat([header, opusPacket]);
@@ -365,7 +379,7 @@ io.on('connection', (socket: Socket) => {
       
       const header = Buffer.alloc(92);
       header.writeUInt32LE(socket.data.sessionId, 0);
-      header.writeUInt16LE(videoSeqNum, 4);
+      header.writeUInt16LE(videoSeqNum & 0xFFFF, 4);
       header.writeUInt8(2, 6); // PayloadType JPEG
       
       let flags = 0;
@@ -452,8 +466,7 @@ setInterval(() => {
   });
 }, 5000);
 
-const PORT = process.env.PORT || 4000; // WebSocket server runs on 4001 or 5000 since C++ is on 4000?
-// WAIT, if C++ server is on 4000, we MUST run this Node server on a different port!
+const PORT = process.env.PORT || 4000;
 server.listen(5000, () => {
   console.log(`WebSocket Proxy server running on port 5000`);
 });

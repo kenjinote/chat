@@ -62,6 +62,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "The specified room is full. You joined an overflow room."
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s is full, so you entered %s."
 END
 
 LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
@@ -119,6 +121,8 @@ BEGIN
     IDS_SCREEN          " (画面)"
     IDS_WINDOW          " (ウィンドウ)"
     IDS_REPORT_TITLE    "通報"
+    IDS_SYSMSG_ROOM_OVERFLOW "指定された部屋が満室のため、別室に入室しました。"
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s が満室のため、%s に入室しました。"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
@@ -176,6 +180,8 @@ BEGIN
     IDS_SCREEN          " (屏幕)"
     IDS_WINDOW          " (窗口)"
     IDS_REPORT_TITLE    "举报"
+    IDS_SYSMSG_ROOM_OVERFLOW "指定的房间已满，您已加入溢出房间。"
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "由于 %s 已满，您已进入 %s。"
 END
 
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
@@ -233,6 +239,8 @@ BEGIN
     IDS_SCREEN          " (화면)"
     IDS_WINDOW          " (창)"
     IDS_REPORT_TITLE    "신고"
+    IDS_SYSMSG_ROOM_OVERFLOW "지정된 방이 가득 차서 다른 방에 입장했습니다."
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s 방이 가득 차서 %s에 입장했습니다."
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL
@@ -290,6 +298,8 @@ BEGIN
     IDS_SCREEN          " (螢幕)"
     IDS_WINDOW          " (視窗)"
     IDS_REPORT_TITLE    "檢舉"
+    IDS_SYSMSG_ROOM_OVERFLOW "指定的房间已满，您已加入溢出房间。"
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "由于 %s 已满，您已进入 %s。"
 END
 
 LANGUAGE LANG_FRENCH, SUBLANG_FRENCH
@@ -347,6 +357,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "Le salon spécifié est plein. Vous avez rejoint un salon de débordement."
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s est plein, vous êtes entré dans %s."
 END
 
 LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
@@ -404,6 +416,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "Der angegebene Raum ist voll. Sie sind einem Überlaufraum beigetreten."
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "Da %s voll ist, haben Sie %s betreten."
 END
 
 LANGUAGE LANG_SPANISH, SUBLANG_SPANISH_MODERN
@@ -461,6 +475,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "La sala especificada está llena. Te uniste a una sala de desbordamiento."
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "Como %s está lleno, entraste a %s."
 END
 
 LANGUAGE LANG_HINDI, SUBLANG_DEFAULT
@@ -518,6 +534,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "निर्दिष्ट कमरा भरा हुआ है। आप एक अतिप्रवाह कमरे में शामिल हो गए。"
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "चूंकि %s भरा हुआ है, आपने %s में प्रवेश किया。"
 END
 
 LANGUAGE LANG_PORTUGUESE, SUBLANG_DEFAULT
@@ -575,6 +593,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "A sala especificada está cheia. Você entrou em uma sala de transbordo."
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "Como %s está cheio, você entrou em %s."
 END
 
 LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
@@ -632,6 +652,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "Указанная комната заполнена. Вы присоединились к резервной комнате."
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "Так как %s заполнен, вы вошли в %s."
 END
 
 LANGUAGE LANG_ARABIC, SUBLANG_DEFAULT
@@ -689,6 +711,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "الغرفة المحددة ممتلئة. لقد انضممت إلى غرفة إضافية."
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "بما أن %s ممتلئة، فقد دخلت %s."
 END
 
 LANGUAGE LANG_BENGALI, SUBLANG_DEFAULT
@@ -746,6 +770,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "নির্দিষ্ট রুমটি পূর্ণ। আপনি একটি অতিরিক্ত রুমে যোগ দিয়েছেন。"
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "যেহেতু %s পূর্ণ, আপনি %s এ প্রবেশ করেছেন。"
 END
 
 LANGUAGE LANG_INDONESIAN, SUBLANG_DEFAULT
@@ -803,6 +829,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "Ruangan yang ditentukan penuh. Anda telah bergabung ke ruang tambahan."
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "Karena %s penuh, Anda masuk ke %s."
 END
 
 LANGUAGE LANG_ITALIAN, SUBLANG_DEFAULT
@@ -860,6 +888,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "La stanza specificata è piena. Sei entrato in una stanza di overflow."
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "Poiché %s è pieno, sei entrato in %s."
 END
 
 LANGUAGE LANG_TURKISH, SUBLANG_DEFAULT
@@ -917,6 +947,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "Belirtilen oda dolu. Bir taşma odasına katıldınız."
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s dolu olduğundan %s odasına girdiniz."
 END
 
 LANGUAGE LANG_VIETNAMESE, SUBLANG_DEFAULT
@@ -974,6 +1006,8 @@ BEGIN
     IDS_SCREEN          " (Screen)"
     IDS_WINDOW          " (Window)"
     IDS_REPORT_TITLE    "Report"
+    IDS_SYSMSG_ROOM_OVERFLOW "Phòng chỉ định đã đầy. Bạn đã tham gia vào phòng bổ sung."
+    IDS_SYSMSG_ROOM_OVERFLOW_FMT "Vì %s đã đầy, bạn đã vào %s."
 END
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
@@ -989,8 +1023,8 @@ END
 
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,0,6
- PRODUCTVERSION 1,0,0,6
+ FILEVERSION 1,0,0,7
+ PRODUCTVERSION 1,0,0,7
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS 0x40004L
@@ -1001,8 +1035,8 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "FileVersion", "1.0.0.6"
-            VALUE "ProductVersion", "1.0.0.6"
+            VALUE "FileVersion", "1.0.0.7"
+            VALUE "ProductVersion", "1.0.0.7"
         END
     END
     BLOCK "VarFileInfo"

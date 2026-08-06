@@ -16,6 +16,7 @@
 #include <openssl/sha.h>
 #include <iomanip>
 #include <sstream>
+#include <climits>
 using asio::ip::tcp;
 using asio::ip::udp;
 
@@ -418,8 +419,63 @@ private:
                                 return; // DO NOT process join locally
                             }
                         } else {
-                            // Claim the room
-                            redis->setex("room_owner:" + roomName, 15, ServerManager::get().getMyEndpoint());
+                            // Find the least loaded server
+                            std::vector<std::string> keys;
+                            redis->keys("server_load:*", std::back_inserter(keys));
+                            
+                            std::string bestServer = ServerManager::get().getMyEndpoint();
+                            int minLoad = INT_MAX;
+                            
+                            for (const auto& key : keys) {
+                                auto val = redis->get(key);
+                                if (val) {
+                                    int load = std::stoi(*val);
+                                    if (load < minLoad) {
+                                        minLoad = load;
+                                        bestServer = key.substr(12); // remove "server_load:"
+                                    }
+                                }
+                            }
+                            
+                            // Claim the room for the best server using atomic SETNX logic
+                            bool acquired = redis->set("room_owner:" + roomName, bestServer, std::chrono::seconds(15), sw::redis::UpdateType::NOT_EXIST);
+                            
+                            if (acquired) {
+                                if (bestServer != ServerManager::get().getMyEndpoint()) {
+                                    // Redirect client to the best server
+                                    size_t colon = bestServer.find(':');
+                                    std::string ip = bestServer.substr(0, colon);
+                                    int port = 4000;
+                                    if (colon != std::string::npos) port = std::stoi(bestServer.substr(colon + 1));
+                                    
+                                    json11::Json redirectMsg = json11::Json::object {
+                                        {"type", "redirect"},
+                                        {"ip", ip},
+                                        {"port", port},
+                                        {"roomName", roomName}
+                                    };
+                                    deliver(redirectMsg.dump() + "\n");
+                                    return;
+                                }
+                            } else {
+                                // We lost the race. Fetch the actual owner set by another server
+                                auto newOwner = redis->get("room_owner:" + roomName);
+                                if (newOwner && *newOwner != ServerManager::get().getMyEndpoint()) {
+                                    size_t colon = newOwner->find(':');
+                                    std::string ip = newOwner->substr(0, colon);
+                                    int port = 4000;
+                                    if (colon != std::string::npos) port = std::stoi(newOwner->substr(colon + 1));
+                                    
+                                    json11::Json redirectMsg = json11::Json::object {
+                                        {"type", "redirect"},
+                                        {"ip", ip},
+                                        {"port", port},
+                                        {"roomName", roomName}
+                                    };
+                                    deliver(redirectMsg.dump() + "\n");
+                                    return;
+                                }
+                            }
                         }
                     } catch (const std::exception& e) {
                         std::cerr << "Redis error during join: " << e.what() << std::endl;
@@ -440,13 +496,13 @@ private:
                     // Success!
                     if (roomName != originalRoomName) {
                         // Notify the user that they were placed in an overflow room
+                        bool isPrivate = (originalRoomName.find("private_") == 0);
                         json11::Json sysMsg = json11::Json::object {
-                            {"type", "chat"},
-                            {"user", ""},
-                            {"msg", originalRoomName + " が満室のため、" + roomName + " に入室しました。"},
-                            {"clr", 255}, // Red color to make it visible
-                            {"b", false}, {"i", false}, {"u", false},
-                            {"sz", 12}
+                            {"type", "sysmsg"},
+                            {"id", "room_overflow"},
+                            {"isPrivate", isPrivate},
+                            {"orig", originalRoomName},
+                            {"new", roomName}
                         };
                         deliver(sysMsg.dump() + "\n");
                     }
@@ -682,9 +738,10 @@ void ServerManager::doTimer() {
         if (m_redis) {
             try {
                 auto pipe = m_redis->pipeline();
+                pipe.setex("server_load:" + m_myEndpoint, 15, std::to_string(m_sessions.size()));
                 for (const auto& pair : m_rooms) {
+                    pipe.setex("room_owner:" + pair.first, 15, m_myEndpoint);
                     if (!pair.second->isPrivate()) {
-                        pipe.setex("room_owner:" + pair.first, 15, m_myEndpoint);
                         pipe.setex("room_count:" + pair.first, 15, std::to_string(pair.second->getUsers().size()));
                     }
                 }

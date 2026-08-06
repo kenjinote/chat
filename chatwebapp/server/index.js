@@ -43,6 +43,7 @@ const cors_1 = __importDefault(require("cors"));
 const net = __importStar(require("net"));
 const dgram = __importStar(require("dgram"));
 const path = __importStar(require("path"));
+const crypto = __importStar(require("crypto"));
 // @ts-ignore
 const opusscript_1 = __importDefault(require("opusscript"));
 const app = (0, express_1.default)();
@@ -50,7 +51,7 @@ app.use((0, cors_1.default)());
 // Serve static frontend files
 app.use(express_1.default.static(path.join(__dirname, '../dist')));
 // Fallback all routes to index.html for React Router (if needed)
-app.get('*', (req, res) => {
+app.use((req, res) => {
     res.sendFile(path.join(__dirname, '../dist/index.html'));
 });
 const server = (0, http_1.createServer)(app);
@@ -71,6 +72,7 @@ const connectedClients = new Map();
 // Video Reassembly Buffer
 // Key: `${userId}_${seq}`, Value: { fragments: Buffer[], total: number, lastUpdate: number, payloadType: number }
 const videoBuffers = new Map();
+const seenUdpPackets = new Set();
 // Cleanup stale video buffers every 2 seconds
 setInterval(() => {
     const now = Date.now();
@@ -79,26 +81,42 @@ setInterval(() => {
             videoBuffers.delete(key);
         }
     }
+    seenUdpPackets.clear();
 }, 2000);
 // Handle incoming UDP from Azure Server
 udpSocket.on('message', (msg, rinfo) => {
     if (msg.length >= 92) {
         const payloadType = msg.readUInt8(6);
+        const seq = msg.readUInt16LE(4);
         const userIdBuf = msg.subarray(12, 92);
         const senderUserId = userIdBuf.toString('utf16le').replace(/\0/g, '');
+        const fragIdx = (payloadType === 2 || payloadType === 5 || payloadType === 4) ? msg.readUInt32LE(8) : 0;
+        // Deduplicate packets (skip audio since C++ server may not increment seq for audio)
+        if (payloadType !== 1) {
+            const packetKey = `${senderUserId}_${payloadType}_${seq}_${fragIdx}`;
+            if (seenUdpPackets.has(packetKey))
+                return;
+            seenUdpPackets.add(packetKey);
+        }
         if (payloadType === 1) { // Audio
             const opusData = msg.subarray(92);
-            // Decode Opus
-            // We need a decoder. For simplicity in a proxy, if we decode without state it might have minor artifacts,
-            // but let's instantiate a global decoder for incoming audio since it's a prototype, 
-            // or we decode per sender. Let's do a quick global decoder for all incoming.
+            // Decode Opus per sender to preserve predictive state
+            let decoder = decoders.get(senderUserId);
+            if (!decoder) {
+                decoder = new opusscript_1.default(16000, 1, opusscript_1.default.Application.VOIP);
+                decoders.set(senderUserId, decoder);
+            }
             try {
-                const decodedPcm = globalDecoder.decode(opusData);
-                // Broadcast to all sockets
+                const decodedPcm = decoder.decode(opusData);
+                // Broadcast to specific sockets
                 const outBuf = Buffer.alloc(decodedPcm.length + 80); // Include sender name
                 Buffer.from(senderUserId, 'utf8').copy(outBuf, 0); // up to 80 bytes for username
                 decodedPcm.copy(outBuf, 80);
-                io.sockets.emit('audio-receive', outBuf);
+                for (const [id, clientSocket] of connectedClients.entries()) {
+                    if (clientSocket.data.userId !== senderUserId && clientSocket.data.roomUsers && clientSocket.data.roomUsers.has(senderUserId)) {
+                        clientSocket.emit('audio-receive', outBuf);
+                    }
+                }
             }
             catch (e) {
                 // Decode error
@@ -106,7 +124,11 @@ udpSocket.on('message', (msg, rinfo) => {
         }
         else if (payloadType === 4) { // Stream Status
             // Just forward to clients to show "📹" icon
-            io.sockets.emit('stream-status', { userId: senderUserId });
+            for (const [id, clientSocket] of connectedClients.entries()) {
+                if (clientSocket.data.userId !== senderUserId && clientSocket.data.roomUsers && clientSocket.data.roomUsers.has(senderUserId)) {
+                    clientSocket.emit('stream-status', { userId: senderUserId });
+                }
+            }
         }
         else if (payloadType === 2 || payloadType === 5) { // JPEG or H264
             const seq = msg.readUInt16LE(4);
@@ -142,67 +164,135 @@ udpSocket.on('message', (msg, rinfo) => {
                     const outBuf = Buffer.alloc(80 + fullFrame.length);
                     Buffer.from(senderUserId, 'utf8').copy(outBuf, 0);
                     fullFrame.copy(outBuf, 80);
-                    if (payloadType === 2) {
-                        io.sockets.emit('video-receive-jpeg', outBuf);
-                    }
-                    else if (payloadType === 5) {
-                        io.sockets.emit('video-receive-h264', outBuf);
+                    for (const [id, clientSocket] of connectedClients.entries()) {
+                        if (clientSocket.data.userId !== senderUserId && clientSocket.data.roomUsers && clientSocket.data.roomUsers.has(senderUserId)) {
+                            if (payloadType === 2) {
+                                clientSocket.emit('video-receive-jpeg', outBuf);
+                            }
+                            else if (payloadType === 5) {
+                                clientSocket.emit('video-receive-h264', outBuf);
+                            }
+                        }
                     }
                 }
             }
         }
     }
 });
-const globalDecoder = new opusscript_1.default(16000, 1, opusscript_1.default.Application.VOIP);
+const decoders = new Map();
 io.on('connection', (socket) => {
     console.log(`[WS] Client connected: ${socket.id}`);
-    // Create a TCP socket to the C++ server for this client
-    const tcpClient = new net.Socket();
-    tcpClient.connect(C_SERVER_PORT, C_SERVER_IP, () => {
-        console.log(`[TCP] Connected to C++ server for client ${socket.id}`);
-    });
-    // Handle data coming FROM the C++ server
-    let buffer = '';
-    tcpClient.on('data', (data) => {
-        buffer += data.toString('utf8');
-        let newlineIndex;
-        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-            const line = buffer.substring(0, newlineIndex).trim();
-            buffer = buffer.substring(newlineIndex + 1);
-            if (line) {
-                try {
-                    const json = JSON.parse(line);
-                    const type = json.type;
-                    if (type) {
-                        if (type === 'welcome') {
-                            socket.data.sessionId = json.sessionId;
-                            socket.data.userId = json.userId;
-                            if (json.userId)
-                                connectedClients.set(json.userId, socket);
+    let tcpClient = new net.Socket();
+    let currentTcpIp = C_SERVER_IP;
+    socket.data.currentTcpIp = C_SERVER_IP;
+    let currentTcpPort = C_SERVER_PORT;
+    let isReconnecting = false;
+    const connectTcp = (ip, port) => {
+        isReconnecting = true;
+        if (!tcpClient.destroyed) {
+            tcpClient.destroy();
+        }
+        tcpClient = new net.Socket();
+        tcpClient.connect(port, ip, () => {
+            console.log(`[TCP] Connected to C++ server ${ip}:${port} for client ${socket.id}`);
+            isReconnecting = false;
+            if (socket.data.lastJoinPayload) {
+                const payloadStr = JSON.stringify(socket.data.lastJoinPayload) + '\n';
+                console.log(`[TCP SEND (reconnect)] ${payloadStr.trim()}`);
+                tcpClient.write(payloadStr);
+            }
+        });
+        let buffer = '';
+        tcpClient.on('data', (data) => {
+            buffer += data.toString('utf8');
+            let newlineIndex;
+            while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+                const line = buffer.substring(0, newlineIndex).trim();
+                buffer = buffer.substring(newlineIndex + 1);
+                if (line.trim()) {
+                    try {
+                        console.log(`[TCP RECV] ${line}`);
+                        const json = JSON.parse(line);
+                        const type = json.type;
+                        if (type) {
+                            if (type === 'room_users' || type === 'users') {
+                                const users = new Set();
+                                if (Array.isArray(json.users)) {
+                                    for (const u of json.users) {
+                                        users.add(u.userId);
+                                    }
+                                }
+                                socket.data.roomUsers = users;
+                            }
+                            else if (type === 'join') {
+                                if (!socket.data.roomUsers)
+                                    socket.data.roomUsers = new Set();
+                                socket.data.roomUsers.add(json.userId);
+                            }
+                            else if (type === 'leave') {
+                                if (socket.data.roomUsers)
+                                    socket.data.roomUsers.delete(json.userId);
+                            }
+                            if (type === 'redirect') {
+                                console.log(`[TCP] Redirecting client ${socket.id} to ${json.ip}:${json.port}`);
+                                currentTcpIp = json.ip;
+                                socket.data.currentTcpIp = json.ip;
+                                currentTcpPort = json.port;
+                                connectTcp(json.ip, json.port);
+                                return;
+                            }
+                            if (type === 'welcome') {
+                                if (json.sessionId !== undefined) {
+                                    socket.data.sessionId = json.sessionId;
+                                    // Send immediate HolePunch payload so the server maps our UDP address
+                                    const header = Buffer.alloc(92);
+                                    header.writeUInt32LE(socket.data.sessionId, 0);
+                                    header.writeUInt16LE(0, 4);
+                                    header.writeUInt8(255, 6); // HolePunch
+                                    header.writeUInt8(0, 7);
+                                    header.writeUInt32LE(0, 8);
+                                    const userIdBuf = Buffer.from(socket.data.userId + '\0', 'utf16le');
+                                    userIdBuf.copy(header, 12, 0, Math.min(userIdBuf.length, 80));
+                                    udpSocket.send(header, C_UDP_PORT, currentTcpIp);
+                                }
+                            }
+                            // Forward back to WebSocket
+                            socket.emit(type, json);
                         }
-                        // Forward back to WebSocket
-                        socket.emit(type, json);
+                    }
+                    catch (e) {
+                        console.error('[TCP] Error parsing JSON from C++ server:', e);
                     }
                 }
-                catch (e) {
-                    console.error('[TCP] Error parsing JSON from C++ server:', e);
-                }
             }
-        }
-    });
-    tcpClient.on('close', () => {
-        console.log(`[TCP] Connection closed for client ${socket.id}`);
-        socket.disconnect();
-    });
-    tcpClient.on('error', (err) => {
-        console.error(`[TCP] Error for client ${socket.id}:`, err.message);
-    });
-    // Handle data coming FROM the WebSocket (browser client)
+        });
+        tcpClient.on('close', () => {
+            console.log(`[TCP] Connection closed for client ${socket.id}`);
+            if (!isReconnecting) {
+                socket.disconnect();
+            }
+        });
+        tcpClient.on('error', (err) => {
+            console.error(`[TCP] Error for client ${socket.id}:`, err.message);
+        });
+    };
+    connectTcp(C_SERVER_IP, C_SERVER_PORT);
     socket.on('join', (data) => {
+        const secretId = data.secretId || socket.id;
+        socket.data.userId = secretId;
+        connectedClients.set(secretId, socket);
         const payload = {
             type: 'join',
+            secretId: secretId,
+            pub: true,
             ...data
         };
+        if (data.hashRoomName && typeof payload.roomName === 'string') {
+            payload.roomName = 'private_' + crypto.createHash('sha256').update(payload.roomName).digest('hex');
+        }
+        delete payload.hashRoomName;
+        socket.data.lastJoinPayload = payload;
+        console.log(`[TCP SEND] ${JSON.stringify(payload)}`);
         tcpClient.write(JSON.stringify(payload) + '\n');
     });
     socket.on('chat', (data) => {
@@ -219,6 +309,13 @@ io.on('connection', (socket) => {
         };
         tcpClient.write(JSON.stringify(payload) + '\n');
     });
+    socket.on('rename', (data) => {
+        const payload = {
+            type: 'rename',
+            ...data
+        };
+        tcpClient.write(JSON.stringify(payload) + '\n');
+    });
     socket.on('get_rooms', () => {
         tcpClient.write(JSON.stringify({ type: 'get_rooms' }) + '\n');
     });
@@ -228,31 +325,38 @@ io.on('connection', (socket) => {
     // Audio streaming from client
     const encoder = new opusscript_1.default(16000, 1, opusscript_1.default.Application.VOIP);
     let seqNum = 0;
+    let pcmBuffer = Buffer.alloc(0);
     socket.on('audio-stream', (pcmData) => {
         if (!socket.data.sessionId || !socket.data.userId)
             return;
-        try {
-            // Encode PCM 16-bit 16000Hz to Opus
-            const opusPacket = encoder.encode(pcmData, pcmData.length / 2); // length in samples
-            // Build MediaHeader
-            const header = Buffer.alloc(92);
-            header.writeUInt32LE(socket.data.sessionId, 0);
-            header.writeUInt16LE(seqNum++, 4);
-            header.writeUInt8(1, 6); // PayloadType Audio
-            header.writeUInt8(0, 7); // flags
-            header.writeUInt32LE(Date.now() & 0xFFFFFFFF, 8); // timestamp
-            const userIdBuf = Buffer.from(socket.data.userId + '\0', 'utf16le');
-            userIdBuf.copy(header, 12, 0, Math.min(userIdBuf.length, 80));
-            const udpPacket = Buffer.concat([header, opusPacket]);
-            udpSocket.send(udpPacket, C_UDP_PORT, C_SERVER_IP);
-        }
-        catch (e) {
-            console.error('Opus encode error:', e);
+        pcmBuffer = Buffer.concat([pcmBuffer, pcmData]);
+        while (pcmBuffer.length >= 640) {
+            const chunk = pcmBuffer.subarray(0, 640);
+            pcmBuffer = pcmBuffer.subarray(640);
+            try {
+                // Encode PCM 16-bit 16000Hz to Opus (320 samples)
+                const opusPacket = encoder.encode(chunk, 320);
+                // Build MediaHeader
+                const header = Buffer.alloc(92);
+                header.writeUInt32LE(socket.data.sessionId, 0);
+                header.writeUInt16LE((seqNum++) & 0xFFFF, 4);
+                header.writeUInt8(1, 6); // PayloadType Audio
+                header.writeUInt8(0, 7); // flags
+                header.writeUInt32LE((Date.now() & 0xFFFFFFFF) >>> 0, 8); // timestamp
+                const userIdBuf = Buffer.from(socket.data.userId + ' ', 'utf16le');
+                userIdBuf.copy(header, 12, 0, Math.min(userIdBuf.length, 80));
+                const udpPacket = Buffer.concat([header, opusPacket]);
+                udpSocket.send(udpPacket, C_UDP_PORT, currentTcpIp);
+            }
+            catch (e) {
+                console.error('Opus encode error:', e);
+            }
         }
     });
     // Video streaming from client
     let videoSeqNum = 0;
     socket.on('video-stream', (jpegBuf) => {
+        console.log(`[WS] Rcvd video-stream: ${jpegBuf.length} bytes from ${socket.data.userId}`);
         if (!socket.data.sessionId || !socket.data.userId)
             return;
         const MAX_PAYLOAD = 1200;
@@ -266,7 +370,7 @@ io.on('connection', (socket) => {
             const chunk = jpegBuf.subarray(offset, offset + length);
             const header = Buffer.alloc(92);
             header.writeUInt32LE(socket.data.sessionId, 0);
-            header.writeUInt16LE(videoSeqNum, 4);
+            header.writeUInt16LE(videoSeqNum & 0xFFFF, 4);
             header.writeUInt8(2, 6); // PayloadType JPEG
             let flags = 0;
             if (i === 0)
@@ -278,7 +382,7 @@ io.on('connection', (socket) => {
             const userIdBuf = Buffer.from(socket.data.userId + '\0', 'utf16le');
             userIdBuf.copy(header, 12, 0, Math.min(userIdBuf.length, 80));
             const udpPacket = Buffer.concat([header, chunk]);
-            udpSocket.send(udpPacket, C_UDP_PORT, C_SERVER_IP);
+            udpSocket.send(udpPacket, C_UDP_PORT, currentTcpIp);
         }
     });
     socket.on('stream-status', () => {
@@ -289,10 +393,36 @@ io.on('connection', (socket) => {
         header.writeUInt16LE(0, 4);
         header.writeUInt8(4, 6); // PayloadType StreamStatus
         header.writeUInt8(0, 7);
-        header.writeUInt32LE(Date.now() & 0xFFFFFFFF, 8);
+        header.writeUInt32LE((Date.now() & 0xFFFFFFFF) >>> 0, 8);
         const userIdBuf = Buffer.from(socket.data.userId + '\0', 'utf16le');
         userIdBuf.copy(header, 12, 0, Math.min(userIdBuf.length, 80));
-        udpSocket.send(header, C_UDP_PORT, C_SERVER_IP);
+        udpSocket.send(header, C_UDP_PORT, socket.data.currentTcpIp || C_SERVER_IP);
+    });
+    socket.on('watch-video', (targetUserId) => {
+        console.log(`[DEBUG] Received watch-video for ${targetUserId}. Session: ${socket.data.sessionId}, User: ${socket.data.userId}`);
+        if (!socket.data.sessionId || !socket.data.userId || !targetUserId)
+            return;
+        console.log(`[UDP SEND] Watch packet from ${socket.data.userId} to target '${targetUserId}' (len: ${targetUserId.length})`);
+        // Also send TCP subscribe_video to let the server know we want this video stream
+        const subPayload = {
+            type: 'subscribe_video',
+            target: targetUserId
+        };
+        tcpClient.write(JSON.stringify(subPayload) + '\n');
+        const targetBuf = Buffer.from(targetUserId, 'utf8');
+        const header = Buffer.alloc(92);
+        header.writeUInt32LE(socket.data.sessionId, 0);
+        header.writeUInt16LE(0, 4);
+        header.writeUInt8(3, 6); // PayloadType Watch Packet
+        header.writeUInt8(0, 7);
+        header.writeUInt32LE((Date.now() & 0xFFFFFFFF) >>> 0, 8);
+        const userIdBuf = Buffer.from(socket.data.userId + '\0', 'utf16le');
+        userIdBuf.copy(header, 12, 0, Math.min(userIdBuf.length, 80));
+        const udpPacket = Buffer.concat([header, targetBuf]);
+        udpSocket.send(udpPacket, C_UDP_PORT, socket.data.currentTcpIp || C_SERVER_IP);
+        const nullTargetBuf = Buffer.alloc(36, 0);
+        const nullUdpPacket = Buffer.concat([header, nullTargetBuf]);
+        udpSocket.send(nullUdpPacket, C_UDP_PORT, socket.data.currentTcpIp || C_SERVER_IP);
     });
     socket.on('disconnect', () => {
         console.log(`[WS] Client disconnected: ${socket.id}`);
@@ -305,19 +435,20 @@ io.on('connection', (socket) => {
 // Hole punching timer for UDP
 setInterval(() => {
     connectedClients.forEach((socket) => {
-        if (socket.data.sessionId) {
-            const header = Buffer.alloc(92);
-            header.writeUInt32LE(socket.data.sessionId, 0);
-            header.writeUInt16LE(0, 4);
-            header.writeUInt8(255, 6); // HolePunch payload
-            header.writeUInt8(0, 7);
-            header.writeUInt32LE(0, 8);
-            udpSocket.send(header, C_UDP_PORT, C_SERVER_IP);
-        }
+        if (!socket.data.sessionId || !socket.data.userId)
+            return;
+        const header = Buffer.alloc(92);
+        header.writeUInt32LE(socket.data.sessionId, 0);
+        header.writeUInt16LE(0, 4);
+        header.writeUInt8(255, 6); // HolePunch payload
+        header.writeUInt8(0, 7);
+        header.writeUInt32LE(0, 8);
+        const userIdBuf = Buffer.from(socket.data.userId + '\0', 'utf16le');
+        userIdBuf.copy(header, 12, 0, Math.min(userIdBuf.length, 80));
+        udpSocket.send(header, C_UDP_PORT, socket.data.currentTcpIp || C_SERVER_IP);
     });
-}, 3000);
-const PORT = process.env.PORT || 4000; // WebSocket server runs on 4001 or 5000 since C++ is on 4000?
-// WAIT, if C++ server is on 4000, we MUST run this Node server on a different port!
+}, 5000);
+const PORT = process.env.PORT || 4000;
 server.listen(5000, () => {
     console.log(`WebSocket Proxy server running on port 5000`);
 });
