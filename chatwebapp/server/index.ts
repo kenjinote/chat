@@ -12,6 +12,12 @@ import OpusScript from 'opusscript';
 const app = express();
 app.use(cors());
 
+function sanitizeText(str: string, maxLength: number = 1000): string {
+  if (!str) return "";
+  if (typeof str !== 'string') return "";
+  return str.replace(/[\u0300-\u036F\u1AB0-\u1AFF\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]/g, '').substring(0, maxLength);
+}
+
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, '../dist')));
 
@@ -278,7 +284,8 @@ io.on('connection', (socket: Socket) => {
       type: 'join',
       secretId: secretId,
       pub: true,
-      ...data
+      ...data,
+      userName: sanitizeText(data.userName, 50)
     };
     
     if (data.hashRoomName && typeof payload.roomName === 'string') {
@@ -294,7 +301,8 @@ io.on('connection', (socket: Socket) => {
   socket.on('chat', (data: any) => {
     const payload = {
       type: 'chat',
-      ...data
+      ...data,
+      msg: sanitizeText(data.msg, 1000)
     };
     tcpClient.write(JSON.stringify(payload) + '\n');
   });
@@ -310,7 +318,8 @@ io.on('connection', (socket: Socket) => {
   socket.on('rename', (data: any) => {
     const payload = {
       type: 'rename',
-      ...data
+      ...data,
+      userName: sanitizeText(data.userName, 50)
     };
     tcpClient.write(JSON.stringify(payload) + '\n');
   });

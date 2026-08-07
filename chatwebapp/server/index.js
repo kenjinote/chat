@@ -48,6 +48,13 @@ const crypto = __importStar(require("crypto"));
 const opusscript_1 = __importDefault(require("opusscript"));
 const app = (0, express_1.default)();
 app.use((0, cors_1.default)());
+function sanitizeText(str, maxLength = 1000) {
+    if (!str)
+        return "";
+    if (typeof str !== 'string')
+        return "";
+    return str.replace(/[\u0300-\u036F\u1AB0-\u1AFF\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]/g, '').substring(0, maxLength);
+}
 // Serve static frontend files
 app.use(express_1.default.static(path.join(__dirname, '../dist')));
 // Fallback all routes to index.html for React Router (if needed)
@@ -285,7 +292,8 @@ io.on('connection', (socket) => {
             type: 'join',
             secretId: secretId,
             pub: true,
-            ...data
+            ...data,
+            userName: sanitizeText(data.userName, 50)
         };
         if (data.hashRoomName && typeof payload.roomName === 'string') {
             payload.roomName = 'private_' + crypto.createHash('sha256').update(payload.roomName).digest('hex');
@@ -298,7 +306,8 @@ io.on('connection', (socket) => {
     socket.on('chat', (data) => {
         const payload = {
             type: 'chat',
-            ...data
+            ...data,
+            msg: sanitizeText(data.msg, 1000)
         };
         tcpClient.write(JSON.stringify(payload) + '\n');
     });
@@ -312,7 +321,8 @@ io.on('connection', (socket) => {
     socket.on('rename', (data) => {
         const payload = {
             type: 'rename',
-            ...data
+            ...data,
+            userName: sanitizeText(data.userName, 50)
         };
         tcpClient.write(JSON.stringify(payload) + '\n');
     });

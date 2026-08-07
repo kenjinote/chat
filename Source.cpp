@@ -167,6 +167,79 @@ bool ResolveIP(const std::string& host, IN_ADDR& outAddr) {
     return false;
 }
 
+
+struct UrlMatch {
+    size_t start;
+    size_t length;
+    std::wstring url;
+};
+
+std::vector<UrlMatch> FindUrlsInWString(const std::wstring& text) {
+    std::vector<UrlMatch> matches;
+    size_t pos = 0;
+    while (pos < text.length()) {
+        size_t start = text.find(L"http://", pos);
+        size_t start2 = text.find(L"https://", pos);
+        
+        if (start == std::wstring::npos && start2 == std::wstring::npos) break;
+        
+        size_t match_start = start;
+        if (start == std::wstring::npos) match_start = start2;
+        else if (start2 != std::wstring::npos && start2 < start) match_start = start2;
+        
+        size_t end = match_start + (match_start == start2 ? 8 : 7);
+        while (end < text.length()) {
+            wchar_t c = text[end];
+            bool isUrlChar = (isalnum(c) || c == L'_' || c == L'/' || c == L':' || c == L'%' || c == L'#' ||
+                              c == L'$' || c == L'&' || c == L'?' || c == L'(' || c == L')' || c == L'~' ||
+                              c == L'.' || c == L'=' || c == L'+' || c == L'-' || c == L'@');
+            if (!isUrlChar) break;
+            end++;
+        }
+        
+        matches.push_back({match_start, end - match_start, text.substr(match_start, end - match_start)});
+        pos = end;
+    }
+    return matches;
+}
+
+std::string WrapUrlsWithAnchors(const std::string& text) {
+    if (text.find("<a ") != std::string::npos) return text;
+    
+    std::string res;
+    size_t pos = 0;
+    while (pos < text.length()) {
+        size_t start = text.find("http://", pos);
+        size_t start2 = text.find("https://", pos);
+        
+        if (start == std::string::npos && start2 == std::string::npos) {
+            res += text.substr(pos);
+            break;
+        }
+        
+        size_t match_start = start;
+        if (start == std::string::npos) match_start = start2;
+        else if (start2 != std::string::npos && start2 < start) match_start = start2;
+        
+        res += text.substr(pos, match_start - pos);
+        
+        size_t end = match_start + (match_start == start2 ? 8 : 7);
+        while (end < text.length()) {
+            char c = text[end];
+            bool isUrlChar = (isalnum((unsigned char)c) || c == '_' || c == '/' || c == ':' || c == '%' || c == '#' ||
+                              c == '$' || c == '&' || c == '?' || c == '(' || c == ')' || c == '~' ||
+                              c == '.' || c == '=' || c == '+' || c == '-' || c == '@');
+            if (!isUrlChar) break;
+            end++;
+        }
+        
+        std::string url = text.substr(match_start, end - match_start);
+        res += "<a href=\"" + url + "\">" + url + "</a>";
+        pos = end;
+    }
+    return res;
+}
+
 void SetMaintenanceMessage(const std::wstring& msg) {
     g_maintenanceMsg = msg;
     if (g_hMaintenanceText) {
@@ -179,6 +252,34 @@ void SetMaintenanceMessage(const std::wstring& msg) {
 }
 
 #include <sstream>
+
+
+std::wstring SanitizeText(const std::wstring& s) {
+    std::wstring out;
+    out.reserve(s.length());
+    for (size_t i = 0; i < s.length(); ++i) {
+        wchar_t c = s[i];
+        // Combining Diacritical Marks
+        if (c >= 0x0300 && c <= 0x036F) continue;
+        if (c >= 0x1AB0 && c <= 0x1AFF) continue;
+        if (c >= 0x1DC0 && c <= 0x1DFF) continue;
+        if (c >= 0x20D0 && c <= 0x20FF) continue;
+        if (c >= 0xFE20 && c <= 0xFE2F) continue;
+        
+        // Zero-width characters (excluding ZWJ which is needed for emojis)
+        if (c == 0x200B || c == 0x200C || c == 0xFEFF) continue;
+        
+        // Bidi control characters
+        if (c >= 0x202A && c <= 0x202E) continue;
+        if (c >= 0x2066 && c <= 0x2069) continue;
+        
+        // Block other zalgo blocks like 0x0483-0x0489
+        if (c >= 0x0483 && c <= 0x0489) continue;
+        
+        out += c;
+    }
+    return out;
+}
 
 int ParseVersionComponent(std::stringstream& ss) {
     std::string comp;
@@ -297,10 +398,7 @@ void FetchMaintenanceMessageThread(HWND hWnd) {
                 }
                 
                 // Wrap raw URLs with <a href="...">...</a> if they are not already wrapped
-                if (msgUtf8.find("<a ") == std::string::npos) {
-                    std::regex url_regex(R"(https?://[a-zA-Z0-9\-./?=&_@]+)");
-                    msgUtf8 = std::regex_replace(msgUtf8, url_regex, "<a href=\"$&\">$&</a>");
-                }
+                msgUtf8 = WrapUrlsWithAnchors(msgUtf8);
                 
                 int wlen = MultiByteToWideChar(CP_UTF8, 0, msgUtf8.c_str(), -1, NULL, 0);
                 std::wstring* wmsg = new std::wstring(wlen, 0);
@@ -339,10 +437,7 @@ void FetchMaintenanceMessageThread(HWND hWnd) {
             if (msgUtf8.empty()) msgUtf8 = json["en"].string_value();
             
             // Wrap raw URLs with <a href="...">...</a> if they are not already wrapped
-            if (msgUtf8.find("<a ") == std::string::npos) {
-                std::regex url_regex(R"(https?://[a-zA-Z0-9\-./?=&_@]+)");
-                msgUtf8 = std::regex_replace(msgUtf8, url_regex, "<a href=\"$&\">$&</a>");
-            }
+            msgUtf8 = WrapUrlsWithAnchors(msgUtf8);
             
             int wlen = MultiByteToWideChar(CP_UTF8, 0, msgUtf8.c_str(), -1, NULL, 0);
             std::wstring* wmsg = new std::wstring(wlen, 0);
@@ -2371,6 +2466,9 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                         g_pDWriteFactory->CreateTextFormat(
                             g_systemFontName.c_str(), NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
                             9.0f * 1.5f, g_systemLocaleName.c_str(), &g_pLogTextFormat);
+                        if (g_pLogTextFormat) {
+                            g_pLogTextFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_CHARACTER);
+                        }
                     }
                         
                     if (g_pLogTextFormat) {
@@ -2436,17 +2534,13 @@ LRESULT CALLBACK D2DLogProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                             }
                             
                             try {
-                                std::wregex url_regex(L"https?://[\\w/:%#\\$&\\?\\(\\)~\\.=\\+\\-@]+");
-                                auto words_begin = std::wsregex_iterator(fullText.begin(), fullText.end(), url_regex);
-                                auto words_end = std::wsregex_iterator();
-                                
                                 ID2D1SolidColorBrush* pLinkBrush = nullptr;
                                 pRT->CreateSolidColorBrush(D2D1::ColorF(0.0f, 0.0f, 1.0f), &pLinkBrush);
                                 
-                                for (std::wsregex_iterator i = words_begin; i != words_end; ++i) {
-                                    std::wsmatch match = *i;
-                                    DWRITE_TEXT_RANGE urlRange = {(UINT32)match.position(), (UINT32)match.length()};
-                                    entry.urls.push_back({urlRange, match.str()});
+                                auto urls = FindUrlsInWString(fullText);
+                                for (const auto& u : urls) {
+                                    DWRITE_TEXT_RANGE urlRange = {(UINT32)u.start, (UINT32)u.length};
+                                    entry.urls.push_back({urlRange, u.url});
                                     entry.pLayout->SetUnderline(TRUE, urlRange);
                                     if (pLinkBrush) entry.pLayout->SetDrawingEffect(pLinkBrush, urlRange);
                                 }
@@ -2848,6 +2942,10 @@ IDWriteTextLayout* CreateInputLayout(HWND hWnd) {
             g_systemFontName.c_str(), NULL, weight, style, DWRITE_FONT_STRETCH_NORMAL,
             (float)tsize * 1.5f, g_systemLocaleName.c_str(), &g_pInputTextFormat);
             
+        if (g_pInputTextFormat) {
+            g_pInputTextFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_CHARACTER);
+        }
+            
         g_lastInputFontSize = tsize;
         g_lastInputFontB = b;
         g_lastInputFontI = i;
@@ -3048,8 +3146,9 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         g_caretPos = start;
                         g_anchorPos = start;
                     }
-                    if (g_inputText.length() + wcslen(buf) < 1024) {
-                        g_inputText.insert(g_caretPos, buf);
+                    std::wstring pasted = SanitizeText(buf);
+                    if (g_inputText.length() + pasted.length() < 1024) {
+                        g_inputText.insert(g_caretPos, pasted);
                         g_caretPos += (int)wcslen(buf);
                         g_anchorPos = g_caretPos;
                         g_caretVisible = true;
@@ -3228,8 +3327,9 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 g_caretPos = start;
                 g_anchorPos = start;
             }
-            if (g_inputText.length() < 1024) {
-                g_inputText.insert(g_caretPos, 1, (WCHAR)wParam);
+            std::wstring ch = SanitizeText(std::wstring(1, (WCHAR)wParam));
+            if (!ch.empty() && g_inputText.length() < 1024) {
+                g_inputText.insert(g_caretPos, ch);
                 g_caretPos++;
                 g_anchorPos = g_caretPos;
                 g_caretVisible = true;
@@ -5294,22 +5394,22 @@ bool ShowMoveRoomDialog(HWND hParent, std::wstring& outResult, bool& outPrivate)
     return g_moveBoxOK && !g_moveBoxResult.empty();
 }
 
-LPWSTR a2w(LPCSTR lpszText) {
+std::wstring a2w(LPCSTR lpszText) {
+    if (!lpszText) return L"";
     const DWORD dwSize = MultiByteToWideChar(CP_UTF8, 0, lpszText, -1, 0, 0);
-    LPWSTR lpszReturnText = (LPWSTR)GlobalAlloc(0, dwSize * sizeof(WCHAR));
-    if (lpszReturnText) {
-        MultiByteToWideChar(CP_UTF8, 0, lpszText, -1, lpszReturnText, dwSize);
-    }
-    return lpszReturnText;
+    std::wstring wstr(dwSize, 0);
+    MultiByteToWideChar(CP_UTF8, 0, lpszText, -1, &wstr[0], dwSize);
+    if (!wstr.empty() && wstr.back() == L'\0') wstr.pop_back();
+    return wstr;
 }
 
-LPSTR w2a(LPCWSTR lpszText) {
+std::string w2a(LPCWSTR lpszText) {
+    if (!lpszText) return "";
     const DWORD dwSize = WideCharToMultiByte(CP_UTF8, 0, lpszText, -1, 0, 0, 0, 0);
-    LPSTR lpszReturnText = (char*)GlobalAlloc(GPTR, dwSize * sizeof(char));
-    if (lpszReturnText) {
-        WideCharToMultiByte(CP_UTF8, 0, lpszText, -1, lpszReturnText, dwSize, 0, 0);
-    }
-    return lpszReturnText;
+    std::string str(dwSize, 0);
+    WideCharToMultiByte(CP_UTF8, 0, lpszText, -1, &str[0], dwSize, 0, 0);
+    if (!str.empty() && str.back() == '\0') str.pop_back();
+    return str;
 }
 
 std::string HashRoomName(const std::wstring& roomName) {
@@ -5318,9 +5418,9 @@ std::string HashRoomName(const std::wstring& roomName) {
     std::string result = "";
     if (CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)) {
         if (CryptCreateHash(hProv, CALG_SHA_256, 0, 0, &hHash)) {
-            LPSTR utf8Str = w2a(roomName.c_str());
-            if (utf8Str) {
-                if (CryptHashData(hHash, (const BYTE*)utf8Str, (DWORD)strlen(utf8Str), 0)) {
+                        std::string utf8Str = w2a(roomName.c_str());
+            if (!utf8Str.empty()) {
+                if (CryptHashData(hHash, (const BYTE*)utf8Str.c_str(), (DWORD)utf8Str.length(), 0)) {
                     DWORD hashLen = 0;
                     DWORD cbHashLen = sizeof(DWORD);
                     if (CryptGetHashParam(hHash, HP_HASHSIZE, (BYTE*)&hashLen, &cbHashLen, 0)) {
@@ -5334,8 +5434,7 @@ std::string HashRoomName(const std::wstring& roomName) {
                         }
                     }
                 }
-                GlobalFree(utf8Str);
-            }
+                }
             CryptDestroyHash(hHash);
         }
         CryptReleaseContext(hProv, 0);
@@ -5585,8 +5684,8 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 std::string id = json["id"].string_value();
                                 if (id == "room_overflow") {
                                     bool isPrivate = json["isPrivate"].bool_value();
-                                    std::wstring origW = a2w(json["orig"].string_value().c_str());
-                                    std::wstring newW = a2w(json["new"].string_value().c_str());
+                                    std::wstring origW = SanitizeText(a2w(json["orig"].string_value().c_str()));
+                                    std::wstring newW = SanitizeText(a2w(json["new"].string_value().c_str()));
                                     std::wstring msg;
                                     if (isPrivate) {
                                         msg = GetString(IDS_SYSMSG_ROOM_OVERFLOW);
@@ -5612,9 +5711,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             else if (type == "chat") {
                                 MsgData* pData = new MsgData();
                                 std::wstring wuid = a2w(json["userId"].string_value().c_str());
-                                pData->user = a2w(json["userName"].string_value().c_str());
+                                pData->user = SanitizeText(a2w(json["userName"].string_value().c_str()));
                                 pData->wuid = wuid;
-                                pData->msg = a2w(json["msg"].string_value().c_str());
+                                pData->msg = SanitizeText(a2w(json["msg"].string_value().c_str()));
                                 pData->b = json["b"].bool_value();
                                 pData->i = json["i"].bool_value();
                                 pData->u = json["u"].bool_value();
@@ -5806,9 +5905,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                             if (g_isPrivateRoom) {
                                                 finalRoomName = HashRoomName(g_currentRoom);
                                             } else {
-                                                LPSTR roomA_ptr = w2a(g_currentRoom.c_str());
+                                                std::string roomA_ptr = w2a(g_currentRoom.c_str());
                                                 finalRoomName = roomA_ptr;
-                                                GlobalFree(roomA_ptr);
+                                                
                                             }
                                         }
 
@@ -6128,9 +6227,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                         if (g_isPrivateRoom) {
                             finalRoomName = HashRoomName(g_currentRoom);
                         } else {
-                            LPSTR roomA_ptr = w2a(g_currentRoom.c_str());
+                            std::string roomA_ptr = w2a(g_currentRoom.c_str());
                             finalRoomName = roomA_ptr;
-                            GlobalFree(roomA_ptr);
+                            
                         }
 
                         json11::Json joinMsg = json11::Json::object {
@@ -6160,14 +6259,14 @@ void UpdateInputFormat() {
 }
 
 void SendLeaveRequest(const std::wstring& roomName) {
-    LPSTR userA_ptr = w2a(g_username.c_str());
+    std::string userA_ptr = w2a(g_username.c_str());
     std::string finalRoomName;
     if (g_isPrivateRoom) {
         finalRoomName = HashRoomName(roomName);
     } else {
-        LPSTR roomA_ptr = w2a(roomName.c_str());
+        std::string roomA_ptr = w2a(roomName.c_str());
         finalRoomName = roomA_ptr;
-        GlobalFree(roomA_ptr);
+        
     }
     
     json11::Json leaveMsg = json11::Json::object {
@@ -6175,7 +6274,7 @@ void SendLeaveRequest(const std::wstring& roomName) {
         {"userId", std::string(userA_ptr)},
         {"roomName", finalRoomName}
     };
-    GlobalFree(userA_ptr);
+    
     
     std::string leaveStr = leaveMsg.dump() + "\n";
     if (g_tcpSocket != INVALID_SOCKET) {
@@ -6184,14 +6283,14 @@ void SendLeaveRequest(const std::wstring& roomName) {
 }
 
 void SendJoinRequest(const std::wstring& roomName, bool isPrivate = false) {
-    LPSTR userA_ptr = w2a(g_username.c_str());
+    std::string userA_ptr = w2a(g_username.c_str());
     std::string finalRoomName;
     if (isPrivate) {
         finalRoomName = HashRoomName(roomName);
     } else {
-        LPSTR roomA_ptr = w2a(roomName.c_str());
+        std::string roomA_ptr = w2a(roomName.c_str());
         finalRoomName = roomA_ptr;
-        GlobalFree(roomA_ptr);
+        
     }
     
     json11::Json joinMsg = json11::Json::object {
@@ -6222,8 +6321,8 @@ void SendRenameRequest() {
 }
 
 void SendChatMessage(const std::wstring& msg) {
-    LPSTR userA_ptr = w2a(g_username.c_str());
-    LPSTR msgA_ptr = w2a(msg.c_str());
+    std::string userA_ptr = w2a(g_username.c_str());
+    std::string msgA_ptr = w2a(msg.c_str());
     
     bool b = SendMessage(g_hBtnB, BM_GETCHECK, 0, 0) == BST_CHECKED;
     bool i = SendMessage(g_hBtnI, BM_GETCHECK, 0, 0) == BST_CHECKED;
@@ -6269,8 +6368,8 @@ void SendChatMessage(const std::wstring& msg) {
     pData->nameColor = g_nameColor;
     PostMessage(GetParent(g_hInput), WM_USER_MSG, 0, (LPARAM)pData);
     
-    GlobalFree(userA_ptr);
-    GlobalFree(msgA_ptr);
+    
+    
 }
 
 void SnapWindow(HWND hMovingWnd, LPRECT prc);
@@ -7254,12 +7353,11 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                         }
                         SaveIgnoredUsers();
                         SortUserList();
-                        LPSTR utf8Target = w2a(clickedUser.c_str());
+                        std::string utf8Target = w2a(clickedUser.c_str());
                         json11::Json reportMsg = json11::Json::object {
                             {"type", "report"},
                             {"target", utf8Target}
                         };
-                        GlobalFree(utf8Target);
                         std::string msg = reportMsg.dump() + "\n";
                         if (g_tcpSocket != INVALID_SOCKET) {
                             send(g_tcpSocket, msg.c_str(), (int)msg.length(), 0);

@@ -18,6 +18,59 @@
 #include <sstream>
 #include <climits>
 using asio::ip::tcp;
+
+bool isValidText(const std::string& utf8str) {
+    if (utf8str.length() > 4096) return false; // Max message length
+    
+    size_t i = 0;
+    int consecutive_combining = 0;
+    while (i < utf8str.length()) {
+        unsigned char c = utf8str[i];
+        uint32_t codepoint = 0;
+        int bytes = 0;
+        if (c <= 0x7F) {
+            codepoint = c;
+            bytes = 1;
+        } else if ((c & 0xE0) == 0xC0) {
+            if (i + 1 >= utf8str.length()) break;
+            codepoint = ((c & 0x1F) << 6) | (utf8str[i+1] & 0x3F);
+            bytes = 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            if (i + 2 >= utf8str.length()) break;
+            codepoint = ((c & 0x0F) << 12) | ((utf8str[i+1] & 0x3F) << 6) | (utf8str[i+2] & 0x3F);
+            bytes = 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            if (i + 3 >= utf8str.length()) break;
+            codepoint = ((c & 0x07) << 18) | ((utf8str[i+1] & 0x3F) << 12) | ((utf8str[i+2] & 0x3F) << 6) | (utf8str[i+3] & 0x3F);
+            bytes = 4;
+        } else {
+            bytes = 1;
+            i++;
+            continue;
+        }
+        
+        if (codepoint >= 0x13000 && codepoint <= 0x1342F) return false;
+        if (codepoint >= 0x12000 && codepoint <= 0x123FF) return false;
+        if (codepoint >= 0x14400 && codepoint <= 0x1467F) return false;
+        
+        bool is_combining = (codepoint >= 0x0300 && codepoint <= 0x036F) || 
+                            (codepoint >= 0x1AB0 && codepoint <= 0x1AFF) || 
+                            (codepoint >= 0x1DC0 && codepoint <= 0x1DFF) || 
+                            (codepoint >= 0x20D0 && codepoint <= 0x20FF) || 
+                            (codepoint >= 0xFE20 && codepoint <= 0xFE2F);
+                            
+        if (is_combining) {
+            consecutive_combining++;
+            if (consecutive_combining > 3) return false;
+        } else {
+            consecutive_combining = 0;
+        }
+        
+        i += bytes;
+    }
+    return true;
+}
+
 using asio::ip::udp;
 
 #pragma pack(push, 1)
@@ -381,7 +434,7 @@ private:
             }
 
             m_userName = json["userName"].string_value();
-            if (m_userName.empty()) m_userName = m_userId; // fallback
+            if (m_userName.empty() || !isValidText(m_userName)) m_userName = m_userId; // fallback
             m_nclr = json["nclr"].int_value();
             std::string originalRoomName = json["roomName"].string_value();
             if (originalRoomName.empty()) originalRoomName = "Public";
@@ -584,6 +637,8 @@ private:
             
         } else if (type == "chat") {
             if (m_room) {
+                std::string msgText = json["msg"].string_value();
+                if (!isValidText(msgText)) return; // drop spam
                 json11::Json::object chatObj = json.object_items();
                 chatObj["userId"] = m_userId;
                 chatObj["userName"] = m_userName;
@@ -599,7 +654,11 @@ private:
                 m_room->deliver(json11::Json(chatObj).dump() + "\n", shared_from_this());
             }
         } else if (type == "rename") {
-            m_userName = json["userName"].string_value();
+            std::string newName = json["userName"].string_value();
+            if (newName.empty() || !isValidText(newName)) {
+                newName = m_userId; // fallback or ignore? Let's just fallback.
+            }
+            m_userName = newName;
             m_nclr = json["nclr"].int_value();
             if (m_room) {
                 json11::Json renameBroadcast = json11::Json::object {

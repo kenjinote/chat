@@ -309,6 +309,11 @@ const safeColors = [
 const userViolations: Record<string, number> = {};
 const userMessageTimes: Record<string, number[]> = {};
 
+function sanitizeText(str: string, maxLength: number = 1000): string {
+  if (!str) return "";
+  return str.replace(/[\u0300-\u036F\u1AB0-\u1AFF\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]/g, '').substring(0, maxLength);
+}
+
 function filterProfanity(text: string, userId: string, onIgnore: (uid: string) => void): string {
   if (!text) return text;
   
@@ -340,7 +345,7 @@ const App: React.FC = () => {
   // Use lazy initialization so these are only generated once or read from storage
   const [name, setName] = useState(() => {
     const savedName = localStorage.getItem('chat_user_name');
-    if (savedName) return savedName;
+    if (savedName) return sanitizeText(savedName, 50);
     const newName = `User_${Math.floor(Math.random() * 900) + 100}`;
     localStorage.setItem('chat_user_name', newName);
     return newName;
@@ -503,7 +508,7 @@ const App: React.FC = () => {
 
   const connectToRoom = async (targetRoom: string, targetName?: string, targetColor?: number, isPrivate = false) => {
     initAudio();
-    const finalName = targetName || name;
+    const finalName = sanitizeText(targetName || name, 50);
     const finalColor = targetColor !== undefined ? targetColor : nclr;
     
     setIsJoined(false);
@@ -599,27 +604,28 @@ const App: React.FC = () => {
 
     socket.on('room_users', (data: { users: User[] }) => {
       if (data.users) {
-        setUsers(data.users);
+        setUsers(data.users.map(u => ({ ...u, userName: sanitizeText(u.userName, 50) })));
       }
     });
 
     socket.on('users', (data: any) => {
       if (data.users) {
-        setUsers(data.users);
+        setUsers(data.users.map((u: User) => ({ ...u, userName: sanitizeText(u.userName, 50) })));
       }
     });
 
     socket.on('join', (user: User) => {
+      const sanitizedUser = { ...user, userName: sanitizeText(user.userName, 50) };
       setUsers(prev => {
-        if (!prev.find(u => u.userId === user.userId)) {
-          return [...prev, user];
+        if (!prev.find(u => u.userId === sanitizedUser.userId)) {
+          return [...prev, sanitizedUser];
         }
         return prev;
       });
-      if (user.userId !== localUserIdRef.current && featureFlags.showSystemMessages) {
+      if (sanitizedUser.userId !== localUserIdRef.current && featureFlags.showSystemMessages) {
         setMessages(prev => [
           ...prev,
-          { id: crypto.randomUUID(), userId: '', userName: '', msg: t.userEntered(user.userName.split('#')[0], roomId), clr: 0, sz: 9, isSystem: true, systemColor: '#808080' }
+          { id: crypto.randomUUID(), userId: '', userName: '', msg: t.userEntered(sanitizedUser.userName.split('#')[0], roomId), clr: 0, sz: 9, isSystem: true, systemColor: '#808080' }
         ]);
       }
     });
@@ -642,7 +648,7 @@ const App: React.FC = () => {
         const next = [...prev];
         const idx = next.findIndex(u => u.userId === data.userId);
         if (idx !== -1) {
-          next[idx] = { ...next[idx], userName: data.userName, nclr: data.nclr };
+          next[idx] = { ...next[idx], userName: sanitizeText(data.userName, 50), nclr: data.nclr };
         }
         return next;
       });
@@ -683,8 +689,8 @@ const App: React.FC = () => {
       setMessages(prev => [...prev, {
         id: crypto.randomUUID(),
         userId: senderUserId,
-        userName: data.userName || 'System',
-        msg: finalMsg,
+        userName: sanitizeText(data.userName || 'System', 50),
+        msg: sanitizeText(finalMsg, 1000),
         clr: data.clr !== undefined ? data.clr : 0,
         nclr: data.nclr !== undefined ? data.nclr : 0,
         b: data.b,
@@ -902,8 +908,10 @@ const App: React.FC = () => {
     initAudio();
     if (!messageInput.trim() || !socket || !isJoined) return;
     
+    const sanitizedMsg = sanitizeText(messageInput, 1000);
+    
     socket.emit('chat', {
-      msg: messageInput,
+      msg: sanitizedMsg,
       clr: msgColor,
       nclr: toColorRef(nclr),
       b: isBold,
@@ -917,7 +925,7 @@ const App: React.FC = () => {
       id: crypto.randomUUID(),
       userId: localUserIdRef.current || 'self',
       userName: name,
-      msg: messageInput,
+      msg: sanitizedMsg,
       clr: msgColor,
       nclr: nclr,
       b: isBold,
@@ -947,7 +955,7 @@ const App: React.FC = () => {
   const handleChangeNameSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (newNameInput.trim()) {
-      const finalName = newNameInput.trim();
+      const finalName = sanitizeText(newNameInput.trim(), 50);
       setName(finalName);
       setNclr(newColorInput);
       localStorage.setItem('chat_user_name', finalName);
