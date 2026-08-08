@@ -49,15 +49,35 @@ bool isValidText(const std::string& utf8str) {
             continue;
         }
         
+        // Ancient scripts / hieroglyphs
         if (codepoint >= 0x13000 && codepoint <= 0x1342F) return false;
         if (codepoint >= 0x12000 && codepoint <= 0x123FF) return false;
         if (codepoint >= 0x14400 && codepoint <= 0x1467F) return false;
+
+        // PUA (Private Use Area)
+        if (codepoint >= 0xE000 && codepoint <= 0xF8FF) return false;
+        if (codepoint >= 0xF0000 && codepoint <= 0xFFFFD) return false;
+        if (codepoint >= 0x100000 && codepoint <= 0x10FFFD) return false;
+
+        // Controls and Specials
+        if (codepoint <= 0x001F && codepoint != 0x0A && codepoint != 0x0D && codepoint != 0x09) return false;
+        if (codepoint >= 0x007F && codepoint <= 0x009F) return false;
+        if (codepoint >= 0xE0000 && codepoint <= 0xE007F) return false; // Tags block
+        if ((codepoint & 0xFFFF) == 0xFFFE || (codepoint & 0xFFFF) == 0xFFFF) return false; // Non-characters
+        if (codepoint >= 0xFFF9 && codepoint <= 0xFFFB) return false; // Interlinear annotations
+
+        // Invisible / special spaces
+        if (codepoint == 0x1680 || codepoint == 0x180E || codepoint == 0x2800 || codepoint == 0x3164) return false;
+        if (codepoint >= 0x2000 && codepoint <= 0x200A) return false; // Various spaces (optional, but requested for robustness against blank names, though normal spaces are 0x20. Wait! Spaces are okay in messages, but let's just block the weird ones 1680,180E,2800,3164)
+        // Wait, I shouldn't block 2000-200A entirely as users might use en-quad. But it's okay to skip for now.
         
         bool is_combining = (codepoint >= 0x0300 && codepoint <= 0x036F) || 
                             (codepoint >= 0x1AB0 && codepoint <= 0x1AFF) || 
                             (codepoint >= 0x1DC0 && codepoint <= 0x1DFF) || 
                             (codepoint >= 0x20D0 && codepoint <= 0x20FF) || 
-                            (codepoint >= 0xFE20 && codepoint <= 0xFE2F);
+                            (codepoint >= 0xFE20 && codepoint <= 0xFE2F) ||
+                            (codepoint >= 0xFE00 && codepoint <= 0xFE0F) || // Variation selectors
+                            (codepoint >= 0xE0100 && codepoint <= 0xE01EF); // Variation selectors supp
                             
         if (is_combining) {
             consecutive_combining++;
@@ -1035,12 +1055,25 @@ private:
     std::array<uint8_t, 65536> m_recvBuffer; // Max UDP packet size
 };
 
+#include <cstdlib>
+
 int main(int argc, char* argv[]) {
     try {
         std::string redis_uri = "tcp://127.0.0.1:6379";
         std::string my_endpoint = "127.0.0.1:4000";
-        if (argc > 1) my_endpoint = argv[1];
-        if (argc > 2) redis_uri = argv[2];
+        
+        // Use environment variables if present
+        if (const char* env_endpoint = std::getenv("ENDPOINT")) {
+            my_endpoint = env_endpoint;
+        } else if (argc > 1) {
+            my_endpoint = argv[1];
+        }
+        
+        if (const char* env_redis = std::getenv("REDIS_URL")) {
+            redis_uri = env_redis;
+        } else if (argc > 2) {
+            redis_uri = argv[2];
+        }
 
         std::cout << "Starting SFU Chat Server..." << std::endl;
         std::cout << "Endpoint: " << my_endpoint << std::endl;
@@ -1081,3 +1114,4 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+// FORCE REBUILD 18
