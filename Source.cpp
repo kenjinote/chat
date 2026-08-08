@@ -276,6 +276,16 @@ std::wstring SanitizeText(const std::wstring& s) {
         // Block other zalgo blocks like 0x0483-0x0489
         if (c >= 0x0483 && c <= 0x0489) continue;
         
+        // PUA (BMP)
+        if (c >= 0xE000 && c <= 0xF8FF) continue;
+        
+        // Control & Spaces
+        if (c <= 0x001F && c != 0x0A && c != 0x0D && c != 0x09) continue;
+        if (c >= 0x007F && c <= 0x009F) continue;
+        if (c == 0xFFFE || c == 0xFFFF) continue;
+        if (c >= 0xFFF9 && c <= 0xFFFB) continue;
+        if (c == 0x1680 || c == 0x180E || c == 0x2800 || c == 0x3164) continue;
+        
         out += c;
     }
     return out;

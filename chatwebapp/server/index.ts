@@ -68,7 +68,14 @@ udpSocket.on('message', (msg, rinfo) => {
     const payloadType = msg.readUInt8(6);
     const seq = msg.readUInt16LE(4);
     const userIdBuf = msg.subarray(12, 92);
-    const senderUserId = userIdBuf.toString('utf16le').replace(/\0/g, '');
+      let senderUserId = '';
+      if (userIdBuf[1] === 0) {
+        senderUserId = userIdBuf.toString('utf16le');
+      } else {
+        senderUserId = userIdBuf.toString('utf8');
+      }
+      const nullIdx = senderUserId.indexOf('\0');
+      if (nullIdx !== -1) senderUserId = senderUserId.substring(0, nullIdx);
     
     const fragIdx = (payloadType === 2 || payloadType === 5 || payloadType === 4) ? msg.readUInt32LE(8) : 0;
     
@@ -246,9 +253,14 @@ io.on('connection', (socket: Socket) => {
                   header.writeUInt8(255, 6); // HolePunch
                   header.writeUInt8(0, 7);
                   header.writeUInt32LE(0, 8);
+                  
                   const userIdBuf = Buffer.from(socket.data.userId + '\0', 'utf16le');
                   userIdBuf.copy(header, 12, 0, Math.min(userIdBuf.length, 80));
+                  
                   udpSocket.send(header, C_UDP_PORT, currentTcpIp);
+                }
+                if (json.userId) {
+                  socket.data.userId = json.userId;
                 }
               }
               // Forward back to WebSocket

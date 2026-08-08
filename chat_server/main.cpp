@@ -362,7 +362,7 @@ private:
                             };
                             m_room->deliver(leaveMsg.dump() + "\n");
                         }
-                        if (m_room->getUsers().empty() && m_roomName != "Public") {
+                        if (m_room->getUsers().empty()) {
                             ServerManager::get().removeRoom(m_roomName);
                             if (ServerManager::get().getRedis()) {
                                 try {
@@ -406,7 +406,7 @@ private:
                             };
                             m_room->deliver(leaveMsg.dump() + "\n");
                         }
-                        if (m_room->getUsers().empty() && m_roomName != "Public") {
+                        if (m_room->getUsers().empty()) {
                             ServerManager::get().removeRoom(m_roomName);
                             if (ServerManager::get().getRedis()) {
                                 try {
@@ -470,7 +470,7 @@ private:
 
             while (true) {
                 // Room Affinity logic via Redis (All rooms centralized)
-                if (roomName != "Public" && ServerManager::get().getRedis()) {
+                if (ServerManager::get().getRedis()) {
                     auto redis = ServerManager::get().getRedis();
                     try {
                         auto owner = redis->get("room_owner:" + roomName);
@@ -580,7 +580,7 @@ private:
                         deliver(sysMsg.dump() + "\n");
                     }
 
-                    if (created && roomName != "Public") {
+                    if (created) {
                         // Announce removed for bandwidth optimization
                     }
 
@@ -591,7 +591,7 @@ private:
                             {"userId", oldUserId}
                         };
                         m_room->deliver(leaveMsg.dump() + "\n");
-                        if (m_room->getUsers().empty() && m_roomName != "Public") {
+                        if (m_room->getUsers().empty()) {
                             ServerManager::get().removeRoom(m_roomName);
                             if (ServerManager::get().getRedis()) {
                                 try {
@@ -720,7 +720,7 @@ private:
                     m_room->deliver(leaveMsg.dump() + "\n");
                 }
                 
-                if (m_room->getUsers().empty() && m_roomName != "Public") {
+                if (m_room->getUsers().empty()) {
                     ServerManager::get().removeRoom(m_roomName);
                     if (ServerManager::get().getRedis()) {
                         try {
@@ -1115,3 +1115,4 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 // FORCE REBUILD 18
+
