@@ -93,7 +93,8 @@ void LogToFile(const std::string& msg) {
 HWND g_hLog, g_hInput, g_hSendBtn, g_hUserList, g_hUserListHeader;
 HWND g_hBtnB, g_hBtnI, g_hBtnU, g_hComboSize, g_hBtnColor;
 HWND g_hBtnMoveRoom;
-HWND g_hBtnVoice, g_hBtnVideo, g_hVolumeIndicator, g_hSpeakerIcon, g_hVolumeSlider;
+HWND g_hBtnVoice, g_hBtnVoiceDrop, g_hBtnVideo, g_hVolumeIndicator, g_hSpeakerIcon, g_hVolumeSlider;
+int g_selectedAudioDevice = -1; // -1: WAVE_MAPPER, -2: Loopback, >=0: Mic index
 HWND g_hMaintenanceText;
 std::wstring g_maintenanceMsg = L"";
 
@@ -1209,6 +1210,7 @@ std::map<std::wstring, OpusDecoder*> g_opusDecoders;
 
 HWAVEOUT g_hWaveOut = NULL;
 bool g_isVoiceActive = false;
+bool g_isAudioShuttingDown = false;
 bool g_suspectMicDead = false;
 DWORD g_lastVoiceActiveTime = 0;
 
@@ -2025,7 +2027,18 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
 void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2) {
     if (uMsg == WIM_DATA) {
         WAVEHDR* pHdr = (WAVEHDR*)dwParam1;
-        if (pHdr->dwBytesRecorded > 0 && g_isVoiceActive && g_sock != INVALID_SOCKET) {
+        
+        // If the buffer is partial (e.g. waveInReset was called or unplugged) or we are shutting down, DO NOT re-add it.
+        // Calling waveInAddBuffer during reset causes a permanent deadlock in winmm.
+        if (g_isAudioShuttingDown || pHdr->dwBytesRecorded < AUDIO_BUF_SIZE) {
+            if (!g_isAudioShuttingDown) {
+                g_suspectMicDead = true;
+                g_hWaveIn = NULL;
+            }
+            return;
+        }
+
+        if (g_isVoiceActive && g_sock != INVALID_SOCKET) {
             short* samples = (short*)pHdr->lpData;
             int numSamples = (int)(pHdr->dwBytesRecorded / sizeof(short));
             long long sumSquares = 0;
@@ -2039,7 +2052,6 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
                 if (g_currentMicVolume < 0) g_currentMicVolume = 0;
                 
                 // VAD (Voice Activity Detection) Threshold
-                // Base rms scale is 0 to 32768. We consider rms > 150 (approx 0.5%) as active speech.
                 if (rms > 150) {
                     g_lastVoiceActiveTime = GetTickCount();
                 }
@@ -2085,17 +2097,11 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
                 }
             }
         }
+        
         if (g_isVoiceActive) {
-            // If the buffer was aborted (e.g. unplugged), do not re-add it.
-            // Calling waveInAddBuffer on a dead device causes a permanent deadlock in winmm.
-            if (pHdr->dwBytesRecorded < AUDIO_BUF_SIZE) {
+            if (waveInAddBuffer(hwi, pHdr, sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
                 g_suspectMicDead = true;
                 g_hWaveIn = NULL;
-            } else {
-                if (waveInAddBuffer(hwi, pHdr, sizeof(WAVEHDR)) != MMSYSERR_NOERROR) {
-                    g_suspectMicDead = true;
-                    g_hWaveIn = NULL;
-                }
             }
         }
     }
@@ -2138,7 +2144,227 @@ void InitVolumeSync(HWND hWnd) {
     }
 }
 
+
+std::thread* g_pAudioLoopbackThread = nullptr;
+bool g_runAudioLoopback = false;
+
+void AudioLoopbackThreadFunc() {
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+    
+    IMMDeviceEnumerator* pEnumerator = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+    if (SUCCEEDED(hr)) {
+        IMMDevice* pDevice = nullptr;
+        hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
+        if (SUCCEEDED(hr)) {
+            IAudioClient* pAudioClient = nullptr;
+            hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&pAudioClient);
+            if (SUCCEEDED(hr)) {
+                WAVEFORMATEX* pwfx = nullptr;
+                pAudioClient->GetMixFormat(&pwfx);
+                
+                hr = pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 10000000, 0, pwfx, NULL);
+                if (SUCCEEDED(hr)) {
+                    IAudioCaptureClient* pCaptureClient = nullptr;
+                    hr = pAudioClient->GetService(__uuidof(IAudioCaptureClient), (void**)&pCaptureClient);
+                    if (SUCCEEDED(hr)) {
+                        pAudioClient->Start();
+                        
+                        bool isFloat = false;
+                        if (pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) isFloat = true;
+                        else if (pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
+                            WAVEFORMATEXTENSIBLE* pEx = (WAVEFORMATEXTENSIBLE*)pwfx;
+                            if (IsEqualGUID(pEx->SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) isFloat = true;
+                        }
+                        
+                        float ratio = pwfx->nSamplesPerSec / 16000.0f;
+                        int inChannels = pwfx->nChannels;
+                        
+                        short resampleBuf[320];
+                        int resampleCount = 0;
+                        float phase = 0.0f;
+                        
+                        UINT32 packetLength = 0;
+                        while (g_runAudioLoopback && g_sock != INVALID_SOCKET) {
+                            Sleep(10);
+                            hr = pCaptureClient->GetNextPacketSize(&packetLength);
+                            while (packetLength != 0 && g_runAudioLoopback) {
+                                BYTE* pData;
+                                UINT32 numFramesAvailable;
+                                DWORD flags;
+                                hr = pCaptureClient->GetBuffer(&pData, &numFramesAvailable, &flags, NULL, NULL);
+                                if (SUCCEEDED(hr)) {
+                                    if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
+                                        // Write zeroes for silent buffers to maintain time sync
+                                        for (UINT32 i = 0; i < numFramesAvailable; i++) {
+                                            phase += 1.0f;
+                                            if (phase >= ratio) {
+                                                phase -= ratio;
+                                                resampleBuf[resampleCount++] = 0;
+                                                
+                                                if (resampleCount >= 320) {
+                                                    // Compute volume
+                                                    g_currentMicVolume = 0;
+                                                    InvalidateRect(g_hVolumeIndicator, NULL, FALSE);
+                                                    
+                                                    if (GetTickCount() - g_lastVoiceActiveTime <= 500) {
+                                                        if (g_opusEncoder) {
+                                                            char udpPkt[2048];
+                                                            MediaHeader* mhdr = (MediaHeader*)udpPkt;
+                                                            mhdr->sessionId = g_sessionId;
+                                                            mhdr->seqNum = 0;
+                                                            mhdr->payloadType = 1;
+                                                            mhdr->flags = 0;
+                                                            mhdr->timestamp = GetTickCount();
+                                                            wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
+                                                            
+                                                            unsigned char* payloadData = (unsigned char*)(udpPkt + sizeof(MediaHeader));
+                                                            int opusBytes = opus_encode(g_opusEncoder, resampleBuf, 320, payloadData, sizeof(udpPkt) - sizeof(MediaHeader));
+                                                            if (opusBytes > 0) {
+                                                                sockaddr_in serverUdp = {0};
+                                                                serverUdp.sin_family = AF_INET;
+                                                                serverUdp.sin_port = htons(4001);
+                                                                if (!g_isServerUdpAddrResolved) {
+                                                                    g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                                                                }
+                                                                serverUdp.sin_addr = g_serverUdpAddr;
+                                                                
+                                                                sendto(g_sock, udpPkt, sizeof(MediaHeader) + opusBytes, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                                                            }
+                                                        }
+                                                    }
+                                                    resampleCount = 0;
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        float* fSamples = (float*)pData;
+                                        short* sSamples = (short*)pData;
+                                        
+                                        for (UINT32 i = 0; i < numFramesAvailable; i++) {
+                                            phase += 1.0f;
+                                            if (phase >= ratio) {
+                                                phase -= ratio;
+                                                
+                                                float sum = 0.0f;
+                                                if (isFloat) {
+                                                    for (int c = 0; c < inChannels; c++) sum += fSamples[i * inChannels + c];
+                                                } else {
+                                                    for (int c = 0; c < inChannels; c++) sum += (sSamples[i * inChannels + c] / 32768.0f);
+                                                }
+                                                sum /= inChannels;
+                                                
+                                                if (sum > 1.0f) sum = 1.0f;
+                                                if (sum < -1.0f) sum = -1.0f;
+                                                resampleBuf[resampleCount++] = (short)(sum * 32767.0f);
+                                                
+                                                if (resampleCount >= 320) {
+                                                    // Compute volume
+                                                    long long sumSquares = 0;
+                                                    for (int s = 0; s < 320; s++) {
+                                                        sumSquares += resampleBuf[s] * resampleBuf[s];
+                                                    }
+                                                    int rms = (int)sqrt(sumSquares / 320);
+                                                    g_currentMicVolume = (rms * 100) / 32768;
+                                                    if (g_currentMicVolume > 100) g_currentMicVolume = 100;
+                                                    if (g_currentMicVolume < 0) g_currentMicVolume = 0;
+                                                    
+                                                    if (rms > 150) g_lastVoiceActiveTime = GetTickCount();
+                                                    
+                                                    g_currentMicVolume *= 3;
+                                                    if (g_currentMicVolume > 100) g_currentMicVolume = 100;
+                                                    InvalidateRect(g_hVolumeIndicator, NULL, FALSE);
+                                                    
+                                                    if (GetTickCount() - g_lastVoiceActiveTime <= 500) {
+                                                        if (g_opusEncoder) {
+                                                            char udpPkt[2048];
+                                                            MediaHeader* mhdr = (MediaHeader*)udpPkt;
+                                                            mhdr->sessionId = g_sessionId;
+                                                            mhdr->seqNum = 0;
+                                                            mhdr->payloadType = 1;
+                                                            mhdr->flags = 0;
+                                                            mhdr->timestamp = GetTickCount();
+                                                            wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
+                                                            
+                                                            unsigned char* payloadData = (unsigned char*)(udpPkt + sizeof(MediaHeader));
+                                                            int opusBytes = opus_encode(g_opusEncoder, resampleBuf, 320, payloadData, sizeof(udpPkt) - sizeof(MediaHeader));
+                                                            if (opusBytes > 0) {
+                                                                sockaddr_in serverUdp = {0};
+                                                                serverUdp.sin_family = AF_INET;
+                                                                serverUdp.sin_port = htons(4001);
+                                                                if (!g_isServerUdpAddrResolved) g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                                                                serverUdp.sin_addr = g_serverUdpAddr;
+                                                                sendto(g_sock, udpPkt, sizeof(MediaHeader) + opusBytes, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                                                            }
+                                                        }
+                                                    }
+                                                    resampleCount = 0;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    pCaptureClient->ReleaseBuffer(numFramesAvailable);
+                                }
+                                pCaptureClient->GetNextPacketSize(&packetLength);
+                            }
+                        }
+                        pAudioClient->Stop();
+                        pCaptureClient->Release();
+                    }
+                }
+                CoTaskMemFree(pwfx);
+                pAudioClient->Release();
+            }
+            pDevice->Release();
+        }
+        pEnumerator->Release();
+    }
+    CoUninitialize();
+}
+
+bool StartWASAPICapture() {
+    g_runAudioLoopback = true;
+    g_pAudioLoopbackThread = new std::thread(AudioLoopbackThreadFunc);
+    return true;
+}
+
+void StopWASAPICapture() {
+    g_runAudioLoopback = false;
+    if (g_pAudioLoopbackThread) {
+        if (g_pAudioLoopbackThread->joinable()) g_pAudioLoopbackThread->join();
+        delete g_pAudioLoopbackThread;
+        g_pAudioLoopbackThread = nullptr;
+    }
+}
+
+
+
+bool InitWinMMCapture();
+void StopWinMMCapture();
+
 bool InitAudioIn() {
+    if (!g_opusEncoder) {
+        int err;
+        g_opusEncoder = opus_encoder_create(16000, 1, OPUS_APPLICATION_VOIP, &err);
+        if (g_opusEncoder) {
+            opus_encoder_ctl(g_opusEncoder, OPUS_SET_BITRATE(32000));
+        }
+    }
+    
+    if (g_selectedAudioDevice == -2) {
+        return StartWASAPICapture();
+    } else {
+        return InitWinMMCapture();
+    }
+}
+
+void CleanupAudioIn() {
+    StopWASAPICapture();
+    StopWinMMCapture();
+}
+
+
+bool InitWinMMCapture() {
     if (g_hWaveIn) return true;
 
     WAVEFORMATEX wfx = {0};
@@ -2157,7 +2383,11 @@ bool InitAudioIn() {
         }
     }
 
-    if (waveInOpen(&g_hWaveIn, WAVE_MAPPER, &wfx, (DWORD_PTR)waveInProc, 0, CALLBACK_FUNCTION) != MMSYSERR_NOERROR) {
+    UINT deviceId = WAVE_MAPPER;
+    if (g_selectedAudioDevice >= 0) {
+        deviceId = (UINT)g_selectedAudioDevice;
+    }
+    if (waveInOpen(&g_hWaveIn, deviceId, &wfx, (DWORD_PTR)waveInProc, 0, CALLBACK_FUNCTION) != MMSYSERR_NOERROR) {
         g_hWaveIn = NULL;
         return false;
     }
@@ -2172,7 +2402,7 @@ bool InitAudioIn() {
     return true;
 }
 
-void CleanupAudioIn() {
+void StopWinMMCapture() {
     if (g_hWaveIn) {
         MMTIME mmt;
         mmt.wType = TIME_BYTES;
@@ -2183,16 +2413,17 @@ void CleanupAudioIn() {
             // Avoid winmm deadlock on disconnected devices
             g_hWaveIn = NULL;
             g_suspectMicDead = false;
-            return;
+        } else {
+            g_isAudioShuttingDown = true;
+            waveInStop(g_hWaveIn);
+            waveInReset(g_hWaveIn);
+            for (int i = 0; i < AUDIO_BUF_COUNT; i++) {
+                waveInUnprepareHeader(g_hWaveIn, &g_waveInHdr[i], sizeof(WAVEHDR));
+            }
+            waveInClose(g_hWaveIn);
+            g_hWaveIn = NULL;
+            g_isAudioShuttingDown = false;
         }
-
-        waveInStop(g_hWaveIn);
-        waveInReset(g_hWaveIn);
-        for (int i = 0; i < AUDIO_BUF_COUNT; i++) {
-            waveInUnprepareHeader(g_hWaveIn, &g_waveInHdr[i], sizeof(WAVEHDR));
-        }
-        waveInClose(g_hWaveIn);
-        g_hWaveIn = NULL;
     }
     
     if (g_opusEncoder) {
@@ -7904,6 +8135,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         g_hBtnVoice = CreateWindow(L"BUTTON", GetString(IDS_TALK).c_str(), 
             WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
             0, 0, 0, 0, hWnd, (HMENU)1009, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+        
+        g_hBtnVoiceDrop = CreateWindow(L"BUTTON", L"", 
+            WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
+            0, 0, 0, 0, hWnd, (HMENU)1011, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 
         g_hVolumeIndicator = CreateWindow(L"STATIC", L"", 
             WS_CHILD | SS_OWNERDRAW,
@@ -8071,7 +8306,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             {
                 Gdiplus::Graphics graphics(hdc);
                 graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-                int cx = rc.left + Scale(14);
+                int cx = rc.left + Scale(12);
                 int cy = rc.top + (rc.bottom - rc.top) / 2 - Scale(2);
 
                 Gdiplus::SolidBrush micBrush(Gdiplus::Color(255, 0, 0, 0));
@@ -8091,9 +8326,47 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             std::wstring talkStr = GetString(IDS_TALK);
             LPCWSTR text = talkStr.c_str();
             RECT rcText = rc;
-            rcText.left += Scale(28);
+            rcText.left += Scale(24);
             DrawTextW(hdc, text, -1, &rcText, DT_SINGLELINE | DT_LEFT | DT_VCENTER);
             SelectObject(hdc, hOldFont);
+
+            BitBlt(hdcPaint, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, hdc, 0, 0, SRCCOPY);
+            SelectObject(hdc, hOldBmp);
+            DeleteObject(hBmp);
+            DeleteDC(hdc);
+
+            return TRUE;
+        }
+        else if (lpdis->CtlID == 1011) {
+            HDC hdcPaint = lpdis->hDC;
+            RECT rc = lpdis->rcItem;
+            
+            HDC hdc = CreateCompatibleDC(hdcPaint);
+            HBITMAP hBmp = CreateCompatibleBitmap(hdcPaint, rc.right - rc.left, rc.bottom - rc.top);
+            HBITMAP hOldBmp = (HBITMAP)SelectObject(hdc, hBmp);
+
+            HBRUSH hFaceBrush = CreateSolidBrush(RGB(192, 192, 192));
+            FillRect(hdc, &rc, hFaceBrush);
+            DeleteObject(hFaceBrush);
+            UINT edge = (lpdis->itemState & ODS_SELECTED) ? EDGE_SUNKEN : EDGE_RAISED;
+            DrawScaledButtonBorder(hdc, rc, edge);
+            
+            // 矢印（▼）の描画
+            int cx = rc.left + (rc.right - rc.left) / 2;
+            int cy = rc.top + (rc.bottom - rc.top) / 2;
+            POINT pts[3];
+            pts[0].x = cx - Scale(3); pts[0].y = cy - Scale(1);
+            pts[1].x = cx + Scale(3); pts[1].y = cy - Scale(1);
+            pts[2].x = cx;            pts[2].y = cy + Scale(2);
+            HBRUSH hBlackBrush = CreateSolidBrush(RGB(0, 0, 0));
+            HPEN hBlackPen = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
+            HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBlackBrush);
+            HPEN hOldPen = (HPEN)SelectObject(hdc, hBlackPen);
+            Polygon(hdc, pts, 3);
+            SelectObject(hdc, hOldBrush);
+            SelectObject(hdc, hOldPen);
+            DeleteObject(hBlackBrush);
+            DeleteObject(hBlackPen);
 
             BitBlt(hdcPaint, rc.left, rc.top, rc.right - rc.left, rc.bottom - rc.top, hdc, 0, 0, SRCCOPY);
             SelectObject(hdc, hOldBmp);
@@ -8177,7 +8450,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             DeleteObject(hFaceBrush);
             
             if (g_isVoiceActive) {
-                if (!g_hWaveIn) {
+                if (!g_hWaveIn && !g_runAudioLoopback) {
                     SetBkMode(hdc, TRANSPARENT);
                     SetTextColor(hdc, RGB(255, 0, 0));
                     HFONT hOldFont = (HFONT)SelectObject(hdc, g_hFont);
@@ -8629,8 +8902,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         hdwp = DeferWindowPos(hdwp, g_hBtnColor, NULL, currentX, toolY, Scale(32), toolHeight, SWP_NOZORDER);
         currentX += Scale(32) + gap;
 
-        hdwp = DeferWindowPos(hdwp, g_hBtnVoice, NULL, currentX, toolY, Scale(70), toolHeight, SWP_NOZORDER);
-        currentX += Scale(70) + gap;
+        hdwp = DeferWindowPos(hdwp, g_hBtnVoice, NULL, currentX, toolY, Scale(55), toolHeight, SWP_NOZORDER);
+        currentX += Scale(55); // No gap
+        
+        hdwp = DeferWindowPos(hdwp, g_hBtnVoiceDrop, NULL, currentX, toolY, Scale(15), toolHeight, SWP_NOZORDER);
+        currentX += Scale(15) + gap;
 
         hdwp = DeferWindowPos(hdwp, g_hVolumeIndicator, NULL, currentX, toolY, Scale(70), toolHeight, SWP_NOZORDER);
         currentX += Scale(70) + gap;
@@ -8757,7 +9033,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             if (!g_isVoiceActive) {
                 g_isVoiceActive = true;
                 if (InitAudioIn()) {
-                    waveInStart(g_hWaveIn);
+                    if (g_selectedAudioDevice != -2) {
+                        waveInStart(g_hWaveIn);
+                    }
                 }
                 ShowWindow(g_hVolumeIndicator, SW_SHOW);
             } else {
@@ -8779,8 +9057,48 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 }
             }
         }
-        else if (id == 1010 && code == BN_CLICKED) {
-            // Video toggle (TODO)
+        else if (id == 1011 && code == BN_CLICKED) {
+            HMENU hMenu = CreatePopupMenu();
+            AppendMenu(hMenu, MF_STRING, 1999, L"既定のマイク");
+            AppendMenu(hMenu, MF_STRING, 2000, L"PC音源（ループバック）");
+            AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
+            
+            int numDevs = waveInGetNumDevs();
+            for (int i = 0; i < numDevs; i++) {
+                WAVEINCAPS wic;
+                if (waveInGetDevCaps(i, &wic, sizeof(wic)) == MMSYSERR_NOERROR) {
+                    AppendMenu(hMenu, MF_STRING, 2001 + i, wic.szPname);
+                }
+            }
+            
+            if (g_selectedAudioDevice == -1) {
+                CheckMenuItem(hMenu, 1999, MF_BYCOMMAND | MF_CHECKED);
+            } else if (g_selectedAudioDevice == -2) {
+                CheckMenuItem(hMenu, 2000, MF_BYCOMMAND | MF_CHECKED);
+            } else if (g_selectedAudioDevice >= 0) {
+                CheckMenuItem(hMenu, 2001 + g_selectedAudioDevice, MF_BYCOMMAND | MF_CHECKED);
+            }
+            
+            ApplyThemeToMenu(hMenu);
+            
+            RECT rc;
+            GetWindowRect(g_hBtnVoiceDrop, &rc);
+            TrackPopupMenu3D(hMenu, TPM_LEFTALIGN | TPM_TOPALIGN, rc.left, rc.bottom, 0, hWnd, NULL);
+            DestroyMenu(hMenu);
+        }
+        else if (id >= 1999 && id < 2100) {
+            if (id == 1999) g_selectedAudioDevice = -1;
+            else if (id == 2000) g_selectedAudioDevice = -2;
+            else g_selectedAudioDevice = id - 2001;
+            
+            if (g_isVoiceActive) {
+                CleanupAudioIn();
+                if (InitAudioIn()) {
+                    if (g_selectedAudioDevice != -2) {
+                        waveInStart(g_hWaveIn);
+                    }
+                }
+            }
         }
         else if (id == 1008 && code == BN_CLICKED) {
             std::wstring newRoom;
