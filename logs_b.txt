@@ -1,0 +1,7 @@
+Starting SFU Chat Server...
+Endpoint: chat-sfu-b-2026.japaneast.azurecontainer.io:4000
+Redis: tcp://your-redis-host.example.com:6379
+TCP Signaling: Port 4000
+UDP Media: Port 4001
+Redis error in doTimer: failed to connect to Redis (your-redis-host.example.com:6379): Connection timed out, err: 1, errno: 110
+

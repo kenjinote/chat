@@ -232,6 +232,7 @@ const featureFlags = {
   enableAudio: urlParams.get('enableAudio') !== '0' && urlParams.get('enableAudio') !== 'false',
   enableVideo: urlParams.get('enableVideo') !== '0' && urlParams.get('enableVideo') !== 'false',
   showFrame: urlParams.get('showFrame') !== '0' && urlParams.get('showFrame') !== 'false',
+  isPrivate: urlParams.get('private') === '1' || urlParams.get('private') === 'true',
 };
 
 // Update document language dynamically
@@ -512,6 +513,7 @@ const App: React.FC = () => {
     const finalColor = targetColor !== undefined ? targetColor : nclr;
     
     setIsJoined(false);
+    setIsPrivateRoom(isPrivate);
 
     if (socket) {
       socket.emit('leave', { userId: localUserIdRef.current });
@@ -546,7 +548,7 @@ const App: React.FC = () => {
 
   // Initialize and Auto-Join on mount
   useEffect(() => {
-    connectToRoom(featureFlags.room);
+    connectToRoom(featureFlags.room, undefined, undefined, featureFlags.isPrivate);
     chatInputRef.current?.focus();
     // We intentionally only run this on mount, so no dependencies
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -556,6 +558,7 @@ const App: React.FC = () => {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     params.set('room', roomId);
+    params.set('private', isPrivateRoom ? '1' : '0');
     params.set('showUsers', featureFlags.showUsers ? '1' : '0');
     params.set('showMoveRoom', featureFlags.showMoveRoom ? '1' : '0');
     params.set('showSystemMessages', featureFlags.showSystemMessages ? '1' : '0');
@@ -568,7 +571,7 @@ const App: React.FC = () => {
     
     const newUrl = `${window.location.pathname}?${params.toString()}`;
     window.history.replaceState(null, '', newUrl);
-  }, [roomId]);
+  }, [roomId, isPrivateRoom]);
 
   // Setup Socket Events
   useEffect(() => {
@@ -605,7 +608,6 @@ const App: React.FC = () => {
       if (data.userId) {
         setLocalUserId(data.userId);
         localUserIdRef.current = data.userId;
-        setIsPrivateRoom(data.pub === false);
         socket.emit('get_users');
         
         setIsJoined(true);
