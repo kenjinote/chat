@@ -110,6 +110,7 @@ COLORREF g_nameColor = 0xFFFFFFFF;
 std::map<std::wstring, COLORREF> g_userColors;
 std::map<std::wstring, std::wstring> g_userNames;
 bool g_isNameChanging = false;
+void SendRenameRequest();
 class CAudioSessionEvents : public IAudioSessionEvents {
     LONG _cRef;
 public:
@@ -1068,6 +1069,7 @@ std::wstring FilterProfanity(std::wstring text, const std::wstring& username) {
             }
             if (needsSave) {
                 SaveIgnoredUsers();
+                SortUserList();
                 if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
             }
             return L"";
@@ -1096,6 +1098,7 @@ std::wstring FilterProfanity(std::wstring text, const std::wstring& username) {
             }
             if (needsSave) {
                 SaveIgnoredUsers();
+                SortUserList();
                 if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
             }
         }
@@ -4681,6 +4684,7 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
                 if (g_hLog) InvalidateRect(g_hLog, NULL, FALSE);
                 if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
                 SaveSettings();
+                SendRenameRequest();
             }
         }
         return 0;
@@ -5499,6 +5503,7 @@ void AppendLog(const MsgData& data) {
         }
         if (needsSave) {
             SaveIgnoredUsers();
+            SortUserList();
             if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
             return;
         }

@@ -20,6 +20,13 @@ body {
   box-sizing: border-box;
 }
 
+button {
+  color: #000000 !important;
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-text-fill-color: #000000;
+}
+
 /* Win95 Window */
 .window {
   background-color: #c0c0c0;
@@ -176,6 +183,7 @@ body {
   font-size: 12px;
   font-weight: bold;
   cursor: pointer;
+  color: #000000 !important;
   min-width: 24px;
   text-align: center;
 }
@@ -238,6 +246,7 @@ body {
   font-family: 'MS Sans Serif', Tahoma, sans-serif;
   font-size: 12px;
   cursor: pointer;
+  color: #000000 !important;
 }
 .send-btn:active {
   border-left: 2px solid #000000;
@@ -314,6 +323,7 @@ body {
   align-items: center;
   gap: 4px;
   cursor: pointer;
+  color: #000000 !important;
 }
 .move-room-btn:active {
   border-left: 2px solid #000000;

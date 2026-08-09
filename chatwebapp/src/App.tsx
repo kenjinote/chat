@@ -581,6 +581,26 @@ const App: React.FC = () => {
       socket.disconnect();
     });
 
+    socket.on('disconnect', (reason) => {
+      let msg = '';
+      if (reason === 'ping timeout') {
+        msg = '一定時間通信がなかったため、サーバーから切断されました。';
+      } else if (reason === 'transport close') {
+        msg = '通信が途切れたため、サーバーから切断されました。';
+      } else if (reason === 'io server disconnect') {
+        msg = 'サーバーによって強制的に切断されました。（サーバー再起動などの可能性があります）';
+      } else {
+        msg = '予期せぬエラーにより、サーバーから切断されました。';
+      }
+      
+      if (featureFlags.showSystemMessages) {
+        setMessages(prev => [
+          ...prev,
+          { id: crypto.randomUUID(), userId: '', userName: '', msg, clr: 0, sz: 9, isSystem: true, systemColor: '#ff0000' }
+        ]);
+      }
+    });
+
     socket.on('welcome', (data: any) => {
       if (data.userId) {
         setLocalUserId(data.userId);
