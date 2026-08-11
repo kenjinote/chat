@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
@@ -584,7 +585,7 @@ var inputText by remember { mutableStateOf("") }
                     Box(modifier = Modifier.size(16.dp).background(selectedColor).border(1.dp, Win95Black))
                 }
                 
-                Spacer(modifier = Modifier.width(16.dp))
+                
                 
                 val micVolume by viewModel.micVolume.collectAsState()
                 
@@ -596,7 +597,10 @@ var inputText by remember { mutableStateOf("") }
                     modifier = Modifier.padding(end=8.dp).fillMaxHeight(),
                     checked = isTalkOn
                 ) { 
-                    Text("話す", style = win95TextStyle, modifier = Modifier.padding(horizontal = 8.dp)) 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(painter = painterResource(id = R.drawable.ic_mic), contentDescription = "Mic", modifier = Modifier.size(32.dp), tint = Color.Black)
+                        Text("話す", style = win95TextStyle)
+                    } 
                 }
                 
                 MicVolumeIndicator(volume = micVolume, modifier = Modifier.width(100.dp).height(20.dp).padding(end=8.dp))
