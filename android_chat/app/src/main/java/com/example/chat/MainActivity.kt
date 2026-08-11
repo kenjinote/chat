@@ -379,24 +379,7 @@ var inputText by remember { mutableStateOf("") }
                 Win95Panel(modifier = Modifier.weight(7f).fillMaxHeight(), backgroundColor = Color.White) {
                     LazyColumn(modifier = Modifier.fillMaxSize().background(Color.White).padding(0.5.dp)) {
                         items(messages) { msg ->
-                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                                if (msg.type != "system" && msg.type != "sysmsg") {
-                                    val uName = msg.userName ?: "Unknown"
-                                    val displayUser = if (uName.contains("#")) uName.substringBefore("#") else uName
-                                    val nclr = msg.nclr ?: -1
-                                    val userColor = if (nclr != -1L) {
-                                        val b = ((nclr shr 16) and 0xFF).toInt()
-                                        val g = ((nclr shr 8) and 0xFF).toInt()
-                                        val r = (nclr and 0xFF).toInt()
-                                        Color(r, g, b, 255)
-                                    } else Win95Black
-                                    
-                                    Text(text = "${displayUser}: ", fontWeight = FontWeight.Bold, color = userColor, style = win95TextStyle)
-                                }
-                                
-                                val contentToDisplay = msg.msg ?: msg.content ?: ""
-                                val annotatedStr = TextProcessor.formatMessage(contentToDisplay)
-                                
+                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                                 val msgColor = if (msg.type == "system" || msg.type == "sysmsg") Win95DarkGray else {
                                     val c = msg.clr ?: 0
                                     if (c != 0) {
@@ -411,16 +394,37 @@ var inputText by remember { mutableStateOf("") }
                                 val msgFontWeight = if (msg.b == true) FontWeight.Bold else FontWeight.Normal
                                 val msgFontStyle = if (msg.i == true) FontStyle.Italic else FontStyle.Normal
                                 
+                                val builder = androidx.compose.ui.text.AnnotatedString.Builder()
+                                if (msg.type != "system" && msg.type != "sysmsg") {
+                                    val uName = msg.userName ?: "Unknown"
+                                    val displayUser = if (uName.contains("#")) uName.substringBefore("#") else uName
+                                    val nclr = msg.nclr ?: -1
+                                    val userColor = if (nclr != -1L) {
+                                        val b = ((nclr shr 16) and 0xFF).toInt()
+                                        val g = ((nclr shr 8) and 0xFF).toInt()
+                                        val r = (nclr and 0xFF).toInt()
+                                        Color(r, g, b, 255)
+                                    } else Win95Black
+                                    
+                                    builder.withStyle(androidx.compose.ui.text.SpanStyle(color = userColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)) {
+                                        append("${displayUser}:")
+                                    }
+                                }
+                                
+                                val contentToDisplay = msg.msg ?: msg.content ?: ""
+                                val annotatedStr = TextProcessor.formatMessage(contentToDisplay)
+                                
+                                builder.withStyle(androidx.compose.ui.text.SpanStyle(color = msgColor, fontSize = msgFontSize, fontWeight = msgFontWeight, fontStyle = msgFontStyle)) {
+                                    append(annotatedStr)
+                                }
+                                
+                                val finalStr = builder.toAnnotatedString()
+                                
                                 ClickableText(
-                                    text = annotatedStr,
-                                    style = win95TextStyle.copy(
-                                        color = msgColor,
-                                        fontSize = msgFontSize,
-                                        fontWeight = msgFontWeight,
-                                        fontStyle = msgFontStyle
-                                    ),
+                                    text = finalStr,
+                                    style = win95TextStyle,
                                     onClick = { offset ->
-                                        annotatedStr.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                        finalStr.getStringAnnotations(tag = "URL", start = offset, end = offset)
                                             .firstOrNull()?.let { annotation -> uriHandler.openUri(annotation.item) }
                                     }
                                 )
