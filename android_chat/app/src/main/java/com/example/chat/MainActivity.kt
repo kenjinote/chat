@@ -56,10 +56,10 @@ val win95TextStyle = TextStyle(
 )
 
 @Composable
-fun Win95Panel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun Win95Panel(modifier: Modifier = Modifier, backgroundColor: Color = Win95Gray, content: @Composable () -> Unit) {
     Box(
         modifier = modifier
-            .background(Win95Gray)
+            .background(backgroundColor)
             .drawBehind {
                 val bw = 2.dp.toPx()
                 drawRect(Win95DarkGray, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
@@ -304,13 +304,16 @@ fun MoveRoomDialog(viewModel: ChatViewModel, onDismiss: () -> Unit, onConfirm: (
 }
 @Composable
 fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
+    LaunchedEffect(Unit) {
+        viewModel.connect("chat-lb-2026.japaneast.cloudapp.azure.com")
+    }
     val connectionState by viewModel.connectionState.collectAsState()
     val messages by viewModel.messages.collectAsState()
     val watchingUserId by viewModel.watchingUserId.collectAsState()
     val uriHandler = LocalUriHandler.current
 
     var inputText by remember { mutableStateOf("") }
-    var isVideoOn by remember { mutableStateOf(true) }
+    var isVideoOn by remember { mutableStateOf(false) }
     var isTalkOn by remember { mutableStateOf(false) }
     var volumeLevel by remember { mutableStateOf(50f) }
     var showMoveRoomDialog by remember { mutableStateOf(false) }
@@ -346,7 +349,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
         )
     }
 
-    Win95Panel(modifier = Modifier.fillMaxSize().padding(4.dp)) {
+    Box(modifier = Modifier.fillMaxSize().background(Win95Gray)) {
         if (watchingUserId != null) {
             Win95VideoWindow(
                 title = "Video - ",
@@ -354,12 +357,12 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                 videoEngine = viewModel.getVideoEngine()
             )
         }
-        Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+        Column(modifier = Modifier.fillMaxSize()) {
             // Main Chat Area
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // Left: Chat Messages
-                Win95Panel(modifier = Modifier.weight(7f).fillMaxHeight()) {
-                    LazyColumn(modifier = Modifier.fillMaxSize().padding(0.5.dp)) {
+                Win95Panel(modifier = Modifier.weight(7f).fillMaxHeight(), backgroundColor = Color.White) {
+                    LazyColumn(modifier = Modifier.fillMaxSize().background(Color.White).padding(0.5.dp)) {
                         items(messages) { msg ->
                             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                                 if (msg.type != "system" && msg.type != "sysmsg") {
@@ -422,9 +425,9 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                     
                     var menuExpandedUserId by remember { mutableStateOf<String?>(null) }
                     
-                    Win95Panel(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        LazyColumn(modifier = Modifier.fillMaxSize().padding(4.dp)) {
-                            items(users) { user ->
+                    Win95Panel(modifier = Modifier.weight(1f).fillMaxWidth(), backgroundColor = Color.White) {
+                        LazyColumn(modifier = Modifier.fillMaxSize().background(Color.White).padding(0.5.dp)) {
+                            items(users.sortedBy { it.userName }) { user ->
                                 val uName = user.userName
                                 val baseDisplayUser = if (uName.contains("#")) uName.substringBefore("#") else uName
                                 val isMe = user.userId == viewModel.myUserId
