@@ -12,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -140,7 +141,7 @@ fun Win95ComboBox(items: List<String>, selectedItem: String, onItemSelected: (St
         Win95Button(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxHeight()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(selectedItem, style = win95TextStyle)
-                Spacer(modifier = Modifier.width(4.dp))
+                
                 Text("▼", style = win95TextStyle.copy(fontSize = 12.sp))
             }
         }
@@ -467,7 +468,7 @@ var inputText by remember { mutableStateOf("") }
                     }
                 }
 
-                Spacer(modifier = Modifier.width(4.dp))
+                
 
                 // Right: User List
                 Column(modifier = Modifier.weight(3f).fillMaxHeight()) {
@@ -488,8 +489,6 @@ var inputText by remember { mutableStateOf("") }
                                 val displayUser = if (isMe) baseDisplayUser + stringResource(R.string.you_suffix) else baseDisplayUser
                                 val videoStreamers by viewModel.videoStreamers.collectAsState()
                                 val isStreaming = videoStreamers.containsKey(user.userId)
-                                val prefix = "😊" + (if(isStreaming) "📺" else "")
-                                val finalDisplayUser = prefix + displayUser
                                 val isMenuExpanded = menuExpandedUserId == user.userId
                                 
                                 val baseColor = if (user.nclr != -1) {
@@ -505,11 +504,19 @@ var inputText by remember { mutableStateOf("") }
                                 Box(modifier = Modifier.fillMaxWidth().background(bgColor).clickable {
                                     menuExpandedUserId = user.userId
                                 }) {
-                                    Text(
-                                        text = finalDisplayUser,
-                                        style = win95TextStyle.copy(fontSize = 16.sp, color = textColor, fontWeight = if (isMe) FontWeight.Bold else FontWeight.Normal),
-                                        modifier = Modifier.padding(horizontal = 0.5.dp, vertical = 0.5.dp).fillMaxWidth()
-                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 0.5.dp, vertical = 0.5.dp).fillMaxWidth()) {
+                                        Box(modifier = Modifier.height(32.dp)) {
+                                            if (isStreaming) {
+                                                Image(painter = painterResource(id = R.drawable.ic_tv_win), contentDescription = "TV", modifier = Modifier.fillMaxHeight())
+                                            }
+                                            Image(painter = painterResource(id = R.drawable.ic_smile_win), contentDescription = "User", modifier = Modifier.fillMaxHeight())
+                                        }
+                                        
+                                        Text(
+                                            text = displayUser,
+                                            style = win95TextStyle.copy(fontSize = 16.sp, color = textColor, fontWeight = if (isMe) FontWeight.Bold else FontWeight.Normal)
+                                        )
+                                    }
                                     
                                     DropdownMenu(
                                         expanded = isMenuExpanded,
