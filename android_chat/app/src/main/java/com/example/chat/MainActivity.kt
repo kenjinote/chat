@@ -446,7 +446,7 @@ var inputText by remember { mutableStateOf("") }
                     
                     Win95Panel(modifier = Modifier.weight(1f).fillMaxHeight(), backgroundColor = Color.White) {
                         LazyColumn(modifier = Modifier.fillMaxSize().background(Color.White).padding(0.5.dp)) {
-                            items(users.sortedBy { it.userName }) { user ->
+                            items(users) { user ->
                                 val uName = user.userName
                                 val baseDisplayUser = if (uName.contains("#")) uName.substringBefore("#") else uName
                                 val isMe = user.userId == viewModel.myUserId
