@@ -175,11 +175,12 @@ fun ColorPickerDialog(onColorSelected: (Color) -> Unit, onDismiss: () -> Unit) {
     var customB by remember { mutableStateOf(0f) }
 
     val palette = listOf(
-        Color(200, 50, 50), Color(50, 150, 50), Color(50, 50, 200),
-        Color(180, 180, 50), Color(180, 50, 180), Color(50, 180, 180),
-        Color(255, 128, 0), Color(128, 0, 255), Color(0, 128, 255),
-        Color(128, 200, 0), Color(255, 0, 128), Color(0, 200, 128),
-        Color.Black, Color.DarkGray, Color.Gray, Color.LightGray
+        Color(255, 128, 128), Color(255, 255, 128), Color(128, 255, 128), Color(0, 255, 128), Color(128, 255, 255), Color(0, 128, 255), Color(255, 128, 192), Color(255, 128, 255),
+        Color(255, 0, 0), Color(255, 255, 0), Color(128, 255, 0), Color(0, 255, 64), Color(0, 255, 255), Color(0, 128, 192), Color(128, 128, 192), Color(255, 0, 255),
+        Color(128, 64, 64), Color(255, 128, 64), Color(0, 255, 0), Color(0, 128, 128), Color(0, 64, 128), Color(128, 128, 255), Color(128, 0, 64), Color(255, 0, 128),
+        Color(128, 0, 0), Color(255, 128, 0), Color(0, 128, 0), Color(0, 128, 64), Color(0, 0, 255), Color(0, 0, 160), Color(128, 0, 128), Color(128, 0, 255),
+        Color(64, 0, 0), Color(128, 64, 0), Color(0, 64, 0), Color(0, 64, 64), Color(0, 0, 128), Color(0, 0, 64), Color(64, 0, 64), Color(64, 0, 128),
+        Color.Black, Color(64, 64, 64), Color.Gray, Color(160, 160, 160), Color.LightGray, Color(224, 224, 224), Color.White, Color(255, 255, 255)
     )
     Dialog(onDismissRequest = onDismiss) {
         Column(
@@ -202,12 +203,12 @@ fun ColorPickerDialog(onColorSelected: (Color) -> Unit, onDismiss: () -> Unit) {
             }
             Spacer(modifier = Modifier.height(8.dp))
             Column {
-                for (row in 0 until 4) {
+                for (row in 0 until 6) {
                     Row {
-                        for (colIdx in 0 until 4) {
-                            val col = palette[row * 4 + colIdx]
+                        for (colIdx in 0 until 8) {
+                            val col = palette[row * 8 + colIdx]
                             Box(modifier = Modifier
-                                .size(32.dp).padding(2.dp).background(col).border(1.dp, Win95Black)
+                                .size(24.dp).padding(1.dp).background(col).border(1.dp, Win95Black)
                                 .clickable { onColorSelected(col) }
                             )
                         }
@@ -591,7 +592,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                             val r = (selectedColor.red * 255).toInt()
                             val g = (selectedColor.green * 255).toInt()
                             val b = (selectedColor.blue * 255).toInt()
-                            val cInt = (r shl 16) or (g shl 8) or b
+                            val cInt = (b shl 16) or (g shl 8) or r
                             viewModel.sendMessage(
                                 text = inputText,
                                 isBold = isBold,
@@ -761,7 +762,12 @@ fun ChangeNameDialog(
                     )
                     Row {
                         Win95Button(onClick = { 
-                            val nclr = if (selectedColor == Win95Black) -1 else selectedColor.toArgb() and 0xFFFFFF
+                            val nclr = if (selectedColor == Win95Black) -1 else {
+                                val r = (selectedColor.red * 255).toInt()
+                                val g = (selectedColor.green * 255).toInt()
+                                val b = (selectedColor.blue * 255).toInt()
+                                (b shl 16) or (g shl 8) or r
+                            }
                             onConfirm(newName, nclr) 
                         }, modifier = Modifier.width(80.dp)) {
                             Text("OK", style = win95TextStyle)
