@@ -537,19 +537,15 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
             Spacer(modifier = Modifier.height(4.dp))
 
             // Toolbar Area
-            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Win95Button(onClick = { isBold = !isBold }, checked = isBold, modifier = Modifier.padding(end=4.dp)) { Text("B", style = win95TextStyle.copy(fontWeight = FontWeight.Bold)) }
-                Win95Button(onClick = { isItalic = !isItalic }, checked = isItalic, modifier = Modifier.padding(end=4.dp)) { Text("I", style = win95TextStyle.copy(fontStyle = FontStyle.Italic)) }
-                Win95Button(onClick = { isUnderline = !isUnderline }, checked = isUnderline, modifier = Modifier.padding(end=4.dp)) { Text("U", style = win95TextStyle) } 
+            Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp).height(androidx.compose.foundation.layout.IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
+                Win95Button(onClick = { isBold = !isBold }, checked = isBold, modifier = Modifier.padding(end=4.dp).fillMaxHeight().aspectRatio(1f)) { Text("B", style = win95TextStyle.copy(fontWeight = FontWeight.Bold)) }
+                Win95Button(onClick = { isItalic = !isItalic }, checked = isItalic, modifier = Modifier.padding(end=4.dp).fillMaxHeight().aspectRatio(1f)) { Text("I", style = win95TextStyle.copy(fontStyle = FontStyle.Italic)) }
+                Win95Button(onClick = { isUnderline = !isUnderline }, checked = isUnderline, modifier = Modifier.padding(end=4.dp).fillMaxHeight().aspectRatio(1f)) { Text("U", style = win95TextStyle) } 
                 
                 Win95ComboBox(items = fontSizes, selectedItem = selectedSize, onItemSelected = { selectedSize = it }, modifier = Modifier.padding(end=4.dp))
                 
-                Win95Button(onClick = { showColorPicker = true }, modifier = Modifier.padding(end=4.dp)) { 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Col", style = win95TextStyle)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Box(modifier = Modifier.size(16.dp).background(selectedColor).border(1.dp, Win95Black))
-                    }
+                Win95Button(onClick = { showColorPicker = true }, modifier = Modifier.padding(end=4.dp).fillMaxHeight().aspectRatio(1f)) { 
+                    Box(modifier = Modifier.size(16.dp).background(selectedColor).border(1.dp, Win95Black))
                 }
                 
                 Spacer(modifier = Modifier.width(16.dp))
@@ -573,7 +569,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
             Spacer(modifier = Modifier.height(4.dp))
 
             // Input Area
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(modifier = Modifier.fillMaxWidth().height(androidx.compose.foundation.layout.IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
                 Win95TextField(
                     value = inputText,
                     onValueChange = { inputText = it },
@@ -587,7 +583,8 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Win95Button(
-                    onClick = { 
+                    modifier = Modifier.fillMaxHeight().padding(vertical = 2.dp),
+                    onClick = {
                         if (inputText.isNotBlank()) {
                             val r = (selectedColor.red * 255).toInt()
                             val g = (selectedColor.green * 255).toInt()
@@ -605,7 +602,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                         }
                     }
                 ) {
-                    Text("Send", style = win95TextStyle)
+                    Text(stringResource(R.string.send), style = win95TextStyle)
                 }
             }
         }
