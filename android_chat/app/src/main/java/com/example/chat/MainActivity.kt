@@ -315,7 +315,6 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     var inputText by remember { mutableStateOf("") }
     var isVideoOn by remember { mutableStateOf(false) }
     var isTalkOn by remember { mutableStateOf(false) }
-    var volumeLevel by remember { mutableStateOf(50f) }
     var showMoveRoomDialog by remember { mutableStateOf(false) }
     
     // Formatting states
@@ -532,14 +531,20 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                 
                 Spacer(modifier = Modifier.width(16.dp))
                 
-                Win95Button(onClick = { isTalkOn = !isTalkOn }, modifier = Modifier.padding(end=4.dp)) { 
-                    Text(if(isTalkOn) "Talk" else "Mute", style = win95TextStyle) 
+                val micVolume by viewModel.micVolume.collectAsState()
+                
+                Win95Button(
+                    onClick = { 
+                        isTalkOn = !isTalkOn 
+                        viewModel.setTalkOn(isTalkOn)
+                    }, 
+                    modifier = Modifier.padding(end=8.dp),
+                    checked = isTalkOn
+                ) { 
+                    Text("話す", style = win95TextStyle, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) 
                 }
-                Win95Button(onClick = { isVideoOn = !isVideoOn }, modifier = Modifier.padding(end=4.dp)) { 
-                    Text(if(isVideoOn) "Vid:ON" else "Vid:OFF", style = win95TextStyle) 
-                }
-                Text("Vol:", style = win95TextStyle)
-                Slider(value = volumeLevel, onValueChange = { volumeLevel = it }, valueRange = 0f..100f, modifier = Modifier.width(100.dp))
+                
+                MicVolumeIndicator(volume = micVolume, modifier = Modifier.width(100.dp).height(20.dp).padding(end=8.dp))
             }
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -659,6 +664,32 @@ fun Win95VideoWindow(title: String, onClose: () -> Unit, videoEngine: com.exampl
                     modifier = Modifier.fillMaxSize()
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun MicVolumeIndicator(volume: Int, modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier = modifier.background(Color.Black)) {
+        val bars = 20
+        val activeBars = (volume * bars) / 100
+        val barWidth = size.width / bars
+        for (i in 0 until bars) {
+            val color = if (i >= activeBars) {
+                Color(0, 50, 0)
+            } else if (i < 12) {
+                Color(0, 255, 0)
+            } else if (i < 16) {
+                Color(255, 255, 0)
+            } else {
+                Color(255, 0, 0)
+            }
+            
+            drawRect(
+                color = color,
+                topLeft = androidx.compose.ui.geometry.Offset(i * barWidth + 1.dp.toPx(), 2.dp.toPx()),
+                size = androidx.compose.ui.geometry.Size(barWidth - 1.dp.toPx(), size.height - 4.dp.toPx())
+            )
         }
     }
 }
