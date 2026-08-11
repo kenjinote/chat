@@ -316,6 +316,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     var isVideoOn by remember { mutableStateOf(false) }
     var isTalkOn by remember { mutableStateOf(false) }
     var showMoveRoomDialog by remember { mutableStateOf(false) }
+    var showChangeNameDialog by remember { mutableStateOf(false) }
     
     // Formatting states
     var isBold by remember { mutableStateOf(false) }
@@ -334,6 +335,18 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
             onConfirm = { roomName, isPrivate ->
                 showMoveRoomDialog = false
                 viewModel.moveRoom(roomName, isPrivate)
+            }
+        )
+    }
+    
+    if (showChangeNameDialog) {
+        ChangeNameDialog(
+            initialName = viewModel.myUserName,
+            initialColor = viewModel.myNameColor,
+            onDismiss = { showChangeNameDialog = false },
+            onConfirm = { newName, newColor ->
+                showChangeNameDialog = false
+                viewModel.rename(newName, newColor)
             }
         )
     }
@@ -474,6 +487,15 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                                                 onClick = {
                                                     menuExpandedUserId = null
                                                     isVideoOn = !isVideoOn
+                                                }
+                                            )
+                                            Divider(color = Win95DarkGray, thickness = 1.dp)
+                                            Divider(color = Win95White, thickness = 1.dp)
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.rename_menu), style = win95TextStyle) },
+                                                onClick = {
+                                                    menuExpandedUserId = null
+                                                    showChangeNameDialog = true
                                                 }
                                             )
                                         } else {
@@ -691,5 +713,76 @@ fun MicVolumeIndicator(volume: Int, modifier: Modifier = Modifier) {
                 size = androidx.compose.ui.geometry.Size(barWidth - 1.dp.toPx(), size.height - 4.dp.toPx())
             )
         }
+    }
+}
+
+@Composable
+fun ChangeNameDialog(
+    initialName: String,
+    initialColor: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (String, Int) -> Unit
+) {
+    var newName by remember { mutableStateOf(initialName) }
+    var selectedColor by remember { mutableStateOf(if (initialColor == -1) Win95Black else Color(initialColor or 0xFF000000.toInt())) }
+    var showColorPicker by remember { mutableStateOf(false) }
+    
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.width(320.dp).background(Win95Gray)
+                .drawBehind {
+                    val bw = 2.dp.toPx()
+                    drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
+                    drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
+                    drawRect(Win95Black, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
+                    drawRect(Win95Black, topLeft = Offset(size.width - bw, 0f), size = Size(bw, size.height))
+                }
+                .padding(2.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().background(Color(0xFF000080)).padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = stringResource(R.string.rename_menu), color = Color.White, fontWeight = FontWeight.Bold, style = win95TextStyle)
+            }
+            Column(modifier = Modifier.padding(16.dp)) {
+                Win95TextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier
+                        .size(24.dp)
+                        .background(selectedColor)
+                        .border(1.dp, Win95Black)
+                        .clickable { showColorPicker = true }
+                    )
+                    Row {
+                        Win95Button(onClick = { 
+                            val nclr = if (selectedColor == Win95Black) -1 else selectedColor.toArgb() and 0xFFFFFF
+                            onConfirm(newName, nclr) 
+                        }, modifier = Modifier.width(80.dp)) {
+                            Text("OK", style = win95TextStyle)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Win95Button(onClick = onDismiss, modifier = Modifier.width(80.dp)) {
+                            Text("Cancel", style = win95TextStyle)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (showColorPicker) {
+        ColorPickerDialog(
+            onColorSelected = { col ->
+                selectedColor = col
+                showColorPicker = false
+            },
+            onDismiss = { showColorPicker = false }
+        )
     }
 }
