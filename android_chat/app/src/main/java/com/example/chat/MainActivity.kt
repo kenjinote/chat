@@ -244,7 +244,7 @@ fun MoveRoomDialog(viewModel: ChatViewModel, onDismiss: () -> Unit, onConfirm: (
     var roomNameInput by remember { mutableStateOf("") }
     var isPrivate by remember { mutableStateOf(false) }
     val roomList by viewModel.roomList.collectAsState()
-    val filteredRooms = roomList.filter { it.name.contains(roomNameInput, ignoreCase = true) }.sortedByDescending { it.users }
+    val filteredRooms = roomList.filter { it.name.contains(roomNameInput, ignoreCase = true) }.sortedByDescending { it.count }
     
     DisposableEffect(Unit) {
         viewModel.requestRooms()
@@ -281,7 +281,7 @@ fun MoveRoomDialog(viewModel: ChatViewModel, onDismiss: () -> Unit, onConfirm: (
                     LazyColumn(modifier = Modifier.fillMaxSize().padding(0.5.dp)) {
                         items(filteredRooms) { room ->
                             Text(
-                                text = "${room.name} (${room.users})", style = win95TextStyle,
+                                text = "${room.name} (${room.count})", style = win95TextStyle,
                                 modifier = Modifier.fillMaxWidth().clickable { roomNameInput = room.name }.padding(vertical = 2.dp)
                             )
                         }
@@ -329,7 +329,7 @@ var inputText by remember { mutableStateOf("") }
     var selectedColor by remember { mutableStateOf(Win95Black) }
     var showColorPicker by remember { mutableStateOf(false) }
     
-    val fontSizes = listOf("8", "9", "10", "11", "12", "14", "16", "18", "20", "22", "24", "26", "28", "36", "48", "72")
+    val fontSizes = listOf("6", "7", "8", "9", "10", "11", "12", "14", "16", "18", "20", "22", "24", "28", "32")
 
     if (showMoveRoomDialog) {
         MoveRoomDialog(
