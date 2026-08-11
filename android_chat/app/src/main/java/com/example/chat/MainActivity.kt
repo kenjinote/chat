@@ -1,6 +1,10 @@
 package com.example.chat
 
 import android.os.Bundle
+import android.app.Activity
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
@@ -33,6 +37,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
@@ -64,7 +69,7 @@ fun Win95Panel(modifier: Modifier = Modifier, backgroundColor: Color = Win95Gray
         modifier = modifier
             .background(backgroundColor)
             .drawBehind {
-                val bw = 2.dp.toPx()
+                val bw = 1.dp.toPx()
                 drawRect(Win95DarkGray, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
                 drawRect(Win95DarkGray, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
                 drawRect(Win95White, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
@@ -83,7 +88,7 @@ fun Win95Button(onClick: () -> Unit, modifier: Modifier = Modifier, checked: Boo
             .clickable(onClick = onClick)
             .background(if (checked) Win95White else Win95Gray)
             .drawBehind {
-                val bw = 2.dp.toPx()
+                val bw = 1.dp.toPx()
                 val topColor = if (checked) Win95DarkGray else Win95White
                 val bottomColor = if (checked) Win95White else Win95Black
                 drawRect(topColor, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
@@ -105,7 +110,7 @@ fun Win95TextField(value: String, onValueChange: (String) -> Unit, modifier: Mod
             .height(60.dp)
             .background(Win95White)
             .drawBehind {
-                val bw = 2.dp.toPx()
+                val bw = 1.dp.toPx()
                 drawRect(Win95DarkGray, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
                 drawRect(Win95DarkGray, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
                 drawRect(Win95White, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
@@ -150,6 +155,14 @@ fun Win95ComboBox(items: List<String>, selectedItem: String, onItemSelected: (St
 
 @Composable
 fun AndroidChatTheme(content: @Composable () -> Unit) {
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            window.statusBarColor = androidx.compose.ui.graphics.Color(0xFF000080).toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+        }
+    }
     MaterialTheme(
         colorScheme = lightColorScheme(
             background = Win95Gray,
@@ -190,7 +203,7 @@ fun ColorPickerDialog(onColorSelected: (Color) -> Unit, onDismiss: () -> Unit) {
             modifier = Modifier
                 .background(Win95Gray)
                 .drawBehind {
-                    val bw = 2.dp.toPx()
+                    val bw = 1.dp.toPx()
                     drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
                     drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
                     drawRect(Win95Black, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
@@ -258,7 +271,7 @@ fun MoveRoomDialog(viewModel: ChatViewModel, onDismiss: () -> Unit, onConfirm: (
         Column(
             modifier = Modifier.width(320.dp).background(Win95Gray)
                 .drawBehind {
-                    val bw = 2.dp.toPx()
+                    val bw = 1.dp.toPx()
                     drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
                     drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
                     drawRect(Win95Black, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
@@ -395,7 +408,7 @@ var inputText by remember { mutableStateOf("") }
                     }
                     LazyColumn(state = chatListState, modifier = Modifier.fillMaxSize().background(Color.White).padding(0.5.dp).win95Scrollbar(chatListState)) {
                         items(messages) { msg ->
-                            Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                            Box(modifier = Modifier.fillMaxWidth().padding(start = 0.dp, end = 8.dp, top = 4.dp, bottom = 4.dp)) {
                                 val msgColor = if (msg.type == "system" || msg.type == "sysmsg") Win95DarkGray else {
                                     val c = msg.clr ?: 0
                                     if (c != 0) {
@@ -498,7 +511,7 @@ var inputText by remember { mutableStateOf("") }
                                         onDismissRequest = { menuExpandedUserId = null },
                                         modifier = Modifier.background(Win95Gray)
                                             .drawBehind {
-                                                val bw = 2.dp.toPx()
+                                                val bw = 1.dp.toPx()
                                                 drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
                                                 drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
                                                 drawRect(Win95Black, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
@@ -563,7 +576,7 @@ var inputText by remember { mutableStateOf("") }
             Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp).height(androidx.compose.foundation.layout.IntrinsicSize.Min), verticalAlignment = Alignment.CenterVertically) {
                 Win95Button(onClick = { isBold = !isBold }, checked = isBold, modifier = Modifier.padding(end=4.dp).fillMaxHeight().aspectRatio(1f)) { Text("B", style = win95TextStyle.copy(fontWeight = FontWeight.Bold)) }
                 Win95Button(onClick = { isItalic = !isItalic }, checked = isItalic, modifier = Modifier.padding(end=4.dp).fillMaxHeight().aspectRatio(1f)) { Text("I", style = win95TextStyle.copy(fontStyle = FontStyle.Italic)) }
-                Win95Button(onClick = { isUnderline = !isUnderline }, checked = isUnderline, modifier = Modifier.padding(end=4.dp).fillMaxHeight().aspectRatio(1f)) { Text("U", style = win95TextStyle) } 
+                Win95Button(onClick = { isUnderline = !isUnderline }, checked = isUnderline, modifier = Modifier.padding(end=4.dp).fillMaxHeight().aspectRatio(1f)) { Text("U", style = win95TextStyle.copy(textDecoration = TextDecoration.Underline)) } 
                 
                 Win95ComboBox(items = fontSizes, selectedItem = selectedSize, onItemSelected = { selectedSize = it }, modifier = Modifier.padding(end=4.dp).fillMaxHeight())
                 
@@ -644,7 +657,7 @@ fun Win95VideoWindow(title: String, onClose: () -> Unit, videoEngine: com.exampl
             .size(200.dp, 180.dp)
             .background(Win95Gray)
             .drawBehind {
-                val bw = 2.dp.toPx()
+                val bw = 1.dp.toPx()
                 drawRect(Win95White, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, bw))
                 drawRect(Win95White, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(bw, size.height))
                 drawRect(Win95Black, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - bw), size = androidx.compose.ui.geometry.Size(size.width, bw))
@@ -717,7 +730,7 @@ fun MicVolumeIndicator(volume: Int, modifier: Modifier = Modifier) {
         modifier = modifier
             .background(Win95Gray)
             .drawBehind {
-                val bw = 2.dp.toPx()
+                val bw = 1.dp.toPx()
                 drawRect(Win95DarkGray, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, bw))
                 drawRect(Win95DarkGray, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(bw, size.height))
                 drawRect(Win95White, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - bw), size = androidx.compose.ui.geometry.Size(size.width, bw))
@@ -727,7 +740,7 @@ fun MicVolumeIndicator(volume: Int, modifier: Modifier = Modifier) {
                 drawRect(Color.Black, topLeft = innerRect.topLeft, size = innerRect.size)
             }
     ) {
-        val bw = 2.dp.toPx()
+        val bw = 1.dp.toPx()
         val maxVolWidth = size.width - bw * 2
         val volWidth = (maxVolWidth * volume) / 100f
         
@@ -763,7 +776,7 @@ fun ChangeNameDialog(
         Column(
             modifier = Modifier.width(320.dp).background(Win95Gray)
                 .drawBehind {
-                    val bw = 2.dp.toPx()
+                    val bw = 1.dp.toPx()
                     drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
                     drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
                     drawRect(Win95Black, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
@@ -836,7 +849,7 @@ class ScrollbarCache {
 
 fun androidx.compose.ui.Modifier.win95Scrollbar(
     state: androidx.compose.foundation.lazy.LazyListState,
-    width: androidx.compose.ui.unit.Dp = 16.dp
+    width: androidx.compose.ui.unit.Dp = 8.dp
 ): androidx.compose.ui.Modifier = composed {
     val cache = remember { ScrollbarCache() }
 
@@ -932,7 +945,7 @@ fun androidx.compose.ui.Modifier.win95Scrollbar(
                     size = androidx.compose.ui.geometry.Size(thumbW, thumbH)
                 )
                 
-                val bw = 2.dp.toPx()
+                val bw = 1.dp.toPx()
                 drawRect(androidx.compose.ui.graphics.Color.White, topLeft = androidx.compose.ui.geometry.Offset(thumbX, thumbY), size = androidx.compose.ui.geometry.Size(thumbW, bw))
                 drawRect(androidx.compose.ui.graphics.Color.White, topLeft = androidx.compose.ui.geometry.Offset(thumbX, thumbY), size = androidx.compose.ui.geometry.Size(bw, thumbH))
                 drawRect(androidx.compose.ui.graphics.Color.Black, topLeft = androidx.compose.ui.geometry.Offset(thumbX, thumbY + thumbH - bw), size = androidx.compose.ui.geometry.Size(thumbW, bw))
