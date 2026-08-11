@@ -244,7 +244,7 @@ fun MoveRoomDialog(viewModel: ChatViewModel, onDismiss: () -> Unit, onConfirm: (
     var roomNameInput by remember { mutableStateOf("") }
     var isPrivate by remember { mutableStateOf(false) }
     val roomList by viewModel.roomList.collectAsState()
-    val filteredRooms = roomList.filter { it.name.contains(roomNameInput, ignoreCase = true) }
+    val filteredRooms = roomList.filter { it.name.contains(roomNameInput, ignoreCase = true) }.sortedByDescending { it.users }
     
     DisposableEffect(Unit) {
         viewModel.requestRooms()
@@ -270,18 +270,18 @@ fun MoveRoomDialog(viewModel: ChatViewModel, onDismiss: () -> Unit, onConfirm: (
                 Text(text = stringResource(R.string.move_room_btn), color = Color.White, fontWeight = FontWeight.Bold, style = win95TextStyle)
             }
             Column(modifier = Modifier.padding(8.dp)) {
-                Win95Panel(modifier = Modifier.fillMaxWidth().background(Win95White)) {
+                Win95Panel(modifier = Modifier.fillMaxWidth(), backgroundColor = Color.White) {
                     BasicTextField(
                         value = roomNameInput, onValueChange = { roomNameInput = it },
                         modifier = Modifier.fillMaxWidth().padding(4.dp), textStyle = win95TextStyle, singleLine = true, cursorBrush = SolidColor(Win95Black)
                     )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                Win95Panel(modifier = Modifier.fillMaxWidth().height(200.dp).background(Win95White)) {
+                Win95Panel(modifier = Modifier.fillMaxWidth().height(200.dp), backgroundColor = Color.White) {
                     LazyColumn(modifier = Modifier.fillMaxSize().padding(0.5.dp)) {
                         items(filteredRooms) { room ->
                             Text(
-                                text = " ()", style = win95TextStyle,
+                                text = "${room.name} (${room.users})", style = win95TextStyle,
                                 modifier = Modifier.fillMaxWidth().clickable { roomNameInput = room.name }.padding(vertical = 2.dp)
                             )
                         }
