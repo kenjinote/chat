@@ -64,6 +64,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "The specified room is full. You joined an overflow room."
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s is full, so you entered %s."
+    IDS_DEFAULT_MIC "Default Microphone"
+    IDS_PC_AUDIO_LOOPBACK "PC Audio (Loopback)"
 END
 
 LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
@@ -123,6 +125,8 @@ BEGIN
     IDS_REPORT_TITLE    "通報"
     IDS_SYSMSG_ROOM_OVERFLOW "指定された部屋が満室のため、別室に入室しました。"
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s が満室のため、%s に入室しました。"
+    IDS_DEFAULT_MIC "既定のマイク"
+    IDS_PC_AUDIO_LOOPBACK "PC音源（ループバック）"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
@@ -182,6 +186,8 @@ BEGIN
     IDS_REPORT_TITLE    "举报"
     IDS_SYSMSG_ROOM_OVERFLOW "指定的房间已满，您已加入溢出房间。"
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "由于 %s 已满，您已进入 %s。"
+    IDS_DEFAULT_MIC "默认麦克风"
+    IDS_PC_AUDIO_LOOPBACK "PC音频 (回环)"
 END
 
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
@@ -241,6 +247,8 @@ BEGIN
     IDS_REPORT_TITLE    "신고"
     IDS_SYSMSG_ROOM_OVERFLOW "지정된 방이 가득 차서 다른 방에 입장했습니다."
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s 방이 가득 차서 %s에 입장했습니다."
+    IDS_DEFAULT_MIC "기본 마이크"
+    IDS_PC_AUDIO_LOOPBACK "PC 오디오 (루프백)"
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL
@@ -300,6 +308,8 @@ BEGIN
     IDS_REPORT_TITLE    "檢舉"
     IDS_SYSMSG_ROOM_OVERFLOW "指定的房间已满，您已加入溢出房间。"
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "由于 %s 已满，您已进入 %s。"
+    IDS_DEFAULT_MIC "默认麦克风"
+    IDS_PC_AUDIO_LOOPBACK "PC音频 (回环)"
 END
 
 LANGUAGE LANG_FRENCH, SUBLANG_FRENCH
@@ -359,6 +369,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "Le salon spécifié est plein. Vous avez rejoint un salon de débordement."
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s est plein, vous êtes entré dans %s."
+    IDS_DEFAULT_MIC "Microphone par défaut"
+    IDS_PC_AUDIO_LOOPBACK "Audio du PC (Loopback)"
 END
 
 LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
@@ -418,6 +430,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "Der angegebene Raum ist voll. Sie sind einem Überlaufraum beigetreten."
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Da %s voll ist, haben Sie %s betreten."
+    IDS_DEFAULT_MIC "Standard-Mikrofon"
+    IDS_PC_AUDIO_LOOPBACK "PC-Audio (Loopback)"
 END
 
 LANGUAGE LANG_SPANISH, SUBLANG_SPANISH_MODERN
@@ -477,6 +491,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "La sala especificada está llena. Te uniste a una sala de desbordamiento."
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Como %s está lleno, entraste a %s."
+    IDS_DEFAULT_MIC "Micrófono predeterminado"
+    IDS_PC_AUDIO_LOOPBACK "Audio de PC (Loopback)"
 END
 
 LANGUAGE LANG_HINDI, SUBLANG_DEFAULT
@@ -536,6 +552,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "निर्दिष्ट कमरा भरा हुआ है। आप एक अतिप्रवाह कमरे में शामिल हो गए。"
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "चूंकि %s भरा हुआ है, आपने %s में प्रवेश किया。"
+    IDS_DEFAULT_MIC "डिफ़ॉल्ट माइक्रोफ़ोन"
+    IDS_PC_AUDIO_LOOPBACK "पीसी ऑडियो (लूपबैक)"
 END
 
 LANGUAGE LANG_PORTUGUESE, SUBLANG_DEFAULT
@@ -595,6 +613,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "A sala especificada está cheia. Você entrou em uma sala de transbordo."
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Como %s está cheio, você entrou em %s."
+    IDS_DEFAULT_MIC "Microfone padrão"
+    IDS_PC_AUDIO_LOOPBACK "Áudio do PC (Loopback)"
 END
 
 LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
@@ -654,6 +674,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "Указанная комната заполнена. Вы присоединились к резервной комнате."
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Так как %s заполнен, вы вошли в %s."
+    IDS_DEFAULT_MIC "Микрофон по умолчанию"
+    IDS_PC_AUDIO_LOOPBACK "Звук ПК (Loopback)"
 END
 
 LANGUAGE LANG_ARABIC, SUBLANG_DEFAULT
@@ -713,6 +735,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "الغرفة المحددة ممتلئة. لقد انضممت إلى غرفة إضافية."
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "بما أن %s ممتلئة، فقد دخلت %s."
+    IDS_DEFAULT_MIC "الميكروفون الافتراضي"
+    IDS_PC_AUDIO_LOOPBACK "صوت الكمبيوتر (استرجاع)"
 END
 
 LANGUAGE LANG_BENGALI, SUBLANG_DEFAULT
@@ -772,6 +796,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "নির্দিষ্ট রুমটি পূর্ণ। আপনি একটি অতিরিক্ত রুমে যোগ দিয়েছেন。"
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "যেহেতু %s পূর্ণ, আপনি %s এ প্রবেশ করেছেন。"
+    IDS_DEFAULT_MIC "ডিফল্ট মাইক্রোফোন"
+    IDS_PC_AUDIO_LOOPBACK "পিসি অডিও (লুপব্যাক)"
 END
 
 LANGUAGE LANG_INDONESIAN, SUBLANG_DEFAULT
@@ -831,6 +857,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "Ruangan yang ditentukan penuh. Anda telah bergabung ke ruang tambahan."
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Karena %s penuh, Anda masuk ke %s."
+    IDS_DEFAULT_MIC "Mikrofon Bawaan"
+    IDS_PC_AUDIO_LOOPBACK "Audio PC (Loopback)"
 END
 
 LANGUAGE LANG_ITALIAN, SUBLANG_DEFAULT
@@ -890,6 +918,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "La stanza specificata è piena. Sei entrato in una stanza di overflow."
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Poiché %s è pieno, sei entrato in %s."
+    IDS_DEFAULT_MIC "Microfono predefinito"
+    IDS_PC_AUDIO_LOOPBACK "Audio del PC (Loopback)"
 END
 
 LANGUAGE LANG_TURKISH, SUBLANG_DEFAULT
@@ -949,6 +979,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "Belirtilen oda dolu. Bir taşma odasına katıldınız."
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s dolu olduğundan %s odasına girdiniz."
+    IDS_DEFAULT_MIC "Varsayılan Mikrofon"
+    IDS_PC_AUDIO_LOOPBACK "PC Sesi (Loopback)"
 END
 
 LANGUAGE LANG_VIETNAMESE, SUBLANG_DEFAULT
@@ -1008,6 +1040,8 @@ BEGIN
     IDS_REPORT_TITLE    "Report"
     IDS_SYSMSG_ROOM_OVERFLOW "Phòng chỉ định đã đầy. Bạn đã tham gia vào phòng bổ sung."
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Vì %s đã đầy, bạn đã vào %s."
+    IDS_DEFAULT_MIC "Micrô mặc định"
+    IDS_PC_AUDIO_LOOPBACK "Âm thanh PC (Loopback)"
 END
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL

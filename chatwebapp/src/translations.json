@@ -49,7 +49,7 @@
     "moveRoomBtn": "部屋移動",
     "viewingCount": "(視聴:%d人)",
     "entered": " が入室しました。",
-    "left": " が退出しました。",
+    "left": " が退室しました。",
     "errorTitle": "エラー",
     "errorRoomFull": "満室です。",
     "errorNetwork": "通信サーバーへの接続に失敗しました。",

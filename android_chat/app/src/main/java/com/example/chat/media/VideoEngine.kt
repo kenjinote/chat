@@ -4,6 +4,7 @@ import android.media.MediaCodec
 import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.view.Surface
+import androidx.camera.core.ImageProxy
 import java.nio.ByteBuffer
 
 class VideoEngine {
@@ -13,7 +14,7 @@ class VideoEngine {
     fun initEncoder(width: Int = 640, height: Int = 480, fps: Int = 30) {
         try {
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
-                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
                 setInteger(MediaFormat.KEY_BIT_RATE, 500000)
                 setInteger(MediaFormat.KEY_FRAME_RATE, fps)
                 setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1) // 1 second between I-frames
@@ -21,8 +22,6 @@ class VideoEngine {
             
             encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
             encoder?.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-            // The surface to draw onto for encoding
-            // val inputSurface = encoder?.createInputSurface() 
             encoder?.start()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -37,6 +36,35 @@ class VideoEngine {
             decoder?.start()
         } catch (e: Exception) {
             e.printStackTrace()
+        }
+    }
+
+    fun encodeFrame(image: ImageProxy) {
+        val encoder = encoder ?: return
+        try {
+            val inputBufferId = encoder.dequeueInputBuffer(10000)
+            if (inputBufferId >= 0) {
+                val inputBuffer = encoder.getInputBuffer(inputBufferId)
+                inputBuffer?.clear()
+
+                val yBuffer = image.planes[0].buffer
+                val uBuffer = image.planes[1].buffer
+                val vBuffer = image.planes[2].buffer
+
+                val ySize = yBuffer.remaining()
+                val uSize = uBuffer.remaining()
+                val vSize = vBuffer.remaining()
+
+                inputBuffer?.put(yBuffer)
+                inputBuffer?.put(uBuffer)
+                inputBuffer?.put(vBuffer)
+
+                encoder.queueInputBuffer(inputBufferId, 0, ySize + uSize + vSize, image.imageInfo.timestamp * 1000, 0)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            image.close()
         }
     }
 

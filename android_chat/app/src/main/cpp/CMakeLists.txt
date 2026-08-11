@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.22.1)
 project("android_chat")
 
 # Set Opus directory
-set(OPUS_DIR "../../../../../../../opus")
+set(OPUS_DIR "../../../../../opus")
 
 # Add Opus as a subdirectory (if you want to compile from source)
 # To keep it lightweight and fast, we can just build the required opus files 

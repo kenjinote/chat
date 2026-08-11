@@ -1,0 +1,2 @@
+{"rooms": [{"count": 2, "name": "Lobby"}, {"count": 1, "name": "Ας μιλήσουμε στα ελληνικά!"}, {"count": 4, "name": "ロビー"}], "type": "room_list"}
+{"rooms": [{"count": 2, "name": "Lobby"}, {"count": 1, "name": "Ας μιλήσουμε στα ελληνικά!"}, {"count": 4, "name": "ロビー"}], "type": "room_list"}

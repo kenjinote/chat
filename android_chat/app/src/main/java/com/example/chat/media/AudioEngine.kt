@@ -5,8 +5,8 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
 
 class AudioEngine {
 
@@ -26,6 +26,9 @@ class AudioEngine {
 
     private var audioRecord: AudioRecord? = null
     private var audioTrack: AudioTrack? = null
+    
+    private val jitterBuffers = ConcurrentHashMap<String, ConcurrentLinkedQueue<ShortArray>>()
+    private var isMixing = false
 
     private external fun createEncoder(sampleRate: Int, channels: Int, application: Int): Long
     private external fun encode(encoderHandle: Long, pcm: ShortArray, frameSize: Int, outOpus: ByteArray): Int
@@ -37,7 +40,6 @@ class AudioEngine {
 
     @SuppressLint("MissingPermission")
     fun initAudio() {
-        // Opus application VOIP = 2048
         encoderHandle = createEncoder(sampleRate, channels, 2048)
         decoderHandle = createDecoder(sampleRate, channels)
 
@@ -69,6 +71,8 @@ class AudioEngine {
             )
             .setBufferSizeInBytes(minPlayBufSize.coerceAtLeast(pcmBufferSize * 2))
             .build()
+            
+        startMixer()
     }
 
     fun startRecording(onOpusData: (ByteArray) -> Unit) {
@@ -88,19 +92,69 @@ class AudioEngine {
             }
         }.start()
     }
+    
+    private fun startMixer() {
+        isMixing = true
+        Thread {
+            if (audioTrack?.playState != AudioTrack.PLAYSTATE_PLAYING) {
+                audioTrack?.play()
+            }
+            val mixedBuffer = FloatArray(pcmBufferSize)
+            val outBuffer = ShortArray(pcmBufferSize)
+            
+            while (isMixing) {
+                mixedBuffer.fill(0f)
+                var hasData = false
+                
+                for ((_, queue) in jitterBuffers) {
+                    val frame = queue.poll()
+                    if (frame != null) {
+                        hasData = true
+                        for (i in frame.indices) {
+                            mixedBuffer[i] += frame[i].toFloat()
+                        }
+                    }
+                }
+                
+                if (hasData) {
+                    for (i in mixedBuffer.indices) {
+                        val x = mixedBuffer[i] / 32768.0f
+                        val absX = kotlin.math.abs(x)
+                        val y: Float
+                        if (absX < 0.5f) {
+                            y = x
+                        } else if (absX < 1.5f) {
+                            val v = absX - 0.5f
+                            val shaped = 0.5f + v - 0.5f * v * v
+                            y = if (x > 0) shaped else -shaped
+                        } else {
+                            y = if (x > 0) 1.0f else -1.0f
+                        }
+                        outBuffer[i] = (y * 32767.0f).toInt().toShort()
+                    }
+                } else {
+                    outBuffer.fill(0)
+                }
+                audioTrack?.write(outBuffer, 0, pcmBufferSize)
+            }
+        }.start()
+    }
 
-    fun playOpusData(opusData: ByteArray) {
-        if (audioTrack?.playState != AudioTrack.PLAYSTATE_PLAYING) {
-            audioTrack?.play()
-        }
+    fun playOpusData(userId: String, opusData: ByteArray) {
         val pcmBuffer = ShortArray(pcmBufferSize)
         val decodedSize = decode(decoderHandle, opusData, opusData.size, pcmBuffer, frameSize)
         if (decodedSize > 0) {
-            audioTrack?.write(pcmBuffer, 0, decodedSize)
+            val queue = jitterBuffers.getOrPut(userId) { ConcurrentLinkedQueue() }
+            queue.offer(pcmBuffer.copyOf(decodedSize))
+            // Limit jitter buffer size to prevent delay (e.g. max 5 frames)
+            if (queue.size > 5) {
+                queue.poll()
+            }
         }
     }
 
     fun release() {
+        isMixing = false
         audioRecord?.stop()
         audioRecord?.release()
         audioTrack?.stop()

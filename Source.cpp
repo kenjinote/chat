@@ -144,6 +144,7 @@ CAudioSessionEvents* g_pAudioEvents = nullptr;
 #define WM_APP_VOLUME_CHANGED (WM_APP + 1)
 #define WM_APP_MAINTENANCE_MSG (WM_APP + 5)
 #define WM_APP_CONNECT_SERVER (WM_APP + 6)
+#define WM_APP_SORT_USERLIST (WM_APP + 7)
 
 HRESULT STDMETHODCALLTYPE CAudioSessionEvents::OnSimpleVolumeChanged(float NewVolume, BOOL NewMute, LPCGUID EventContext) {
     if (g_hVolumeSlider) {
@@ -5689,18 +5690,8 @@ std::string HashRoomName(const std::wstring& roomName) {
 
 
 
-void ClearLogAndUsers() {
+void ClearUserList() {
     g_isRoomJoined = false;
-    for (auto& entry : g_logEntries) {
-        if (entry.pLayout) { entry.pLayout->Release(); entry.pLayout = nullptr; }
-    }
-    g_logEntries.clear();
-    g_logScrollY = 0;
-    g_autoScroll = true;
-    g_logSelection.startEntryIndex = -1;
-    g_logSelection.endEntryIndex = -1;
-    g_logSelection.isSelecting = false;
-    InvalidateRect(g_hLog, NULL, FALSE);
     
     SendMessage(g_hUserList, LB_RESETCONTENT, 0, 0);
 }
@@ -5734,8 +5725,9 @@ void AppendLog(const MsgData& data) {
         }
         if (needsSave) {
             SaveIgnoredUsers();
-            SortUserList();
-            if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
+            if (g_hUserList) {
+                PostMessage(GetParent(g_hUserList), WM_APP_SORT_USERLIST, 0, 0);
+            }
             return;
         }
     }
@@ -9059,8 +9051,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
         else if (id == 1011 && code == BN_CLICKED) {
             HMENU hMenu = CreatePopupMenu();
-            AppendMenu(hMenu, MF_STRING, 1999, L"既定のマイク");
-            AppendMenu(hMenu, MF_STRING, 2000, L"PC音源（ループバック）");
+            AppendMenu(hMenu, MF_STRING, 1999, GetString(IDS_DEFAULT_MIC).c_str());
+            AppendMenu(hMenu, MF_STRING, 2000, GetString(IDS_PC_AUDIO_LOOPBACK).c_str());
             AppendMenu(hMenu, MF_SEPARATOR, 0, NULL);
             
             int numDevs = waveInGetNumDevs();
@@ -9136,7 +9128,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 if (!isPrivate) {
                     g_publicRooms[newRoom] = (std::max)(1, g_publicRooms[newRoom]);
                 }
-                ClearLogAndUsers();
+                ClearUserList();
                 SetWindowTitle(hWnd);
                 MsgData sysMsg;
                 sysMsg.user = L"";
@@ -9148,6 +9140,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 AppendLog(sysMsg);
             }
         }
+        break;
+    }
+
+    case WM_APP_SORT_USERLIST: {
+        SortUserList();
+        if (g_hUserList) InvalidateRect(g_hUserList, NULL, FALSE);
         break;
     }
 
@@ -9354,7 +9352,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         }
 
         SendJoinRequest(g_currentRoom, g_isPrivateRoom);
-        ClearLogAndUsers();
+        ClearUserList();
         {
             std::lock_guard<std::mutex> decLock(g_decoderMutex);
             g_h264Decoders.clear();
