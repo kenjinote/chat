@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lobby">Lobby</string>
+    <string name="rename_btn">Username Change...</string>
+    <string name="private_room">Private</string>
+    <string name="talk">Talk</string>
+    <string name="send">Send</string>
+    <string name="joined_network">Joined network</string>
+    <string name="moved_to">Moving to %1$s...</string>
+    <string name="move_room_btn">Move Room</string>
+    <string name="user_list_fmt">User List (%1$d)</string>
+    <string name="room_enter_fmt">%1$s entered %2$s.</string>
+    <string name="room_leave_fmt">%1$s left %2$s.</string>
+    <string name="app_name">chat</string>
+    <string name="connect">Connect</string>
+    <string name="server_ip">Server IP:</string>
+    <string name="name_label">Name:</string>
+    <string name="vid_on">Vid:ON</string>
+    <string name="vid_off">Vid:OFF</string>
+    <string name="vol">Vol:</string>
+    <string name="mute">Mute</string>
+    <string name="watch_video">Watch Video</string>
+    <string name="ignore_user">Ignore</string>
+    <string name="report_user">Report</string>
+    <string name="you_suffix">（自分）</string>
+    <string name="share_video">Share Video</string>
+    <string name="rename_menu">Change Name</string>
+    <string name="color_label">Color:</string>
+    <string name="disconnected_from_server">Disconnected from server.</string>
+    <string name="disconnected_reason">Disconnected: %1$s</string>
+    <string name="renamed_fmt">%1$s renamed to %2$s</string>
+    <string name="you_renamed_fmt">You changed your name to %1$s</string>
+</resources>
+
+
+

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lobby">Lobby</string>
+    <string name="rename_btn">Alteração de nome de usuário...</string>
+    <string name="private_room">Privado</string>
+    <string name="talk">Falar</string>
+    <string name="send">Enviar</string>
+    <string name="joined_network">Entrou na rede</string>
+    <string name="moved_to">Movendo para %1$s...</string>
+    <string name="move_room_btn">Mudar Sala</string>
+    <string name="user_list_fmt">User List (%1$d)</string>
+    <string name="room_enter_fmt">%1$s entrou em %2$s.</string>
+    <string name="room_leave_fmt">%1$s saiu de %2$s.</string>
+</resources>

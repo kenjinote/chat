@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lobby">ロビー</string>
+    <string name="rename_btn">ユーザ名の変更...</string>
+    <string name="private_room">非公開</string>
+    <string name="talk">話す</string>
+    <string name="send">送信</string>
+    <string name="joined_network">ネットワークに参加しました</string>
+    <string name="moved_to">%1$s に移動しています...</string>
+    <string name="move_room_btn">部屋移動</string>
+    <string name="user_list_fmt">ユーザ一覧 (%1$d)</string>
+    <string name="room_enter_fmt">%1$sが%2$sに入室しました。</string>
+    <string name="room_leave_fmt">%1$sが%2$sから退室しました。</string>
+    <string name="connect">接続</string>
+    <string name="server_ip">サーバーIP:</string>
+    <string name="name_label">名前:</string>
+    <string name="mute">ミュート</string>
+    <string name="vid_on">ビデオ:ON</string>
+    <string name="vid_off">ビデオ:OFF</string>
+    <string name="vol">音量:</string>
+    <string name="watch_video">映像を見る</string>
+    <string name="ignore_user">無視する</string>
+    <string name="report_user">通報する</string>
+    <string name="you_suffix">（自分）</string>
+    <string name="share_video">ビデオ共有</string>
+    <string name="rename_menu">名前の変更</string>
+    <string name="color_label">色:</string>
+    <string name="disconnected_from_server">サーバーから切断されました。</string>
+    <string name="disconnected_reason">切断されました: %1$s</string>
+    <string name="renamed_fmt">%1$s が %2$s に名前を変更しました</string>
+    <string name="you_renamed_fmt">あなたの名前を %1$s に変更しました</string>
+</resources>

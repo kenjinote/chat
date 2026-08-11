@@ -116,10 +116,19 @@ class VideoEngine {
         }
     }
 
+    fun stopDecoder() {
+        try {
+            decoder?.stop()
+            decoder?.release()
+            decoder = null
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun release() {
         encoder?.stop()
         encoder?.release()
-        decoder?.stop()
-        decoder?.release()
+        stopDecoder()
     }
 }

@@ -41,6 +41,9 @@ const C_UDP_PORT = 4001;
 
 // Global UDP Socket for this Proxy Server instance
 const udpSocket = dgram.createSocket('udp4');
+udpSocket.on('error', (err) => {
+  console.error(`[UDP] Socket error: ${err.message}`);
+});
 
 // We map userId -> socket to know who to send decoded audio to
 const connectedClients = new Map<string, Socket>();
@@ -111,6 +114,23 @@ udpSocket.on('message', (msg, rinfo) => {
       } catch(e) {
         // Decode error
       }
+    } else if (payloadType === 3) { // Subscribe Video (Watch)
+      let targetUserIdStr = '';
+      const payloadBuf = msg.subarray(92);
+      if (payloadBuf.length >= 2 && payloadBuf[1] === 0) {
+        targetUserIdStr = payloadBuf.toString('utf16le');
+      } else {
+        targetUserIdStr = payloadBuf.toString('utf8');
+      }
+      const nullIdx = targetUserIdStr.indexOf('\0');
+      if (nullIdx !== -1) targetUserIdStr = targetUserIdStr.substring(0, nullIdx);
+      
+      let watchers = streamWatchers.get(targetUserIdStr);
+      if (!watchers) {
+        watchers = new Map<string, number>();
+        streamWatchers.set(targetUserIdStr, watchers);
+      }
+      watchers.set(senderUserId, Date.now());
     } else if (payloadType === 4) { // Stream Status
       // Just forward to clients to show "📹" icon
       for (const [id, clientSocket] of connectedClients.entries()) {
@@ -174,7 +194,29 @@ udpSocket.on('message', (msg, rinfo) => {
 });
 
 const decoders = new Map<string, any>();
+const streamWatchers = new Map<string, Map<string, number>>();
 
+setInterval(() => {
+  const now = Date.now();
+  for (const [targetUserId, watchers] of streamWatchers.entries()) {
+    for (const [watcherId, lastSeen] of watchers.entries()) {
+      if (now - lastSeen > 3000) {
+        watchers.delete(watcherId);
+      }
+    }
+    
+    // Broadcast to everyone in the room
+    for (const [id, clientSocket] of connectedClients.entries()) {
+      if (clientSocket.data.roomUsers && clientSocket.data.roomUsers.has(targetUserId)) {
+        clientSocket.emit('viewer-count', { userId: targetUserId, count: watchers.size });
+      }
+    }
+    
+    if (watchers.size === 0) {
+      streamWatchers.delete(targetUserId);
+    }
+  }
+}, 1000);
 
 io.on('connection', (socket: Socket) => {
   console.log(`[WS] Client connected: ${socket.id}`);
@@ -432,8 +474,14 @@ io.on('connection', (socket: Socket) => {
   });
 
   socket.on('watch-video', (targetUserId: string) => {
-    console.log(`[DEBUG] Received watch-video for ${targetUserId}. Session: ${socket.data.sessionId}, User: ${socket.data.userId}`);
     if (!socket.data.sessionId || !socket.data.userId || !targetUserId) return;
+    
+    let watchers = streamWatchers.get(targetUserId);
+    if (!watchers) {
+      watchers = new Map<string, number>();
+      streamWatchers.set(targetUserId, watchers);
+    }
+    watchers.set(socket.data.userId, Date.now());
     
     console.log(`[UDP SEND] Watch packet from ${socket.data.userId} to target '${targetUserId}' (len: ${targetUserId.length})`);
     

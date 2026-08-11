@@ -423,6 +423,7 @@ const App: React.FC = () => {
   const [showChangeName, setShowChangeName] = useState(false);
   const [newNameInput, setNewNameInput] = useState('');
   const [newColorInput, setNewColorInput] = useState(0);
+  const [viewerCounts, setViewerCounts] = useState<{ [userId: string]: number }>({});
 
   // Audio state
   const [isMicActive, setIsMicActive] = useState(false);
@@ -439,6 +440,8 @@ const App: React.FC = () => {
   // Video state
   const [isWebcamActive, setIsWebcamActive] = useState(false);
   const [isScreenActive, setIsScreenActive] = useState(false);
+  const [showSelfPreview, setShowSelfPreview] = useState(false);
+  const selfVideoRef = useRef<HTMLVideoElement>(null);
   const videoStreamRef = useRef<MediaStream | null>(null);
   const videoIntervalRef = useRef<number | null>(null);
   const videoCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -676,6 +679,10 @@ const App: React.FC = () => {
       });
     });
 
+    socket.on('viewer-count', (data: { userId: string, count: number }) => {
+      setViewerCounts(prev => ({ ...prev, [data.userId]: data.count }));
+    });
+
     socket.on('chat', (data: any) => {
       const senderUserId = data.userId || 'sys';
       if (ignoredUsersRef.current.includes(senderUserId)) return;
@@ -902,6 +909,28 @@ const App: React.FC = () => {
   }, [streamingUsers]);
 
   // Heartbeat for watching users
+  useEffect(() => {
+    if (!socket) return;
+    const interval = setInterval(() => {
+      socket.emit('ping');
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [socket]);
+
+  useEffect(() => {
+    if (isWebcamActive || isScreenActive) {
+      setShowSelfPreview(true);
+    } else {
+      setShowSelfPreview(false);
+    }
+  }, [isWebcamActive, isScreenActive]);
+
+  useEffect(() => {
+    if (showSelfPreview && selfVideoRef.current && videoStreamRef.current) {
+      selfVideoRef.current.srcObject = videoStreamRef.current;
+    }
+  }, [showSelfPreview, isWebcamActive, isScreenActive]);
+
   useEffect(() => {
     if (!socket) return;
     const interval = setInterval(() => {
@@ -1304,7 +1333,7 @@ const App: React.FC = () => {
               <button type="button" className={`tool-btn ${isItalic ? 'active' : ''}`} style={{ fontStyle: 'italic' }} onClick={() => setIsItalic(!isItalic)}>I</button>
               <button type="button" className={`tool-btn ${isUnderline ? 'active' : ''}`} style={{ textDecoration: 'underline' }} onClick={() => setIsUnderline(!isUnderline)}>U</button>
               <select className="tool-select" value={fontSize} onChange={(e) => setFontSize(parseInt(e.target.value, 10))}>
-                {Array.from({ length: 27 }, (_, i) => i + 6).map(size => (
+                {[6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 32].map(size => (
                   <option key={size} value={size}>{size}</option>
                 ))}
               </select>
@@ -1650,6 +1679,15 @@ const App: React.FC = () => {
                       );
                     })}
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '8px' }}>
+                    <span style={{ fontSize: '11px' }}>{t.custom}:</span>
+                    <input 
+                      type="color" 
+                      value={getHexColor(newColorInput)}
+                      onChange={(e) => setNewColorInput(toColorRefFromHex(e.target.value))}
+                      style={{ height: '24px', padding: 0, flexGrow: 1 }}
+                    />
+                  </div>
                 </div>
                 <div className="dialog-buttons">
                   <button type="submit" className="sys-btn" style={{ minWidth: '60px' }}>{t.change}</button>
@@ -1670,7 +1708,7 @@ const App: React.FC = () => {
         return (
           <div key={userId} className="window" style={{ position: 'fixed', top: '50px', right: '20px', width: '324px', height: 'auto', zIndex: 1000, boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', transform: `translate(${pos.x}px, ${pos.y}px)` }}>
             <div className="title-bar" onPointerDown={(e) => handleVideoDragStart(e, userId)} style={{ cursor: 'move' }}>
-              <div className="title-bar-text">{cleanName} - Video</div>
+              <div className="title-bar-text">{cleanName} - {t.videoStream} ({viewerCounts[userId] || 0})</div>
               <div className="title-bar-controls">
                 <button className="title-btn close-btn" aria-label="Close" onClick={() => {
                   setWatchingUsers(prev => ({ ...prev, [userId]: false }));
@@ -1687,7 +1725,8 @@ const App: React.FC = () => {
                 }}></button>
               </div>
             </div>
-            <div className="window-body" style={{ margin: 0, padding: 0, background: '#000', height: '180px', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+            <div className="window-body" style={{ margin: 0, padding: 0, background: '#000', height: '180px', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+            
               <video 
                 id={`video-element-${userId}`} 
                 autoPlay 
@@ -1705,6 +1744,32 @@ const App: React.FC = () => {
           </div>
         );
       })}
+
+      {/* Self Preview Video Window */}
+      {showSelfPreview && (
+        <div className="window" style={{ position: 'fixed', top: '50px', left: '20px', width: '324px', height: 'auto', zIndex: 1000, boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', transform: `translate(${videoPositions['self']?.x || 0}px, ${videoPositions['self']?.y || 0}px)` }}>
+          <div className="title-bar" onPointerDown={(e) => handleVideoDragStart(e, 'self')} style={{ cursor: 'move' }}>
+            <div className="title-bar-text">{t.self} - {t.videoStream} {t.viewingCount.replace('%d', (viewerCounts[localUserIdRef.current] || 0).toString())}</div>
+            <div className="title-bar-controls">
+              <button className="title-btn close-btn" aria-label="Close" onClick={() => {
+                setShowSelfPreview(false);
+                stopVideoEncodeLoop();
+                setIsWebcamActive(false);
+                setIsScreenActive(false);
+              }}></button>
+            </div>
+          </div>
+          <div className="window-body" style={{ margin: 0, padding: 0, background: '#000', height: '180px', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+            <video 
+              ref={selfVideoRef}
+              autoPlay 
+              muted 
+              playsInline
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+            />
+          </div>
+        </div>
+      )}
 
       {/* Color Picker Dialog */}
       {showColorPicker && (

@@ -18,7 +18,7 @@ class AudioEngine {
 
     private val sampleRate = 16000
     private val channels = 1 // Mono
-    private val frameSize = 960 // 60ms at 16kHz
+    private val frameSize = 320 // 20ms at 16kHz
     private val pcmBufferSize = frameSize
 
     private var encoderHandle: Long = 0
@@ -43,18 +43,23 @@ class AudioEngine {
         encoderHandle = createEncoder(sampleRate, channels, 2048)
         decoderHandle = createDecoder(sampleRate, channels)
 
-        val minRecBufSize = AudioRecord.getMinBufferSize(
-            sampleRate,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
-        )
-        audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            sampleRate,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            minRecBufSize.coerceAtLeast(pcmBufferSize * 2)
-        )
+        try {
+            val minRecBufSize = AudioRecord.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                minRecBufSize.coerceAtLeast(pcmBufferSize * 2)
+            )
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Ignore if microphone permission is denied or audio hardware is unavailable.
+        }
 
         val minPlayBufSize = AudioTrack.getMinBufferSize(
             sampleRate,
@@ -75,8 +80,13 @@ class AudioEngine {
         startMixer()
     }
 
-    fun startRecording(onOpusData: (ByteArray) -> Unit) {
-        audioRecord?.startRecording()
+    fun startRecording(onOpusData: (ByteArray, Int) -> Unit) {
+        try {
+            audioRecord?.startRecording()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        
         val pcmBuffer = ShortArray(pcmBufferSize)
         val opusBuffer = ByteArray(4000)
 
@@ -84,15 +94,30 @@ class AudioEngine {
             while (audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
                 val read = audioRecord?.read(pcmBuffer, 0, pcmBufferSize) ?: 0
                 if (read > 0) {
+                    var sum = 0.0
+                    for (i in 0 until read) {
+                        sum += pcmBuffer[i] * pcmBuffer[i]
+                    }
+                    val rms = Math.sqrt(sum / read)
+                    val vol = (rms / 327.67).toInt().coerceIn(0, 100)
+                    
                     val encodedSize = encode(encoderHandle, pcmBuffer, frameSize, opusBuffer)
                     if (encodedSize > 0) {
-                        onOpusData(opusBuffer.copyOf(encodedSize))
+                        onOpusData(opusBuffer.copyOf(encodedSize), vol)
                     }
                 }
             }
         }.start()
     }
     
+    fun stopRecording() {
+        try {
+            audioRecord?.stop()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     private fun startMixer() {
         isMixing = true
         Thread {
@@ -163,3 +188,5 @@ class AudioEngine {
         if (decoderHandle != 0L) destroyDecoder(decoderHandle)
     }
 }
+
+

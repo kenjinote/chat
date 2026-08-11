@@ -1,77 +1,94 @@
 package com.example.chat
 
-import android.Manifest
-import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.core.content.ContextCompat
-
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.ClickableText
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.ui.Alignment
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.ClickableText
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.chat.network.ChatMessage
 import com.example.chat.utils.TextProcessor
-import androidx.compose.ui.platform.LocalUriHandler
-import android.view.SurfaceHolder
-import android.view.SurfaceView
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageAnalysis
-import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.compose.ui.viewinterop.AndroidView
-import java.util.concurrent.Executors
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.res.stringResource
 
-// Win95 Colors
-val Win95Gray = Color(0xFFC0C0C0)
-val Win95DarkGray = Color(0xFF808080)
-val Win95Black = Color(0xFF000000)
-val Win95White = Color(0xFFFFFFFF)
+val Win95Gray = Color(192, 192, 192)
+val Win95White = Color(255, 255, 255)
+val Win95Black = Color(0, 0, 0)
+val Win95DarkGray = Color(128, 128, 128)
+val Win95TitleBlue = Color(0xFF000080)
+val Win95Blue = Color(0xFF0000FF)
 
-val win95TextStyle = TextStyle(fontSize = 28.sp, color = Win95Black, fontFamily = FontFamily.SansSerif)
+val win95TextStyle = TextStyle(
+    fontFamily = FontFamily.Monospace,
+    fontSize = 20.sp,
+    color = Win95Black
+)
 
 @Composable
-fun Win95Button(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+fun Win95Panel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Box(
         modifier = modifier
-            .clickable(onClick = onClick)
             .background(Win95Gray)
             .drawBehind {
                 val bw = 2.dp.toPx()
-                drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
-                drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
-                drawRect(Win95Black, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
-                drawRect(Win95Black, topLeft = Offset(size.width - bw, 0f), size = Size(bw, size.height))
-                drawRect(Win95DarkGray, topLeft = Offset(bw, size.height - bw * 2), size = Size(size.width - bw * 2, bw))
-                drawRect(Win95DarkGray, topLeft = Offset(size.width - bw * 2, bw), size = Size(bw, size.height - bw * 2))
+                drawRect(Win95DarkGray, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
+                drawRect(Win95DarkGray, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
+                drawRect(Win95White, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
+                drawRect(Win95White, topLeft = Offset(size.width - bw, 0f), size = Size(bw, size.height))
             }
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(2.dp)
+    ) {
+        content()
+    }
+}
+
+@Composable
+fun Win95Button(onClick: () -> Unit, modifier: Modifier = Modifier, checked: Boolean = false, content: @Composable () -> Unit) {
+    Box(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .background(if (checked) Win95White else Win95Gray)
+            .drawBehind {
+                val bw = 2.dp.toPx()
+                val topColor = if (checked) Win95DarkGray else Win95White
+                val bottomColor = if (checked) Win95White else Win95Black
+                drawRect(topColor, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
+                drawRect(topColor, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
+                drawRect(bottomColor, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
+                drawRect(bottomColor, topLeft = Offset(size.width - bw, 0f), size = Size(bw, size.height))
+            }
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         content()
@@ -79,209 +96,316 @@ fun Win95Button(onClick: () -> Unit, modifier: Modifier = Modifier, content: @Co
 }
 
 @Composable
-fun Win95TextField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier, singleLine: Boolean = true) {
-    BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = singleLine,
-        textStyle = win95TextStyle,
+fun Win95TextField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier, textStyle: TextStyle = win95TextStyle) {
+    Box(
         modifier = modifier
+            .height(60.dp)
             .background(Win95White)
             .drawBehind {
                 val bw = 2.dp.toPx()
                 drawRect(Win95DarkGray, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
                 drawRect(Win95DarkGray, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
-                drawRect(Win95Black, topLeft = Offset(bw, bw), size = Size(size.width - bw * 2, bw))
-                drawRect(Win95Black, topLeft = Offset(bw, bw), size = Size(bw, size.height - bw * 2))
                 drawRect(Win95White, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
                 drawRect(Win95White, topLeft = Offset(size.width - bw, 0f), size = Size(bw, size.height))
-                drawRect(Win95Gray, topLeft = Offset(bw, size.height - bw * 2), size = Size(size.width - bw * 2, bw))
-                drawRect(Win95Gray, topLeft = Offset(size.width - bw * 2, bw), size = Size(bw, size.height - bw * 2))
             }
-            .padding(8.dp)
-    )
+            .padding(4.dp)
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle = textStyle,
+            modifier = Modifier.fillMaxSize(),
+            cursorBrush = SolidColor(Win95Black)
+        )
+    }
 }
 
 @Composable
-fun Win95Panel(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Box(
-        modifier = modifier
-            .background(Win95White)
-            .drawBehind {
-                val bw = 2.dp.toPx()
-                drawRect(Win95DarkGray, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
-                drawRect(Win95DarkGray, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
-                drawRect(Win95Black, topLeft = Offset(bw, bw), size = Size(size.width - bw * 2, bw))
-                drawRect(Win95Black, topLeft = Offset(bw, bw), size = Size(bw, size.height - bw * 2))
-                drawRect(Win95White, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
-                drawRect(Win95White, topLeft = Offset(size.width - bw, 0f), size = Size(bw, size.height))
-                drawRect(Win95Gray, topLeft = Offset(bw, size.height - bw * 2), size = Size(size.width - bw * 2, bw))
-                drawRect(Win95Gray, topLeft = Offset(size.width - bw * 2, bw), size = Size(bw, size.height - bw * 2))
+fun Win95ComboBox(items: List<String>, selectedItem: String, onItemSelected: (String) -> Unit, modifier: Modifier = Modifier) {
+    var expanded by remember { mutableStateOf(false) }
+    Box(modifier = modifier) {
+        Win95Button(onClick = { expanded = !expanded }) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(selectedItem, style = win95TextStyle)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("▼", style = win95TextStyle.copy(fontSize = 12.sp))
             }
-    ) {
-        content()
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            items.forEach { item ->
+                DropdownMenuItem(
+                    text = { Text(item, style = win95TextStyle) },
+                    onClick = {
+                        onItemSelected(item)
+                        expanded = false
+                    }
+                )
+            }
+        }
     }
 }
 
 @Composable
 fun AndroidChatTheme(content: @Composable () -> Unit) {
     MaterialTheme(
+        colorScheme = lightColorScheme(
+            background = Win95Gray,
+            surface = Win95Gray
+        ),
         content = content
     )
 }
 
 class MainActivity : ComponentActivity() {
-
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        // Handle permission responses
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        checkAndRequestPermissions()
-
         setContent {
             AndroidChatTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
+                Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     ChatScreen()
                 }
             }
         }
     }
+}
+@Composable
+fun ColorPickerDialog(onColorSelected: (Color) -> Unit, onDismiss: () -> Unit) {
+    var customR by remember { mutableStateOf(0f) }
+    var customG by remember { mutableStateOf(0f) }
+    var customB by remember { mutableStateOf(0f) }
 
-    private fun checkAndRequestPermissions() {
-        val requiredPermissions = arrayOf(
-            Manifest.permission.CAMERA,
-            Manifest.permission.RECORD_AUDIO
-        )
-
-        val missingPermissions = requiredPermissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (missingPermissions.isNotEmpty()) {
-            requestPermissionLauncher.launch(missingPermissions.toTypedArray())
+    val palette = listOf(
+        Color(200, 50, 50), Color(50, 150, 50), Color(50, 50, 200),
+        Color(180, 180, 50), Color(180, 50, 180), Color(50, 180, 180),
+        Color(255, 128, 0), Color(128, 0, 255), Color(0, 128, 255),
+        Color(128, 200, 0), Color(255, 0, 128), Color(0, 200, 128),
+        Color.Black, Color.DarkGray, Color.Gray, Color.LightGray
+    )
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .background(Win95Gray)
+                .drawBehind {
+                    val bw = 2.dp.toPx()
+                    drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
+                    drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
+                    drawRect(Win95Black, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
+                    drawRect(Win95Black, topLeft = Offset(size.width - bw, 0f), size = Size(bw, size.height))
+                }
+                .padding(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().background(Win95TitleBlue).padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Color", color = Win95White, style = win95TextStyle.copy(fontWeight = FontWeight.Bold))
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Column {
+                for (row in 0 until 4) {
+                    Row {
+                        for (colIdx in 0 until 4) {
+                            val col = palette[row * 4 + colIdx]
+                            Box(modifier = Modifier
+                                .size(32.dp).padding(2.dp).background(col).border(1.dp, Win95Black)
+                                .clickable { onColorSelected(col) }
+                            )
+                        }
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Custom Color:", style = win95TextStyle)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("R", style = win95TextStyle, modifier = Modifier.width(24.dp))
+                Slider(value = customR, onValueChange = { customR = it }, modifier = Modifier.weight(1f))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("G", style = win95TextStyle, modifier = Modifier.width(24.dp))
+                Slider(value = customG, onValueChange = { customG = it }, modifier = Modifier.weight(1f))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("B", style = win95TextStyle, modifier = Modifier.width(24.dp))
+                Slider(value = customB, onValueChange = { customB = it }, modifier = Modifier.weight(1f))
+            }
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.size(32.dp).background(Color(customR, customG, customB)).border(1.dp, Win95Black))
+                Win95Button(onClick = { onColorSelected(Color(customR, customG, customB)) }) {
+                    Text("OK", style = win95TextStyle)
+                }
+            }
         }
     }
 }
 
 @Composable
-fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
-    val messages by viewModel.messages.collectAsState()
-    val connectionState by viewModel.connectionState.collectAsState()
-    var inputText by remember { mutableStateOf("") }
-    var ipAddress by remember { mutableStateOf("chat-lb-2026.japaneast.cloudapp.azure.com") }
+fun MoveRoomDialog(viewModel: ChatViewModel, onDismiss: () -> Unit, onConfirm: (String, Boolean) -> Unit) {
+    var roomNameInput by remember { mutableStateOf("") }
     var isPrivate by remember { mutableStateOf(false) }
-    var renameText by remember { mutableStateOf("") }
-    val uriHandler = LocalUriHandler.current
+    val roomList by viewModel.roomList.collectAsState()
+    val filteredRooms = roomList.filter { it.name.contains(roomNameInput, ignoreCase = true) }
     
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
-
-    LaunchedEffect(Unit) {
-        if (connectionState == "Disconnected") {
-            viewModel.connect(ipAddress, isPrivate)
-        }
+    DisposableEffect(Unit) {
+        viewModel.requestRooms()
+        onDispose { viewModel.closeRooms() }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Win95Gray).padding(8.dp)) {
-        // Connection Header
-        if (connectionState == "Disconnected" || connectionState == "Failed") {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Server IP:", style = win95TextStyle)
-                Spacer(modifier = Modifier.width(8.dp))
-                Win95TextField(
-                    value = ipAddress,
-                    onValueChange = { ipAddress = it },
-                    modifier = Modifier.weight(1f),
-                    singleLine = true
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = isPrivate, onCheckedChange = { isPrivate = it })
-                Text("Private", style = win95TextStyle)
-                Spacer(modifier = Modifier.width(16.dp))
-                Win95Button(onClick = { viewModel.connect(ipAddress, isPrivate) }) {
-                    Text("Connect", style = win95TextStyle)
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.width(320.dp).background(Win95Gray)
+                .drawBehind {
+                    val bw = 2.dp.toPx()
+                    drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
+                    drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
+                    drawRect(Win95Black, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
+                    drawRect(Win95Black, topLeft = Offset(size.width - bw, 0f), size = Size(bw, size.height))
                 }
+                .padding(2.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().background(Color(0xFF000080)).padding(horizontal = 4.dp, vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = stringResource(R.string.move_room_btn), color = Color.White, fontWeight = FontWeight.Bold, style = win95TextStyle)
             }
-            Spacer(modifier = Modifier.weight(1f))
-        } else {
-            // No top header in connected state (matches Windows UI)
-
-
-            // Main Area (Chat Log + User List)
-            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                // Left: Chat Log
-                Column(modifier = Modifier.weight(7f).fillMaxHeight()) {
-                    // Video View Area is currently hidden to remove the black rectangle
-                    /*
-                    Row(modifier = Modifier.fillMaxWidth().height(120.dp)) {
-                        AndroidView(
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
-                            factory = { ctx ->
-                                SurfaceView(ctx).apply {
-                                    holder.addCallback(object : SurfaceHolder.Callback {
-                                        override fun surfaceCreated(holder: SurfaceHolder) {
-                                            viewModel.getVideoEngine().initDecoder(holder.surface)
-                                        }
-                                        override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
-                                        override fun surfaceDestroyed(holder: SurfaceHolder) {}
-                                    })
-                                }
-                            }
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        LaunchedEffect(Unit) {
-                            val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
-                            cameraProviderFuture.addListener({
-                                val cameraProvider = cameraProviderFuture.get()
-                                val imageAnalysis = ImageAnalysis.Builder()
-                                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                    .build()
-                                    .also {
-                                        it.setAnalyzer(Executors.newSingleThreadExecutor()) { imageProxy ->
-                                            viewModel.getVideoEngine().encodeFrame(imageProxy)
-                                        }
-                                    }
-                                val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
-                                try {
-                                    cameraProvider.unbindAll()
-                                    cameraProvider.bindToLifecycle(lifecycleOwner, cameraSelector, imageAnalysis)
-                                    viewModel.getVideoEngine().initEncoder()
-                                } catch(exc: Exception) {
-                                    exc.printStackTrace()
-                                }
-                            }, ContextCompat.getMainExecutor(context))
+            Column(modifier = Modifier.padding(8.dp)) {
+                Win95Panel(modifier = Modifier.fillMaxWidth().background(Win95White)) {
+                    BasicTextField(
+                        value = roomNameInput, onValueChange = { roomNameInput = it },
+                        modifier = Modifier.fillMaxWidth().padding(4.dp), textStyle = win95TextStyle, singleLine = true, cursorBrush = SolidColor(Win95Black)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Win95Panel(modifier = Modifier.fillMaxWidth().height(200.dp).background(Win95White)) {
+                    LazyColumn(modifier = Modifier.fillMaxSize().padding(0.5.dp)) {
+                        items(filteredRooms) { room ->
+                            Text(
+                                text = " ()", style = win95TextStyle,
+                                modifier = Modifier.fillMaxWidth().clickable { roomNameInput = room.name }.padding(vertical = 2.dp)
+                            )
                         }
                     }
-                    */
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    // Message List
-                    Win95Panel(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                        LazyColumn(modifier = Modifier.fillMaxSize().padding(4.dp)) {
-                            items(messages) { msg ->
-                                Column(modifier = Modifier.padding(vertical = 4.dp)) {
-                                    Text(text = msg.userName ?: "Unknown", fontWeight = FontWeight.Bold, color = if (msg.type == "system") Color.Red else Color.Unspecified, style = win95TextStyle)
-                                    val contentToDisplay = msg.msg ?: msg.content ?: ""
-                                    val annotatedStr = TextProcessor.formatMessage(contentToDisplay)
-                                    ClickableText(
-                                        text = annotatedStr,
-                                        style = win95TextStyle.copy(color = if (msg.type == "system") Color.Red else Win95Black),
-                                        onClick = { offset ->
-                                            annotatedStr.getStringAnnotations(tag = "URL", start = offset, end = offset)
-                                                .firstOrNull()?.let { annotation -> uriHandler.openUri(annotation.item) }
-                                        }
-                                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = isPrivate, onCheckedChange = { isPrivate = it })
+                        Text(stringResource(R.string.private_room), style = win95TextStyle)
+                    }
+                    Row {
+                        Win95Button(onClick = { onConfirm(roomNameInput, isPrivate) }) { Text("OK", style = win95TextStyle) }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Win95Button(onClick = onDismiss) { Text("Cancel", style = win95TextStyle) }
+                    }
+                }
+            }
+        }
+    }
+}
+@Composable
+fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
+    val connectionState by viewModel.connectionState.collectAsState()
+    val messages by viewModel.messages.collectAsState()
+    val watchingUserId by viewModel.watchingUserId.collectAsState()
+    val uriHandler = LocalUriHandler.current
+
+    var inputText by remember { mutableStateOf("") }
+    var isVideoOn by remember { mutableStateOf(true) }
+    var isTalkOn by remember { mutableStateOf(false) }
+    var volumeLevel by remember { mutableStateOf(50f) }
+    var showMoveRoomDialog by remember { mutableStateOf(false) }
+    
+    // Formatting states
+    var isBold by remember { mutableStateOf(false) }
+    var isItalic by remember { mutableStateOf(false) }
+    var isUnderline by remember { mutableStateOf(false) }
+    var selectedSize by remember { mutableStateOf("10") }
+    var selectedColor by remember { mutableStateOf(Win95Black) }
+    var showColorPicker by remember { mutableStateOf(false) }
+    
+    val fontSizes = listOf("8", "9", "10", "11", "12", "14", "16", "18", "20", "22", "24", "26", "28", "36", "48", "72")
+
+    if (showMoveRoomDialog) {
+        MoveRoomDialog(
+            viewModel = viewModel,
+            onDismiss = { showMoveRoomDialog = false },
+            onConfirm = { roomName, isPrivate ->
+                showMoveRoomDialog = false
+                viewModel.moveRoom(roomName, isPrivate)
+            }
+        )
+    }
+
+    if (showColorPicker) {
+        ColorPickerDialog(
+            onColorSelected = { col ->
+                selectedColor = col
+                showColorPicker = false
+            },
+            onDismiss = { showColorPicker = false }
+        )
+    }
+
+    Win95Panel(modifier = Modifier.fillMaxSize().padding(4.dp)) {
+        if (watchingUserId != null) {
+            Win95VideoWindow(
+                title = "Video - ",
+                onClose = { viewModel.setWatchingUserId(null) },
+                videoEngine = viewModel.getVideoEngine()
+            )
+        }
+        Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+            // Main Chat Area
+            Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                // Left: Chat Messages
+                Win95Panel(modifier = Modifier.weight(7f).fillMaxHeight()) {
+                    LazyColumn(modifier = Modifier.fillMaxSize().padding(0.5.dp)) {
+                        items(messages) { msg ->
+                            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+                                if (msg.type != "system" && msg.type != "sysmsg") {
+                                    val uName = msg.userName ?: "Unknown"
+                                    val displayUser = if (uName.contains("#")) uName.substringBefore("#") else uName
+                                    val nclr = msg.nclr ?: -1
+                                    val userColor = if (nclr != -1) {
+                                        val b = (nclr shr 16) and 0xFF
+                                        val g = (nclr shr 8) and 0xFF
+                                        val r = nclr and 0xFF
+                                        Color(r, g, b, 255)
+                                    } else Win95Black
+                                    
+                                    Text(text = "${displayUser}: ", fontWeight = FontWeight.Bold, color = userColor, style = win95TextStyle)
                                 }
+                                
+                                val contentToDisplay = msg.msg ?: msg.content ?: ""
+                                val annotatedStr = TextProcessor.formatMessage(contentToDisplay)
+                                
+                                val msgColor = if (msg.type == "system" || msg.type == "sysmsg") Win95DarkGray else {
+                                    val c = msg.clr ?: 0
+                                    if (c != 0) {
+                                        val b = (c shr 16) and 0xFF
+                                        val g = (c shr 8) and 0xFF
+                                        val r = c and 0xFF
+                                        Color(r, g, b, 255)
+                                    } else Win95Black
+                                }
+                                
+                                val msgFontSize = (msg.sz ?: 10).sp * 2
+                                val msgFontWeight = if (msg.b == true) FontWeight.Bold else FontWeight.Normal
+                                val msgFontStyle = if (msg.i == true) FontStyle.Italic else FontStyle.Normal
+                                
+                                ClickableText(
+                                    text = annotatedStr,
+                                    style = win95TextStyle.copy(
+                                        color = msgColor,
+                                        fontSize = msgFontSize,
+                                        fontWeight = msgFontWeight,
+                                        fontStyle = msgFontStyle
+                                    ),
+                                    onClick = { offset ->
+                                        annotatedStr.getStringAnnotations(tag = "URL", start = offset, end = offset)
+                                            .firstOrNull()?.let { annotation -> uriHandler.openUri(annotation.item) }
+                                    }
+                                )
                             }
                         }
                     }
@@ -291,19 +415,96 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
 
                 // Right: User List
                 Column(modifier = Modifier.weight(3f).fillMaxHeight()) {
-                    Text("ユーザー一覧", fontWeight = FontWeight.Bold, style = win95TextStyle)
-                    Spacer(modifier = Modifier.height(4.dp))
                     val users by viewModel.users.collectAsState()
+                    val ignoredUsers by viewModel.ignoredUserIds.collectAsState()
+                    Text(stringResource(R.string.user_list_fmt, users.size), fontWeight = FontWeight.Bold, style = win95TextStyle)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    
+                    var menuExpandedUserId by remember { mutableStateOf<String?>(null) }
+                    
                     Win95Panel(modifier = Modifier.weight(1f).fillMaxWidth()) {
                         LazyColumn(modifier = Modifier.fillMaxSize().padding(4.dp)) {
                             items(users) { user ->
-                                Text(user, style = win95TextStyle, modifier = Modifier.padding(vertical = 4.dp))
+                                val uName = user.userName
+                                val baseDisplayUser = if (uName.contains("#")) uName.substringBefore("#") else uName
+                                val isMe = user.userId == viewModel.myUserId
+                                val displayUser = if (isMe) baseDisplayUser + stringResource(R.string.you_suffix) else baseDisplayUser
+                                val videoStreamers by viewModel.videoStreamers.collectAsState()
+                                val isStreaming = videoStreamers.containsKey(user.userId)
+                                val prefix = "😊" + (if(isStreaming) "📺" else "")
+                                val finalDisplayUser = prefix + displayUser
+                                val isMenuExpanded = menuExpandedUserId == user.userId
+                                
+                                val baseColor = if (user.nclr != -1) {
+                                    val b = (user.nclr shr 16) and 0xFF
+                                    val g = (user.nclr shr 8) and 0xFF
+                                    val r = user.nclr and 0xFF
+                                    Color(r, g, b, 255)
+                                } else Win95Black
+                                
+                                val textColor = if (isMenuExpanded) Color.White else baseColor
+                                val bgColor = if (isMenuExpanded) Color(0xFF000080) else Color.Transparent
+
+                                Box(modifier = Modifier.fillMaxWidth().background(bgColor).clickable {
+                                    menuExpandedUserId = user.userId
+                                }) {
+                                    Text(
+                                        text = finalDisplayUser,
+                                        style = win95TextStyle.copy(fontSize = 16.sp, color = textColor, fontWeight = if (isMe) FontWeight.Bold else FontWeight.Normal),
+                                        modifier = Modifier.padding(horizontal = 0.5.dp, vertical = 0.5.dp).fillMaxWidth()
+                                    )
+                                    
+                                    DropdownMenu(
+                                        expanded = isMenuExpanded,
+                                        onDismissRequest = { menuExpandedUserId = null },
+                                        modifier = Modifier.background(Win95Gray)
+                                            .drawBehind {
+                                                val bw = 2.dp.toPx()
+                                                drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(size.width, bw))
+                                                drawRect(Win95White, topLeft = Offset(0f, 0f), size = Size(bw, size.height))
+                                                drawRect(Win95Black, topLeft = Offset(0f, size.height - bw), size = Size(size.width, bw))
+                                                drawRect(Win95Black, topLeft = Offset(size.width - bw, 0f), size = Size(bw, size.height))
+                                            }.padding(2.dp)
+                                    ) {
+                                        if (isMe) {
+                                            DropdownMenuItem(
+                                                text = { Text(if (isVideoOn) "✔ " + stringResource(R.string.share_video) else stringResource(R.string.share_video), style = win95TextStyle) },
+                                                onClick = {
+                                                    menuExpandedUserId = null
+                                                    isVideoOn = !isVideoOn
+                                                }
+                                            )
+                                        } else {
+                                            val isIgnored = ignoredUsers.contains(user.userId)
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.watch_video), style = win95TextStyle) },
+                                                onClick = { 
+                                                    viewModel.setWatchingUserId(user.userId)
+                                                    menuExpandedUserId = null 
+                                                }
+                                            )
+                                            Divider(color = Win95DarkGray, thickness = 1.dp)
+                                            Divider(color = Win95White, thickness = 1.dp)
+                                            DropdownMenuItem(
+                                                text = { Text(if (isIgnored) "✔ " + stringResource(R.string.ignore_user) else stringResource(R.string.ignore_user), style = win95TextStyle) },
+                                                onClick = { 
+                                                    menuExpandedUserId = null 
+                                                    viewModel.toggleIgnoreUser(user.userId)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.report_user), style = win95TextStyle) },
+                                                onClick = { menuExpandedUserId = null }
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Win95Button(onClick = { /* Move Room */ }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Move", style = win95TextStyle)
+                    Win95Button(onClick = { showMoveRoomDialog = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.move_room_btn), style = win95TextStyle)
                     }
                 }
             }
@@ -311,21 +512,23 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
             Spacer(modifier = Modifier.height(4.dp))
 
             // Toolbar Area
-            var isVideoOn by remember { mutableStateOf(true) }
-            var isTalkOn by remember { mutableStateOf(false) }
-            var volumeLevel by remember { mutableStateOf(50f) }
-
             Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                // Formatting (Dummy for UI match)
-                Win95Button(onClick = {}, modifier = Modifier.padding(end=4.dp)) { Text("B", style = win95TextStyle) }
-                Win95Button(onClick = {}, modifier = Modifier.padding(end=4.dp)) { Text("I", style = win95TextStyle) }
-                Win95Button(onClick = {}, modifier = Modifier.padding(end=4.dp)) { Text("U", style = win95TextStyle) }
-                Win95Button(onClick = {}, modifier = Modifier.padding(end=4.dp)) { Text("Sz", style = win95TextStyle) }
-                Win95Button(onClick = {}, modifier = Modifier.padding(end=4.dp)) { Text("Col", style = win95TextStyle) }
+                Win95Button(onClick = { isBold = !isBold }, checked = isBold, modifier = Modifier.padding(end=4.dp)) { Text("B", style = win95TextStyle.copy(fontWeight = FontWeight.Bold)) }
+                Win95Button(onClick = { isItalic = !isItalic }, checked = isItalic, modifier = Modifier.padding(end=4.dp)) { Text("I", style = win95TextStyle.copy(fontStyle = FontStyle.Italic)) }
+                Win95Button(onClick = { isUnderline = !isUnderline }, checked = isUnderline, modifier = Modifier.padding(end=4.dp)) { Text("U", style = win95TextStyle) } 
+                
+                Win95ComboBox(items = fontSizes, selectedItem = selectedSize, onItemSelected = { selectedSize = it }, modifier = Modifier.padding(end=4.dp))
+                
+                Win95Button(onClick = { showColorPicker = true }, modifier = Modifier.padding(end=4.dp)) { 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Col", style = win95TextStyle)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Box(modifier = Modifier.size(16.dp).background(selectedColor).border(1.dp, Win95Black))
+                    }
+                }
                 
                 Spacer(modifier = Modifier.width(16.dp))
                 
-                // Media Controls
                 Win95Button(onClick = { isTalkOn = !isTalkOn }, modifier = Modifier.padding(end=4.dp)) { 
                     Text(if(isTalkOn) "Talk" else "Mute", style = win95TextStyle) 
                 }
@@ -343,13 +546,30 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                 Win95TextField(
                     value = inputText,
                     onValueChange = { inputText = it },
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    textStyle = win95TextStyle.copy(
+                        color = selectedColor,
+                        fontWeight = if (isBold) FontWeight.Bold else FontWeight.Normal,
+                        fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal,
+                        fontSize = (selectedSize.toIntOrNull() ?: 10).sp * 2
+                    )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Win95Button(
                     onClick = { 
                         if (inputText.isNotBlank()) {
-                            viewModel.sendMessage(inputText)
+                            val r = (selectedColor.red * 255).toInt()
+                            val g = (selectedColor.green * 255).toInt()
+                            val b = (selectedColor.blue * 255).toInt()
+                            val cInt = (r shl 16) or (g shl 8) or b
+                            viewModel.sendMessage(
+                                text = inputText,
+                                isBold = isBold,
+                                isItalic = isItalic,
+                                isUnderline = isUnderline,
+                                fontSize = selectedSize.toIntOrNull() ?: 10,
+                                colorInt = cInt
+                            )
                             inputText = ""
                         }
                     }
@@ -361,11 +581,81 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
     }
 }
 
-@Preview(showBackground = true)
+
 @Composable
-fun ChatScreenPreview() {
-    AndroidChatTheme {
-        ChatScreen()
+fun Win95VideoWindow(title: String, onClose: () -> Unit, videoEngine: com.example.chat.media.VideoEngine) {
+    var offsetX by remember { mutableStateOf(50f) }
+    var offsetY by remember { mutableStateOf(50f) }
+    
+    Box(
+        modifier = Modifier
+            .offset { androidx.compose.ui.unit.IntOffset(offsetX.toInt(), offsetY.toInt()) }
+            .size(200.dp, 180.dp)
+            .background(Win95Gray)
+            .drawBehind {
+                val bw = 2.dp.toPx()
+                drawRect(Win95White, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, bw))
+                drawRect(Win95White, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(bw, size.height))
+                drawRect(Win95Black, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - bw), size = androidx.compose.ui.geometry.Size(size.width, bw))
+                drawRect(Win95Black, topLeft = androidx.compose.ui.geometry.Offset(size.width - bw, 0f), size = androidx.compose.ui.geometry.Size(bw, size.height))
+            }
+            .padding(2.dp)
+            .pointerInput(Unit) {
+                detectDragGestures { change, dragAmount ->
+                    change.consume()
+                    offsetX += dragAmount.x
+                    offsetY += dragAmount.y
+                }
+            }
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Title bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Win95TitleBlue)
+                    .padding(2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    style = win95TextStyle.copy(color = Color.White, fontWeight = FontWeight.Bold),
+                    modifier = Modifier.weight(1f).padding(start = 2.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .background(Win95Gray)
+                        .clickable { onClose() }
+                ) {
+                    Text("X", style = win95TextStyle.copy(fontSize = 10.sp), modifier = Modifier.align(Alignment.Center))
+                }
+            }
+            
+            // Video surface
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(4.dp)
+                    .background(Color.Black)
+            ) {
+                androidx.compose.ui.viewinterop.AndroidView(
+                    factory = { ctx ->
+                        android.view.SurfaceView(ctx).apply {
+                            holder.addCallback(object : android.view.SurfaceHolder.Callback {
+                                override fun surfaceCreated(h: android.view.SurfaceHolder) {
+                                    videoEngine.initDecoder(h.surface)
+                                }
+                                override fun surfaceChanged(h: android.view.SurfaceHolder, format: Int, w: Int, h2: Int) {}
+                                override fun surfaceDestroyed(h: android.view.SurfaceHolder) {
+                                    videoEngine.stopDecoder()
+                                }
+                            })
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
     }
 }
-

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lobby">Lobi</string>
+    <string name="rename_btn">Kullanıcı Adı Değişikliği...</string>
+    <string name="private_room">Özel</string>
+    <string name="talk">Konuş</string>
+    <string name="send">Gönder</string>
+    <string name="joined_network">Ağa katıldı</string>
+    <string name="moved_to">%1$s odasına taşınılıyor...</string>
+    <string name="move_room_btn">Oda Değiştir</string>
+    <string name="user_list_fmt">User List (%1$d)</string>
+    <string name="room_enter_fmt">%1$s %2$s odasına girdi.</string>
+    <string name="room_leave_fmt">%1$s %2$s odasından ayrıldı.</string>
+</resources>

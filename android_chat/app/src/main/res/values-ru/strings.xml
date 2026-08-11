@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lobby">Лобби</string>
+    <string name="rename_btn">Изменение имени пользователя...</string>
+    <string name="private_room">Приватный</string>
+    <string name="talk">Говорить</string>
+    <string name="send">Отправить</string>
+    <string name="joined_network">Присоединился к сети</string>
+    <string name="moved_to">Перемещение в %1$s...</string>
+    <string name="move_room_btn">Сменить комнату</string>
+    <string name="user_list_fmt">Список пользователей (%1$d)</string>
+    <string name="room_enter_fmt">%1$s вошел(ла) в %2$s.</string>
+    <string name="room_leave_fmt">%1$s покинул(а) %2$s.</string>
+</resources>

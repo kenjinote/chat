@@ -15,6 +15,8 @@ data class MediaHeader(
         const val SIZE = 92
         const val AUDIO: Byte = 1
         const val VIDEO: Byte = 2
+        const val STREAM_STATUS: Byte = 4
+        const val VIDEO_H264: Byte = 5
         const val HOLE_PUNCH: Byte = 255.toByte()
 
         fun parse(data: ByteArray): Pair<MediaHeader, ByteArray>? {

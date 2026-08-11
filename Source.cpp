@@ -5697,7 +5697,7 @@ void ClearUserList() {
 }
 
 void SetWindowTitle(HWND hWnd) {
-    std::wstring title = GetString(IDS_WINDOW_TITLE) + L" - [" + g_currentRoom + L"]" + (g_isPrivateRoom ? L" (" + GetString(IDS_PRIVATE) + L")" : L"");
+    std::wstring title = L"[" + g_currentRoom + L"]" + (g_isPrivateRoom ? L" (" + GetString(IDS_PRIVATE) + L")" : L"") + L" - " + GetString(IDS_WINDOW_TITLE);
     SetWindowText(hWnd, title.c_str());
 }
 

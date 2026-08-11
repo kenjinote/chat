@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lobby">로비</string>
+    <string name="rename_btn">사용자 이름 변경...</string>
+    <string name="private_room">비공개</string>
+    <string name="talk">말하기</string>
+    <string name="send">보내기</string>
+    <string name="joined_network">네트워크에 참여했습니다</string>
+    <string name="moved_to">%1$s(으)로 이동 중입니다...</string>
+    <string name="move_room_btn">방 이동</string>
+    <string name="user_list_fmt">사용자 목록 (%1$d)</string>
+    <string name="room_enter_fmt">%1$s(이)가 %2$s에 입장했습니다.</string>
+    <string name="room_leave_fmt">%1$s(이)가 %2$s에서 퇴장했습니다.</string>
+</resources>

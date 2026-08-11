@@ -196,6 +196,26 @@ udpSocket.on('message', (msg, rinfo) => {
     }
 });
 const decoders = new Map();
+const streamWatchers = new Map();
+setInterval(() => {
+    const now = Date.now();
+    for (const [targetUserId, watchers] of streamWatchers.entries()) {
+        for (const [watcherId, lastSeen] of watchers.entries()) {
+            if (now - lastSeen > 3000) {
+                watchers.delete(watcherId);
+            }
+        }
+        // Broadcast to everyone in the room
+        for (const [id, clientSocket] of connectedClients.entries()) {
+            if (clientSocket.data.roomUsers && clientSocket.data.roomUsers.has(targetUserId)) {
+                clientSocket.emit('viewer-count', { userId: targetUserId, count: watchers.size });
+            }
+        }
+        if (watchers.size === 0) {
+            streamWatchers.delete(targetUserId);
+        }
+    }
+}, 1000);
 io.on('connection', (socket) => {
     console.log(`[WS] Client connected: ${socket.id}`);
     let tcpClient = new net.Socket();
@@ -421,9 +441,14 @@ io.on('connection', (socket) => {
         udpSocket.send(header, C_UDP_PORT, socket.data.currentTcpIp || C_SERVER_IP);
     });
     socket.on('watch-video', (targetUserId) => {
-        console.log(`[DEBUG] Received watch-video for ${targetUserId}. Session: ${socket.data.sessionId}, User: ${socket.data.userId}`);
         if (!socket.data.sessionId || !socket.data.userId || !targetUserId)
             return;
+        let watchers = streamWatchers.get(targetUserId);
+        if (!watchers) {
+            watchers = new Map();
+            streamWatchers.set(targetUserId, watchers);
+        }
+        watchers.set(socket.data.userId, Date.now());
         console.log(`[UDP SEND] Watch packet from ${socket.data.userId} to target '${targetUserId}' (len: ${targetUserId.length})`);
         // Also send TCP subscribe_video to let the server know we want this video stream
         const subPayload = {

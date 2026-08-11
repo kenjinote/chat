@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lobby">大厅</string>
+    <string name="rename_btn">用户名更改...</string>
+    <string name="private_room">私密</string>
+    <string name="talk">说话</string>
+    <string name="send">发送</string>
+    <string name="joined_network">已加入网络</string>
+    <string name="moved_to">正在移动到 %1$s...</string>
+    <string name="move_room_btn">移动房间</string>
+    <string name="user_list_fmt">用户列表 (%1$d)</string>
+    <string name="room_enter_fmt">%1$s 进入了 %2$s。</string>
+    <string name="room_leave_fmt">%1$s 离开了 %2$s。</string>
+</resources>

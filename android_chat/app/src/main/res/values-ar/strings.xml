@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lobby">الردهة</string>
+    <string name="rename_btn">تغيير اسم المستخدم...</string>
+    <string name="private_room">خاص</string>
+    <string name="talk">تحدث</string>
+    <string name="send">إرسال</string>
+    <string name="joined_network">انضم إلى الشبكة</string>
+    <string name="moved_to">جاري الانتقال إلى %1$s...</string>
+    <string name="move_room_btn">تغيير الغرفة</string>
+    <string name="user_list_fmt">User List (%1$d)</string>
+    <string name="room_enter_fmt">دخل %1$s إلى %2$s.</string>
+    <string name="room_leave_fmt">غادر %1$s %2$s.</string>
+</resources>

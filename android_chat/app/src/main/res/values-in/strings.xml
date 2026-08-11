@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lobby">Lobi</string>
+    <string name="rename_btn">Perubahan Nama Pengguna...</string>
+    <string name="private_room">Pribadi</string>
+    <string name="talk">Bicara</string>
+    <string name="send">Kirim</string>
+    <string name="joined_network">Bergabung dengan jaringan</string>
+    <string name="moved_to">Berpindah ke %1$s...</string>
+    <string name="move_room_btn">Pindah Ruangan</string>
+    <string name="user_list_fmt">User List (%1$d)</string>
+    <string name="room_enter_fmt">%1$s memasuki %2$s.</string>
+    <string name="room_leave_fmt">%1$s meninggalkan %2$s.</string>
+</resources>

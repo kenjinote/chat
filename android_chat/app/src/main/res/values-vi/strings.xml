@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lobby">Sảnh</string>
+    <string name="rename_btn">Thay đổi tên người dùng...</string>
+    <string name="private_room">Riêng tư</string>
+    <string name="talk">Nói</string>
+    <string name="send">Gửi</string>
+    <string name="joined_network">Đã tham gia mạng</string>
+    <string name="moved_to">Đang chuyển đến %1$s...</string>
+    <string name="move_room_btn">Chuyển phòng</string>
+    <string name="user_list_fmt">User List (%1$d)</string>
+    <string name="room_enter_fmt">%1$s đã vào %2$s.</string>
+    <string name="room_leave_fmt">%1$s đã rời khỏi %2$s.</string>
+</resources>

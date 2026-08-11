@@ -14,6 +14,12 @@ import java.net.InetAddress
 import java.net.Socket
 
 @Serializable
+data class RoomItem(
+    val name: String,
+    val count: Int
+)
+
+@Serializable
 data class UserItem(
     val userId: String,
     val userName: String,
@@ -43,7 +49,8 @@ data class ChatMessage(
     val u: Boolean? = null,
     val sz: Int? = null,
     val clr: Int? = null,
-    val users: List<UserItem>? = null
+    val users: List<UserItem>? = null,
+    val rooms: List<RoomItem>? = null
 )
 
 class NetworkClient {

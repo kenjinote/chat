@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="lobby">लॉबी</string>
+    <string name="rename_btn">उपयोगकर्ता नाम परिवर्तन...</string>
+    <string name="private_room">निजी</string>
+    <string name="talk">बोलें</string>
+    <string name="send">भेजें</string>
+    <string name="joined_network">नेटवर्क से जुड़ गए</string>
+    <string name="moved_to">%1$s में जा रहे हैं...</string>
+    <string name="move_room_btn">कमरा बदलें</string>
+    <string name="user_list_fmt">User List (%1$d)</string>
+    <string name="room_enter_fmt">%1$s ने %2$s में प्रवेश किया।</string>
+    <string name="room_leave_fmt">%1$s ने %2$s छोड़ दिया।</string>
+</resources>

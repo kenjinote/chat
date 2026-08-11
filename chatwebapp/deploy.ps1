@@ -27,7 +27,7 @@ if (-not $backendOnly) {
     Compress-Archive -Path dist\* -DestinationPath deploy_dist.zip -Force
     
     Write-Host "3/4 Uploading to server..."
-    scp -o StrictHostKeyChecking=no deploy_dist.zip "${remoteUser}@${remoteHost}:~/deploy_dist.zip"
+    scp -o StrictHostKeyChecking=no deploy_dist.zip "${remoteUser}@${remoteHost}:~/"
     
     Write-Host "4/4 Extracting on server..."
     ssh -o StrictHostKeyChecking=no ${remoteUser}@${remoteHost} "sudo rm -rf ${remoteDistPath}/* && sudo unzip -o deploy_dist.zip -d ${remoteDistPath} && sudo chown -R ${remoteUser}:${remoteUser} ${remoteDistPath}"
