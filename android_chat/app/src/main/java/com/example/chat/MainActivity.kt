@@ -422,6 +422,7 @@ var inputText by remember { mutableStateOf("") }
                                 val msgFontSize = (msg.sz ?: 10).sp * 2
                                 val msgFontWeight = if (msg.b == true) FontWeight.Bold else FontWeight.Normal
                                 val msgFontStyle = if (msg.i == true) FontStyle.Italic else FontStyle.Normal
+                                val msgTextDecoration = if (msg.u == true) TextDecoration.Underline else TextDecoration.None
                                 
                                 val builder = androidx.compose.ui.text.AnnotatedString.Builder()
                                 if (msg.type != "system" && msg.type != "sysmsg") {
@@ -443,7 +444,7 @@ var inputText by remember { mutableStateOf("") }
                                 val contentToDisplay = msg.msg ?: msg.content ?: ""
                                 val annotatedStr = TextProcessor.formatMessage(contentToDisplay)
                                 
-                                builder.withStyle(androidx.compose.ui.text.SpanStyle(color = msgColor, fontSize = msgFontSize, fontWeight = msgFontWeight, fontStyle = msgFontStyle)) {
+                                builder.withStyle(androidx.compose.ui.text.SpanStyle(color = msgColor, fontSize = msgFontSize, fontWeight = msgFontWeight, fontStyle = msgFontStyle, textDecoration = msgTextDecoration)) {
                                     append(annotatedStr)
                                 }
                                 
