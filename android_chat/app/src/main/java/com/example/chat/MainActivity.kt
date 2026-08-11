@@ -12,6 +12,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -54,6 +55,7 @@ import androidx.compose.ui.res.stringResource
 val Win95Gray = Color(192, 192, 192)
 val Win95White = Color(255, 255, 255)
 val Win95Black = Color(0, 0, 0)
+val SpeakActiveGreen = Color(100, 255, 100)
 val Win95DarkGray = Color(128, 128, 128)
 val Win95TitleBlue = Color(0xFF000080)
 val Win95Blue = Color(0xFF0000FF)
@@ -83,11 +85,11 @@ fun Win95Panel(modifier: Modifier = Modifier, backgroundColor: Color = Win95Gray
 }
 
 @Composable
-fun Win95Button(onClick: () -> Unit, modifier: Modifier = Modifier, checked: Boolean = false, content: @Composable () -> Unit) {
+fun Win95Button(onClick: () -> Unit, modifier: Modifier = Modifier, checked: Boolean = false, checkedBackgroundColor: androidx.compose.ui.graphics.Color = Win95Gray, content: @Composable () -> Unit) {
     Box(
         modifier = modifier
             .clickable(onClick = onClick)
-            .background(if (checked) Win95White else Win95Gray)
+            .background(if (checked) checkedBackgroundColor else Win95Gray)
             .drawBehind {
                 val bw = 1.dp.toPx()
                 val topColor = if (checked) Win95DarkGray else Win95White
@@ -100,7 +102,9 @@ fun Win95Button(onClick: () -> Unit, modifier: Modifier = Modifier, checked: Boo
             .padding(horizontal = 8.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
-        content()
+        Box(modifier = Modifier.offset(x = if (checked) 1.dp else 0.dp, y = if (checked) 1.dp else 0.dp)) {
+            content()
+        }
     }
 }
 
@@ -595,7 +599,8 @@ var inputText by remember { mutableStateOf("") }
                         viewModel.setTalkOn(isTalkOn)
                     }, 
                     modifier = Modifier.padding(end=8.dp),
-                    checked = isTalkOn
+                    checked = isTalkOn,
+                    checkedBackgroundColor = SpeakActiveGreen
                 ) { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(painter = painterResource(id = R.drawable.ic_mic), contentDescription = "Mic", modifier = Modifier.size(24.dp), tint = Color.Black)
