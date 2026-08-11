@@ -23,7 +23,7 @@ data class RoomItem(
 data class UserItem(
     val userId: String,
     val userName: String,
-    val nclr: Int? = null
+    val nclr: Long? = null
 )
 
 @Serializable
@@ -38,11 +38,13 @@ data class ChatMessage(
     val reason: String? = null,
     val error: String? = null,
     val msg: String? = null,
+    val ip: String? = null,
+    val port: Int? = null,
     val sessionId: Int? = null,
     val secretId: String? = null,
     val roomName: String? = null,
     val pub: Boolean? = null,
-    val nclr: Int? = null,
+    val nclr: Long? = null,
     val user: String? = null,
     val b: Boolean? = null,
     val i: Boolean? = null,
@@ -78,6 +80,7 @@ class NetworkClient {
     suspend fun sendTcpMessage(message: ChatMessage) = withContext(Dispatchers.IO) {
         try {
             val jsonStr = Json.encodeToString(message)
+            android.util.Log.d("ChatApp", "Sending TCP: " + jsonStr)
             tcpWriter?.println(jsonStr)
         } catch (e: Exception) {
             e.printStackTrace()

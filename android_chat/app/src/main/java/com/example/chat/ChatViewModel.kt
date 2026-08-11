@@ -25,6 +25,16 @@ data class UserItem(val userId: String, val userName: String, val nclr: Int = -1
 data class RoomItem(val name: String, val count: Int)
 
 class ChatViewModel(application: Application) : AndroidViewModel(application) {
+    private fun fixString(s: String?): String? {
+        if (s == null) return null
+        return try {
+            val latin1Bytes = s.toByteArray(java.nio.charset.Charset.forName("ISO-8859-1"))
+            String(latin1Bytes, java.nio.charset.Charset.forName("Shift_JIS"))
+        } catch (e: Exception) {
+            s
+        }
+    }
+
 
     
     private val networkClient = NetworkClient()
@@ -80,6 +90,22 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     private var currentRoom: String = ""
 
     init {
+        audioEngine.initAudio()
+        
+        videoEngine.processEncoderOutput { h264Data ->
+            if (serverSessionId != 0) {
+                val header = MediaHeader(
+                    sessionId = serverSessionId,
+                    seqNum = videoSeqNum++,
+                    payloadType = MediaHeader.VIDEO_H264,
+                    flags = 0,
+                    timestamp = (System.currentTimeMillis() and 0xFFFFFFFF).toInt(),
+                    userId = myUserId
+                )
+                networkClient.sendUdpPacket(header.toByteArray(h264Data))
+            }
+        }
+
         viewModelScope.launch {
             while (true) {
                 delay(1000)
@@ -140,12 +166,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _ignoredUserIds.value = current
     }
 
-    fun connect(ip: String, isPrivate: Boolean = false, room: String = "ロビー") {
-        if (_connectionState.value == "Connected" || _connectionState.value == "Connecting...") {
+    fun connect(ip: String, isPrivate: Boolean = false, room: String? = null, serverRoomOverride: String? = null) {
+        if ((_connectionState.value == "Connected" || _connectionState.value == "Connecting...") && !isReconnecting) {
             return
         }
         currentIp = ip
-        currentRoom = room
+        val prevRoom = currentRoom
+        currentRoom = room ?: getApplication<Application>().getString(R.string.lobby)
         viewModelScope.launch {
             _connectionState.value = "Connecting..."
             val success = networkClient.connect(ip)
@@ -154,39 +181,50 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             if (success) {
                 _connectionState.value = "Connected"
                 startListening()
+
+        
+        Thread {
+            while (true) {
+                val udpData = networkClient.receiveUdpPacket() ?: break
+                val parsed = MediaHeader.parse(udpData)
+                if (parsed != null) {
+                    val (header, payload) = parsed
+                    if (_ignoredUserIds.value.contains(header.userId)) continue
+
+                    if (header.payloadType == MediaHeader.AUDIO && header.userId != myUserId) {
+                        audioEngine.playOpusData(header.userId, payload)
+                    } else if ((header.payloadType == MediaHeader.VIDEO || header.payloadType == MediaHeader.VIDEO_H264 || header.payloadType == MediaHeader.STREAM_STATUS) && header.userId != myUserId) {
+                        _videoStreamers.value = _videoStreamers.value + (header.userId to System.currentTimeMillis())
+                        if (_watchingUserId.value == header.userId || _watchingUserId.value == myUserId && header.userId == myUserId) {
+                            if (header.payloadType == MediaHeader.VIDEO_H264) {
+                                videoEngine.decodeH264(payload)
+                            }
+                        }
+                    }
+                }
+            }
+        }.start()
                 
                 val displayMyName = if (myUserName.contains("#")) myUserName.substringBefore("#") else myUserName
                 if (!wasReconnecting) {
                     appendSystemMessage("${getApplication<Application>().getString(R.string.joined_network)} ($displayMyName)")
                 }
-                appendSystemMessage(getApplication<Application>().getString(R.string.moved_to, room))
-                appendSystemMessage(getApplication<Application>().getString(R.string.room_enter_fmt, displayMyName, room))
+                val actualRoom = room ?: getApplication<Application>().getString(R.string.lobby)
+                if (!wasReconnecting || actualRoom != prevRoom) {
+                    appendSystemMessage(getApplication<Application>().getString(R.string.moved_to, actualRoom))
+                    appendSystemMessage(getApplication<Application>().getString(R.string.room_enter_fmt, displayMyName, actualRoom))
+                }
                 
+                val serverRoomName = serverRoomOverride ?: actualRoom
                 val joinMsg = ChatMessage(
                     type = "join", 
                     userName = myUserName, 
                     secretId = myUserId, 
                     pub = !isPrivate, 
-                    roomName = room, 
-                    nclr = myNameColor
+                    roomName = serverRoomName, 
+                    nclr = myNameColor.toLong()
                 )
                 networkClient.sendTcpMessage(joinMsg)
-
-                audioEngine.initAudio()
-                
-                videoEngine.processEncoderOutput { h264Data ->
-                    if (serverSessionId != 0) {
-                        val header = MediaHeader(
-                            sessionId = serverSessionId,
-                            seqNum = videoSeqNum++,
-                            payloadType = MediaHeader.VIDEO_H264,
-                            flags = 0,
-                            timestamp = (System.currentTimeMillis() and 0xFFFFFFFF).toInt(),
-                            userId = myUserId
-                        )
-                        networkClient.sendUdpPacket(header.toByteArray(h264Data))
-                    }
-                }
             } else {
                 _connectionState.value = "Failed"
             }
@@ -197,6 +235,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             while (true) {
                 val msgStr = networkClient.receiveTcpMessage() ?: break
+                  android.util.Log.d("ChatApp", "Received TCP: " + msgStr)
                 try {
                     val message = Json { ignoreUnknownKeys = true }.decodeFromString<ChatMessage>(msgStr)
                     if (message.sessionId != null) {
@@ -220,7 +259,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                             serverSessionId = message.sessionId
                         }
                     }
-                    handleIncomingMessage(message)
+                    if (!handleIncomingMessage(message)) break
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
@@ -229,39 +268,16 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _connectionState.value = "Disconnected"
                 appendSystemMessage(getApplication<Application>().getString(R.string.disconnected_from_server))
             }
-        }
-        
-        Thread {
-            while (true) {
-                val udpData = networkClient.receiveUdpPacket() ?: break
-                val parsed = MediaHeader.parse(udpData)
-                if (parsed != null) {
-                    val (header, payload) = parsed
-                    if (_ignoredUserIds.value.contains(header.userId)) continue
+        }    }
 
-                    if (header.payloadType == MediaHeader.AUDIO && header.userId != myUserId) {
-                        audioEngine.playOpusData(header.userId, payload)
-                    } else if ((header.payloadType == MediaHeader.VIDEO || header.payloadType == MediaHeader.VIDEO_H264 || header.payloadType == MediaHeader.STREAM_STATUS) && header.userId != myUserId) {
-                        _videoStreamers.value = _videoStreamers.value + (header.userId to System.currentTimeMillis())
-                        if (_watchingUserId.value == header.userId || _watchingUserId.value == myUserId && header.userId == myUserId) {
-                            if (header.payloadType == MediaHeader.VIDEO_H264) {
-                                videoEngine.decodeH264(payload)
-                            }
-                        }
-                    }
-                }
-            }
-        }.start()
-    }
-
-    private fun handleIncomingMessage(message: ChatMessage) {
+    private fun handleIncomingMessage(message: ChatMessage): Boolean {
         when (message.type) {
             "chat" -> {
-                val text = message.msg ?: message.content ?: return
+                val text = message.msg ?: message.content ?: return true
                 val senderId = message.userId ?: ""
                 
                 val filteredText = moderationManager.filterProfanity(text, senderId, myUserId)
-                if (filteredText == null) return
+                if (filteredText == null) return true
                 
                 val finalMsg = message.copy(msg = TextProcessor.sanitizeText(filteredText), content = null)
                 _messages.value = _messages.value + finalMsg
@@ -272,6 +288,18 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             "disconnect" -> {
                 appendSystemMessage(getApplication<Application>().getString(R.string.disconnected_reason, message.reason ?: "Unknown reason"))
             }
+                        "redirect" -> {
+                val newIp = message.ip
+                if (!newIp.isNullOrEmpty()) {
+                    val redirectRoom = message.roomName ?: ""
+                    isReconnecting = true
+                    networkClient.disconnect()
+                    viewModelScope.launch {
+                        connect(newIp, false, currentRoom, redirectRoom)
+                    }
+                    return false
+                }
+            }
             "welcome" -> {
                 val newId = message.userId
                 if (!newId.isNullOrEmpty()) {
@@ -280,30 +308,30 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             }
             "users" -> {
                 userMap.clear()
-                message.users?.forEach { u -> userMap[u.userId] = UserItem(u.userId, u.userName ?: "Unknown", u.nclr ?: -1) }
-                _users.value = userMap.values.toList().sortedBy { it.userName }
+                message.users?.forEach { u -> userMap[u.userId] = UserItem(u.userId, u.userName ?: "Unknown", (u.nclr ?: -1L).toInt()) }
+                _users.value = userMap.values.toList().sortedWith(compareBy<UserItem> { if (moderationManager.isIgnored(it.userId)) 1 else 0 }.thenBy { it.userName.lowercase() })
             }
             "join" -> {
-                val uid = message.userId ?: return
+                val uid = message.userId ?: return true
                 val uname = message.userName ?: "Unknown"
-                userMap[uid] = UserItem(uid, uname, message.nclr ?: -1)
-                _users.value = userMap.values.toList().sortedBy { it.userName }
+                userMap[uid] = UserItem(uid, uname, (message.nclr ?: -1L).toInt())
+                _users.value = userMap.values.toList().sortedWith(compareBy<UserItem> { if (moderationManager.isIgnored(it.userId)) 1 else 0 }.thenBy { it.userName.lowercase() })
                 val displayUname = if (uname.contains("#")) uname.substringBefore("#") else uname
                 appendSystemMessage(getApplication<Application>().getString(R.string.room_enter_fmt, displayUname, currentRoom))
             }
             "leave" -> {
-                val uid = message.userId ?: return
+                val uid = message.userId ?: return true
                 val uname = userMap.remove(uid)?.userName ?: "Unknown"
-                _users.value = userMap.values.toList().sortedBy { it.userName }
+                _users.value = userMap.values.toList().sortedWith(compareBy<UserItem> { if (moderationManager.isIgnored(it.userId)) 1 else 0 }.thenBy { it.userName.lowercase() })
                 val displayUname = if (uname.contains("#")) uname.substringBefore("#") else uname
                 appendSystemMessage(getApplication<Application>().getString(R.string.room_leave_fmt, displayUname, currentRoom))
             }
             "rename" -> {
-                val uid = message.userId ?: return
-                val newName = message.newName ?: return
+                val uid = message.userId ?: return true
+                val newName = message.newName ?: return true
                 val oldName = userMap[uid]?.userName ?: "Unknown"
                 userMap[uid] = UserItem(uid, newName, userMap[uid]?.nclr ?: -1)
-                _users.value = userMap.values.toList().sortedBy { it.userName }
+                _users.value = userMap.values.toList().sortedWith(compareBy<UserItem> { if (moderationManager.isIgnored(it.userId)) 1 else 0 }.thenBy { it.userName.lowercase() })
                 val displayOld = if (oldName.contains("#")) oldName.substringBefore("#") else oldName
                 val displayNew = if (newName.contains("#")) newName.substringBefore("#") else newName
                 appendSystemMessage(getApplication<Application>().getString(R.string.renamed_fmt, displayOld, displayNew))
@@ -313,6 +341,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                 _roomList.value = rooms
             }
         }
+        return true
     }
 
     private fun appendSystemMessage(text: String) {
@@ -358,11 +387,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             myUserName = if (sanitized.isNotBlank()) sanitized else myUserName
             myNameColor = newColor
-            val msg = ChatMessage(type = "rename", userName = myUserName, newName = myUserName, userId = myUserId, nclr = myNameColor)
+            val msg = ChatMessage(type = "rename", userName = myUserName, newName = myUserName, userId = myUserId, nclr = myNameColor.toLong())
             networkClient.sendTcpMessage(msg)
             
             userMap[myUserId] = UserItem(myUserId, myUserName, myNameColor)
-            _users.value = userMap.values.toList().sortedBy { it.userName }
+            _users.value = userMap.values.toList().sortedWith(compareBy<UserItem> { if (moderationManager.isIgnored(it.userId)) 1 else 0 }.thenBy { it.userName.lowercase() })
         }
     }
 

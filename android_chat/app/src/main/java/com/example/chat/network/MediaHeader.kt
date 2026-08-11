@@ -60,7 +60,7 @@ data class MediaHeader(
         buffer.put(userBytes, 0, copyLen)
         // Pad the rest of the 80 bytes with 0
         for (i in copyLen until 80) {
-            buffer.put(0)
+            buffer.put(0.toByte())
         }
         
         buffer.put(payload)

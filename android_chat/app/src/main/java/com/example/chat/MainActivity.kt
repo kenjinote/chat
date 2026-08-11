@@ -124,7 +124,7 @@ fun Win95TextField(value: String, onValueChange: (String) -> Unit, modifier: Mod
 fun Win95ComboBox(items: List<String>, selectedItem: String, onItemSelected: (String) -> Unit, modifier: Modifier = Modifier) {
     var expanded by remember { mutableStateOf(false) }
     Box(modifier = modifier) {
-        Win95Button(onClick = { expanded = !expanded }) {
+        Win95Button(onClick = { expanded = !expanded }, modifier = Modifier.fillMaxHeight()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(selectedItem, style = win95TextStyle)
                 Spacer(modifier = Modifier.width(4.dp))
@@ -305,15 +305,17 @@ fun MoveRoomDialog(viewModel: ChatViewModel, onDismiss: () -> Unit, onConfirm: (
 }
 @Composable
 fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
-    LaunchedEffect(Unit) {
-        viewModel.connect("chat-lb-2026.japaneast.cloudapp.azure.com")
-    }
+    
     val connectionState by viewModel.connectionState.collectAsState()
     val messages by viewModel.messages.collectAsState()
     val watchingUserId by viewModel.watchingUserId.collectAsState()
     val uriHandler = LocalUriHandler.current
 
-    var inputText by remember { mutableStateOf("") }
+    
+    LaunchedEffect(Unit) {
+        viewModel.connect("chat-lb-2026.japaneast.cloudapp.azure.com")
+    }
+var inputText by remember { mutableStateOf("") }
     var isVideoOn by remember { mutableStateOf(false) }
     var isTalkOn by remember { mutableStateOf(false) }
     var showMoveRoomDialog by remember { mutableStateOf(false) }
@@ -382,10 +384,10 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                                     val uName = msg.userName ?: "Unknown"
                                     val displayUser = if (uName.contains("#")) uName.substringBefore("#") else uName
                                     val nclr = msg.nclr ?: -1
-                                    val userColor = if (nclr != -1) {
-                                        val b = (nclr shr 16) and 0xFF
-                                        val g = (nclr shr 8) and 0xFF
-                                        val r = nclr and 0xFF
+                                    val userColor = if (nclr != -1L) {
+                                        val b = ((nclr shr 16) and 0xFF).toInt()
+                                        val g = ((nclr shr 8) and 0xFF).toInt()
+                                        val r = (nclr and 0xFF).toInt()
                                         Color(r, g, b, 255)
                                     } else Win95Black
                                     
@@ -438,7 +440,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                     
                     var menuExpandedUserId by remember { mutableStateOf<String?>(null) }
                     
-                    Win95Panel(modifier = Modifier.weight(1f).fillMaxWidth(), backgroundColor = Color.White) {
+                    Win95Panel(modifier = Modifier.weight(1f).fillMaxHeight(), backgroundColor = Color.White) {
                         LazyColumn(modifier = Modifier.fillMaxSize().background(Color.White).padding(0.5.dp)) {
                             items(users.sortedBy { it.userName }) { user ->
                                 val uName = user.userName
@@ -542,7 +544,7 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                 Win95Button(onClick = { isItalic = !isItalic }, checked = isItalic, modifier = Modifier.padding(end=4.dp).fillMaxHeight().aspectRatio(1f)) { Text("I", style = win95TextStyle.copy(fontStyle = FontStyle.Italic)) }
                 Win95Button(onClick = { isUnderline = !isUnderline }, checked = isUnderline, modifier = Modifier.padding(end=4.dp).fillMaxHeight().aspectRatio(1f)) { Text("U", style = win95TextStyle) } 
                 
-                Win95ComboBox(items = fontSizes, selectedItem = selectedSize, onItemSelected = { selectedSize = it }, modifier = Modifier.padding(end=4.dp))
+                Win95ComboBox(items = fontSizes, selectedItem = selectedSize, onItemSelected = { selectedSize = it }, modifier = Modifier.padding(end=4.dp).fillMaxHeight())
                 
                 Win95Button(onClick = { showColorPicker = true }, modifier = Modifier.padding(end=4.dp).fillMaxHeight().aspectRatio(1f)) { 
                     Box(modifier = Modifier.size(16.dp).background(selectedColor).border(1.dp, Win95Black))
@@ -557,10 +559,10 @@ fun ChatScreen(viewModel: ChatViewModel = viewModel()) {
                         isTalkOn = !isTalkOn 
                         viewModel.setTalkOn(isTalkOn)
                     }, 
-                    modifier = Modifier.padding(end=8.dp),
+                    modifier = Modifier.padding(end=8.dp).fillMaxHeight(),
                     checked = isTalkOn
                 ) { 
-                    Text("話す", style = win95TextStyle, modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) 
+                    Text("話す", style = win95TextStyle, modifier = Modifier.padding(horizontal = 8.dp)) 
                 }
                 
                 MicVolumeIndicator(volume = micVolume, modifier = Modifier.width(100.dp).height(20.dp).padding(end=8.dp))
@@ -690,25 +692,36 @@ fun Win95VideoWindow(title: String, onClose: () -> Unit, videoEngine: com.exampl
 
 @Composable
 fun MicVolumeIndicator(volume: Int, modifier: Modifier = Modifier) {
-    androidx.compose.foundation.Canvas(modifier = modifier.background(Color.Black)) {
-        val bars = 20
-        val activeBars = (volume * bars) / 100
-        val barWidth = size.width / bars
-        for (i in 0 until bars) {
-            val color = if (i >= activeBars) {
-                Color(0, 50, 0)
-            } else if (i < 12) {
-                Color(0, 255, 0)
-            } else if (i < 16) {
-                Color(255, 255, 0)
-            } else {
-                Color(255, 0, 0)
+    androidx.compose.foundation.Canvas(
+        modifier = modifier
+            .background(Win95Gray)
+            .drawBehind {
+                val bw = 2.dp.toPx()
+                drawRect(Win95DarkGray, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(size.width, bw))
+                drawRect(Win95DarkGray, topLeft = androidx.compose.ui.geometry.Offset(0f, 0f), size = androidx.compose.ui.geometry.Size(bw, size.height))
+                drawRect(Win95White, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - bw), size = androidx.compose.ui.geometry.Size(size.width, bw))
+                drawRect(Win95White, topLeft = androidx.compose.ui.geometry.Offset(size.width - bw, 0f), size = androidx.compose.ui.geometry.Size(bw, size.height))
+                
+                val innerRect = androidx.compose.ui.geometry.Rect(bw, bw, size.width - bw, size.height - bw)
+                drawRect(Color.Black, topLeft = innerRect.topLeft, size = innerRect.size)
             }
-            
+    ) {
+        val bw = 2.dp.toPx()
+        val maxVolWidth = size.width - bw * 2
+        val volWidth = (maxVolWidth * volume) / 100f
+        
+        if (volWidth > 0) {
+            val brush = androidx.compose.ui.graphics.Brush.horizontalGradient(
+                0.0f to Color(0, 220, 0),
+                0.7f to Color(255, 220, 0),
+                1.0f to Color(255, 0, 0),
+                startX = bw,
+                endX = size.width - bw
+            )
             drawRect(
-                color = color,
-                topLeft = androidx.compose.ui.geometry.Offset(i * barWidth + 1.dp.toPx(), 2.dp.toPx()),
-                size = androidx.compose.ui.geometry.Size(barWidth - 1.dp.toPx(), size.height - 4.dp.toPx())
+                brush = brush,
+                topLeft = androidx.compose.ui.geometry.Offset(bw, bw),
+                size = androidx.compose.ui.geometry.Size(volWidth, size.height - bw * 2)
             )
         }
     }
