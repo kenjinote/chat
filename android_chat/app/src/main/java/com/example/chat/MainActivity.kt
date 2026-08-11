@@ -19,7 +19,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -377,7 +380,20 @@ var inputText by remember { mutableStateOf("") }
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // Left: Chat Messages
                 Win95Panel(modifier = Modifier.weight(7f).fillMaxHeight(), backgroundColor = Color.White) {
-                    LazyColumn(modifier = Modifier.fillMaxSize().background(Color.White).padding(0.5.dp)) {
+                    val chatListState = androidx.compose.foundation.lazy.rememberLazyListState()
+                    val messagesSize = messages.size
+                    val isAtBottom by remember {
+                        derivedStateOf {
+                            val lastVisibleItem = chatListState.layoutInfo.visibleItemsInfo.lastOrNull()
+                            lastVisibleItem == null || lastVisibleItem.index >= chatListState.layoutInfo.totalItemsCount - 2
+                        }
+                    }
+                    LaunchedEffect(messagesSize) {
+                        if (messagesSize > 0 && isAtBottom) {
+                            chatListState.scrollToItem(messagesSize - 1)
+                        }
+                    }
+                    LazyColumn(state = chatListState, modifier = Modifier.fillMaxSize().background(Color.White).padding(0.5.dp).win95Scrollbar(chatListState)) {
                         items(messages) { msg ->
                             Box(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
                                 val msgColor = if (msg.type == "system" || msg.type == "sysmsg") Win95DarkGray else {
@@ -445,7 +461,8 @@ var inputText by remember { mutableStateOf("") }
                     var menuExpandedUserId by remember { mutableStateOf<String?>(null) }
                     
                     Win95Panel(modifier = Modifier.weight(1f).fillMaxHeight(), backgroundColor = Color.White) {
-                        LazyColumn(modifier = Modifier.fillMaxSize().background(Color.White).padding(0.5.dp)) {
+                        val userListState = androidx.compose.foundation.lazy.rememberLazyListState()
+                        LazyColumn(state = userListState, modifier = Modifier.fillMaxSize().background(Color.White).padding(0.5.dp).win95Scrollbar(userListState)) {
                             items(users) { user ->
                                 val uName = user.userName
                                 val baseDisplayUser = if (uName.contains("#")) uName.substringBefore("#") else uName
@@ -804,5 +821,123 @@ fun ChangeNameDialog(
             },
             onDismiss = { showColorPicker = false }
         )
+    }
+}
+
+
+class ScrollbarCache {
+    val itemHeights = mutableMapOf<Int, Int>()
+    var totalCachedHeight = 0
+    var lastTotalItems = 0
+    var wasAtBottom = false
+    var lastAbsoluteY = 0f
+    var isAutoScrollLock = false
+}
+
+fun androidx.compose.ui.Modifier.win95Scrollbar(
+    state: androidx.compose.foundation.lazy.LazyListState,
+    width: androidx.compose.ui.unit.Dp = 16.dp
+): androidx.compose.ui.Modifier = composed {
+    val cache = remember { ScrollbarCache() }
+
+    this.drawWithContent {
+        drawContent()
+        val totalItems = state.layoutInfo.totalItemsCount
+        val visibleItemsInfo = state.layoutInfo.visibleItemsInfo
+        
+        if (totalItems > 0 && visibleItemsInfo.isNotEmpty()) {
+            val viewportSize = state.layoutInfo.viewportEndOffset - state.layoutInfo.viewportStartOffset.toFloat()
+            
+            if (totalItems < cache.lastTotalItems) {
+                cache.itemHeights.clear()
+                cache.totalCachedHeight = 0
+            }
+            val newItemsAdded = totalItems > cache.lastTotalItems
+
+            visibleItemsInfo.forEach { item ->
+                val oldSize = cache.itemHeights[item.index]
+                if (oldSize != item.size) {
+                    cache.itemHeights[item.index] = item.size
+                    cache.totalCachedHeight += item.size - (oldSize ?: 0)
+                }
+            }
+            
+            val cachedCount = cache.itemHeights.size
+            val averageItemHeight = if (cachedCount > 0) {
+                cache.totalCachedHeight.toFloat() / cachedCount
+            } else {
+                60f
+            }
+            
+            val uncachedCount = (totalItems - cachedCount).coerceAtLeast(0)
+            val totalEstimatedHeight = cache.totalCachedHeight.toFloat() + (uncachedCount * averageItemHeight)
+            
+            val proportion = (viewportSize / totalEstimatedHeight).coerceIn(0.05f, 1f)
+            
+            val scrollbarHeight = size.height
+            val thumbHeight = (scrollbarHeight * proportion).coerceAtLeast(width.toPx())
+            
+            val firstItem = visibleItemsInfo.first()
+            var absoluteY = 0f
+            for (i in 0 until firstItem.index) {
+                absoluteY += (cache.itemHeights[i] ?: averageItemHeight.toInt()).toFloat()
+            }
+            absoluteY += -firstItem.offset.toFloat()
+            
+            val maxScrollDistance = (totalEstimatedHeight - viewportSize).coerceAtLeast(1f)
+            var scrollFraction = (absoluteY / maxScrollDistance).coerceIn(0f, 1f)
+            
+            val lastItem = visibleItemsInfo.last()
+            val isCurrentlyAtBottom = (lastItem.index == totalItems - 1 && lastItem.offset + lastItem.size <= viewportSize + 1f)
+            
+            if (isCurrentlyAtBottom) {
+                scrollFraction = 1f
+                cache.wasAtBottom = true
+                cache.isAutoScrollLock = false
+            } else {
+                if (cache.wasAtBottom && newItemsAdded) {
+                    cache.isAutoScrollLock = true
+                    scrollFraction = 1f
+                } else if (cache.isAutoScrollLock && Math.abs(absoluteY - cache.lastAbsoluteY) < 1f) {
+                    scrollFraction = 1f
+                } else {
+                    scrollFraction = (absoluteY / maxScrollDistance).coerceIn(0f, 1f)
+                    cache.wasAtBottom = false
+                    cache.isAutoScrollLock = false
+                }
+            }
+            cache.lastAbsoluteY = absoluteY
+            cache.lastTotalItems = totalItems
+            
+            val maxThumbOffset = scrollbarHeight - thumbHeight
+            val thumbOffsetY = maxThumbOffset * scrollFraction
+            
+            val trackX = size.width - width.toPx()
+            
+            drawRect(
+                color = androidx.compose.ui.graphics.Color(0xFFDFDFDF),
+                topLeft = androidx.compose.ui.geometry.Offset(trackX, 0f),
+                size = androidx.compose.ui.geometry.Size(width.toPx(), scrollbarHeight)
+            )
+            
+            if (proportion < 1f) {
+                val thumbX = trackX
+                val thumbY = thumbOffsetY
+                val thumbW = width.toPx()
+                val thumbH = thumbHeight
+                
+                drawRect(
+                    color = androidx.compose.ui.graphics.Color(0xFFC0C0C0),
+                    topLeft = androidx.compose.ui.geometry.Offset(thumbX, thumbY),
+                    size = androidx.compose.ui.geometry.Size(thumbW, thumbH)
+                )
+                
+                val bw = 2.dp.toPx()
+                drawRect(androidx.compose.ui.graphics.Color.White, topLeft = androidx.compose.ui.geometry.Offset(thumbX, thumbY), size = androidx.compose.ui.geometry.Size(thumbW, bw))
+                drawRect(androidx.compose.ui.graphics.Color.White, topLeft = androidx.compose.ui.geometry.Offset(thumbX, thumbY), size = androidx.compose.ui.geometry.Size(bw, thumbH))
+                drawRect(androidx.compose.ui.graphics.Color.Black, topLeft = androidx.compose.ui.geometry.Offset(thumbX, thumbY + thumbH - bw), size = androidx.compose.ui.geometry.Size(thumbW, bw))
+                drawRect(androidx.compose.ui.graphics.Color.Black, topLeft = androidx.compose.ui.geometry.Offset(thumbX + thumbW - bw, thumbY), size = androidx.compose.ui.geometry.Size(bw, thumbH))
+            }
+        }
     }
 }
