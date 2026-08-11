@@ -47,6 +47,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import android.util.Log
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.chat.network.ChatMessage
 import com.example.chat.utils.TextProcessor
@@ -387,13 +388,6 @@ var inputText by remember { mutableStateOf("") }
     }
 
     Box(modifier = Modifier.fillMaxSize().background(Win95Gray)) {
-        if (watchingUserId != null) {
-            Win95VideoWindow(
-                title = "Video - ",
-                onClose = { viewModel.setWatchingUserId(null) },
-                videoEngine = viewModel.getVideoEngine()
-            )
-        }
         Column(modifier = Modifier.fillMaxSize()) {
             // Main Chat Area
             Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -505,11 +499,11 @@ var inputText by remember { mutableStateOf("") }
                                     menuExpandedUserId = user.userId
                                 }) {
                                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 0.5.dp, vertical = 0.5.dp).fillMaxWidth()) {
-                                        Box(modifier = Modifier.height(32.dp)) {
+                                        Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
                                             if (isStreaming) {
-                                                Image(painter = painterResource(id = R.drawable.ic_tv_win), contentDescription = "TV", modifier = Modifier.fillMaxHeight())
+                                                Image(painter = painterResource(id = R.drawable.ic_tv_win), contentDescription = "TV", modifier = Modifier.fillMaxSize())
                                             }
-                                            Image(painter = painterResource(id = R.drawable.ic_smile_win), contentDescription = "User", modifier = Modifier.fillMaxHeight())
+                                            Image(painter = painterResource(id = R.drawable.ic_smile_win), contentDescription = "User", modifier = Modifier.fillMaxSize())
                                         }
                                         
                                         Text(
@@ -550,7 +544,8 @@ var inputText by remember { mutableStateOf("") }
                                         } else {
                                             val isIgnored = ignoredUsers.contains(user.userId)
                                             DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.watch_video), style = win95TextStyle) },
+                                                enabled = isStreaming,
+                                                text = { Text(stringResource(R.string.watch_video), style = win95TextStyle.copy(color = if (isStreaming) Color.Black else Win95DarkGray)) },
                                                 onClick = { 
                                                     viewModel.setWatchingUserId(user.userId)
                                                     menuExpandedUserId = null 
@@ -656,7 +651,13 @@ var inputText by remember { mutableStateOf("") }
                 ) {
                     Text(stringResource(R.string.send), style = win95TextStyle)
                 }
-            }
+            }        }
+        if (watchingUserId != null) {
+            Win95VideoWindow(
+                title = "Video - ",
+                onClose = { viewModel.setWatchingUserId(null) },
+                videoEngine = viewModel.getVideoEngine()
+            )
         }
     }
 }
@@ -721,9 +722,10 @@ fun Win95VideoWindow(title: String, onClose: () -> Unit, videoEngine: com.exampl
             ) {
                 androidx.compose.ui.viewinterop.AndroidView(
                     factory = { ctx ->
-                        android.view.SurfaceView(ctx).apply {
+                        android.view.SurfaceView(ctx).apply { setZOrderOnTop(true)
                             holder.addCallback(object : android.view.SurfaceHolder.Callback {
                                 override fun surfaceCreated(h: android.view.SurfaceHolder) {
+                                    Log.d("Win95VideoWindow", "SurfaceCreated! Calling initDecoder")
                                     videoEngine.initDecoder(h.surface)
                                 }
                                 override fun surfaceChanged(h: android.view.SurfaceHolder, format: Int, w: Int, h2: Int) {}

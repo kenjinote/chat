@@ -105,7 +105,7 @@ class NetworkClient {
         }
     }
 
-    fun receiveUdpPacket(bufferSize: Int = 1500): ByteArray? {
+    fun receiveUdpPacket(bufferSize: Int = 65535): ByteArray? {
         return try {
             val buffer = ByteArray(bufferSize)
             val packet = DatagramPacket(buffer, buffer.size)

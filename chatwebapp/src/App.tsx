@@ -1465,7 +1465,7 @@ const App: React.FC = () => {
                         }}
                       >
                         <div style={{ display: 'flex', alignItems: 'center' }}>
-                          {featureFlags.enableVideo && streamingUsers[u.userId] ? (
+                          {featureFlags.enableVideo && (streamingUsers[u.userId] || (isSelf && (isWebcamActive || isScreenActive))) ? (
                             <div className="stream-icon-container" style={{ marginRight: '4px', filter: isIgnored ? 'grayscale(100%) opacity(70%)' : 'none' }}>
                               <span className="stream-icon-tv">📺</span>
                               <span className="stream-icon-face">🙂</span>

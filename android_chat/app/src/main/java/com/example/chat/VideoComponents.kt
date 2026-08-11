@@ -173,7 +173,7 @@ fun VideoWatchDialog(
             Box(modifier = Modifier.fillMaxWidth().height(260.dp).padding(4.dp).border(1.dp, Win95DarkGray)) {
                 AndroidView(
                     factory = { ctx ->
-                        val surfaceView = android.view.SurfaceView(ctx)
+                        val surfaceView = android.view.SurfaceView(ctx).apply { setZOrderOnTop(true) }
                         surfaceView.holder.addCallback(object : android.view.SurfaceHolder.Callback {
                             override fun surfaceCreated(holder: android.view.SurfaceHolder) {
                                 videoEngine.initDecoder(holder.surface, 640, 480)

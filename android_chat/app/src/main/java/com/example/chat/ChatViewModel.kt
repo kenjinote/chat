@@ -3,6 +3,7 @@ package com.example.chat
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Log
 import com.example.chat.media.AudioEngine
 import com.example.chat.media.VideoEngine
 import com.example.chat.network.ChatMessage
@@ -102,7 +103,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     timestamp = (System.currentTimeMillis() and 0xFFFFFFFF).toInt(),
                     userId = myUserId
                 )
-                networkClient.sendUdpPacket(header.toByteArray(h264Data))
+                Log.d("ChatViewModel", "Sending UDP video packet, size: ")
+                  networkClient.sendUdpPacket(header.toByteArray(h264Data))
             }
         }
 
@@ -126,6 +128,17 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         userId = myUserId
                     )
                     networkClient.sendUdpPacket(header.toByteArray(ByteArray(0)))
+                }
+            }
+        }
+        
+        viewModelScope.launch {
+            while (true) {
+                delay(2000)
+                val now = System.currentTimeMillis()
+                val active = _videoStreamers.value.filter { now - it.value < 10000 }
+                if (active.size != _videoStreamers.value.size) {
+                    _videoStreamers.value = active
                 }
             }
         }
@@ -197,7 +210,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                         _videoStreamers.value = _videoStreamers.value + (header.userId to System.currentTimeMillis())
                         if (_watchingUserId.value == header.userId || _watchingUserId.value == myUserId && header.userId == myUserId) {
                             if (header.payloadType == MediaHeader.VIDEO_H264) {
+                                Log.d("ChatViewModel", "Received UDP video packet, size: " + payload.size)
                                 videoEngine.decodeH264(payload)
+                            } else if (header.payloadType == MediaHeader.VIDEO) {
+                                Log.d("ChatViewModel", "Received UDP legacy video packet, size: " + payload.size)
+                                videoEngine.decodeLegacyVideo(payload)
                             }
                         }
                     }
