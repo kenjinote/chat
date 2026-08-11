@@ -247,7 +247,7 @@ fun ColorPickerDialog(onColorSelected: (Color) -> Unit, onDismiss: () -> Unit) {
                 Slider(value = customB, onValueChange = { customB = it }, modifier = Modifier.weight(1f))
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Box(modifier = Modifier.size(32.dp).background(Color(customR, customG, customB)).border(1.dp, Win95Black))
+                Box(modifier = Modifier.size(24.dp).background(Color(customR, customG, customB)).border(1.dp, Win95Black))
                 Win95Button(onClick = { onColorSelected(Color(customR, customG, customB)) }) {
                     Text("OK", style = win95TextStyle)
                 }
@@ -594,11 +594,11 @@ var inputText by remember { mutableStateOf("") }
                         isTalkOn = !isTalkOn 
                         viewModel.setTalkOn(isTalkOn)
                     }, 
-                    modifier = Modifier.padding(end=8.dp).fillMaxHeight(),
+                    modifier = Modifier.padding(end=8.dp),
                     checked = isTalkOn
                 ) { 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(painter = painterResource(id = R.drawable.ic_mic), contentDescription = "Mic", modifier = Modifier.size(32.dp), tint = Color.Black)
+                        Icon(painter = painterResource(id = R.drawable.ic_mic), contentDescription = "Mic", modifier = Modifier.size(24.dp), tint = Color.Black)
                         Text("話す", style = win95TextStyle)
                     } 
                 }
