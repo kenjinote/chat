@@ -35,9 +35,10 @@ H264Encoder* g_pH264Encoder = nullptr;
 #include <mmsystem.h>
 #pragma comment(lib, "winmm.lib")
 #include <mmdeviceapi.h>
+#include <audioclient.h>
+#include <audioclientactivationparams.h>
 #include <audiopolicy.h>
 #pragma comment(lib, "ole32.lib")
-
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "comctl32.lib")
@@ -2149,177 +2150,247 @@ void InitVolumeSync(HWND hWnd) {
 std::thread* g_pAudioLoopbackThread = nullptr;
 bool g_runAudioLoopback = false;
 
+class AudioClientActivationHandler : public IActivateAudioInterfaceCompletionHandler {
+    LONG m_refCount;
+    HANDLE m_hEvent;
+    IAudioClient** m_ppAudioClient;
+    HRESULT* m_pResult;
+
+public:
+    AudioClientActivationHandler(HANDLE hEvent, IAudioClient** ppAudioClient, HRESULT* pResult)
+        : m_refCount(1), m_hEvent(hEvent), m_ppAudioClient(ppAudioClient), m_pResult(pResult) {}
+
+    IFACEMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (riid == __uuidof(IUnknown) || riid == __uuidof(IActivateAudioInterfaceCompletionHandler) || riid == __uuidof(IAgileObject)) {
+            *ppv = static_cast<IActivateAudioInterfaceCompletionHandler*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    IFACEMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&m_refCount); }
+    IFACEMETHODIMP_(ULONG) Release() override {
+        ULONG count = InterlockedDecrement(&m_refCount);
+        if (count == 0) delete this;
+        return count;
+    }
+    IFACEMETHODIMP ActivateCompleted(IActivateAudioInterfaceAsyncOperation* pOperation) override {
+        HRESULT hr = S_OK;
+        IUnknown* pUnk = nullptr;
+        HRESULT activateResult = pOperation->GetActivateResult(&hr, &pUnk);
+        if (SUCCEEDED(activateResult) && SUCCEEDED(hr) && pUnk) {
+            pUnk->QueryInterface(__uuidof(IAudioClient), (void**)m_ppAudioClient);
+            pUnk->Release();
+        }
+        *m_pResult = hr;
+        SetEvent(m_hEvent);
+        return S_OK;
+    }
+};
+
 void AudioLoopbackThreadFunc() {
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
     
+    IAudioClient* pAudioClient = nullptr;
+    WAVEFORMATEX* pwfx = nullptr;
+    HRESULT hrAsync = E_FAIL;
+    
+    // Try process loopback exclusion first (Windows 10 21H1+)
+    AUDIOCLIENT_ACTIVATION_PARAMS params = {};
+    params.ActivationType = AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
+    params.ProcessLoopbackParams.TargetProcessId = GetCurrentProcessId();
+    params.ProcessLoopbackParams.ProcessLoopbackMode = PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE;
+
+    PROPVARIANT prop = {};
+    prop.vt = VT_BLOB;
+    prop.blob.cbSize = sizeof(params);
+    prop.blob.pBlobData = (BYTE*)&params;
+
+    HANDLE hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (hEvent) {
+        AudioClientActivationHandler* pHandler = new AudioClientActivationHandler(hEvent, &pAudioClient, &hrAsync);
+        IActivateAudioInterfaceAsyncOperation* pOperation = nullptr;
+        HRESULT hrInvoke = ActivateAudioInterfaceAsync(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, __uuidof(IAudioClient), &prop, pHandler, &pOperation);
+        if (SUCCEEDED(hrInvoke) && pOperation) {
+            WaitForSingleObject(hEvent, INFINITE);
+            pOperation->Release();
+        }
+        pHandler->Release();
+        CloseHandle(hEvent);
+    }
+    
+    HRESULT hr = hrAsync;
+    
     IMMDeviceEnumerator* pEnumerator = nullptr;
-    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
-    if (SUCCEEDED(hr)) {
-        IMMDevice* pDevice = nullptr;
-        hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
+    IMMDevice* pDevice = nullptr;
+    
+    // Fallback to legacy loopback
+    if (FAILED(hr) || !pAudioClient) {
+        if (pAudioClient) { pAudioClient->Release(); pAudioClient = nullptr; }
+        hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
         if (SUCCEEDED(hr)) {
-            IAudioClient* pAudioClient = nullptr;
-            hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&pAudioClient);
+            hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
             if (SUCCEEDED(hr)) {
-                WAVEFORMATEX* pwfx = nullptr;
-                pAudioClient->GetMixFormat(&pwfx);
-                
-                hr = pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 10000000, 0, pwfx, NULL);
+                hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&pAudioClient);
+            }
+        }
+    }
+
+    if (SUCCEEDED(hr) && pAudioClient) {
+        hr = pAudioClient->GetMixFormat(&pwfx);
+        if (SUCCEEDED(hr)) {
+            static const GUID GUID_ChatLoopbackSession = { 0x5a1b3d2c, 0x9f8e, 0x47a1, { 0xb2, 0xc3, 0xd4, 0xe5, 0xf6, 0x07, 0x18, 0x29 } };
+            hr = pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 10000000, 0, pwfx, &GUID_ChatLoopbackSession);
+            if (SUCCEEDED(hr)) {
+                IAudioCaptureClient* pCaptureClient = nullptr;
+                hr = pAudioClient->GetService(__uuidof(IAudioCaptureClient), (void**)&pCaptureClient);
                 if (SUCCEEDED(hr)) {
-                    IAudioCaptureClient* pCaptureClient = nullptr;
-                    hr = pAudioClient->GetService(__uuidof(IAudioCaptureClient), (void**)&pCaptureClient);
-                    if (SUCCEEDED(hr)) {
-                        pAudioClient->Start();
-                        
-                        bool isFloat = false;
-                        if (pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) isFloat = true;
-                        else if (pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
-                            WAVEFORMATEXTENSIBLE* pEx = (WAVEFORMATEXTENSIBLE*)pwfx;
-                            if (IsEqualGUID(pEx->SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) isFloat = true;
-                        }
-                        
-                        float ratio = pwfx->nSamplesPerSec / 16000.0f;
-                        int inChannels = pwfx->nChannels;
-                        
-                        short resampleBuf[320];
-                        int resampleCount = 0;
-                        float phase = 0.0f;
-                        
-                        UINT32 packetLength = 0;
-                        while (g_runAudioLoopback && g_sock != INVALID_SOCKET) {
-                            Sleep(10);
-                            hr = pCaptureClient->GetNextPacketSize(&packetLength);
-                            while (packetLength != 0 && g_runAudioLoopback) {
-                                BYTE* pData;
-                                UINT32 numFramesAvailable;
-                                DWORD flags;
-                                hr = pCaptureClient->GetBuffer(&pData, &numFramesAvailable, &flags, NULL, NULL);
-                                if (SUCCEEDED(hr)) {
-                                    if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
-                                        // Write zeroes for silent buffers to maintain time sync
-                                        for (UINT32 i = 0; i < numFramesAvailable; i++) {
-                                            phase += 1.0f;
-                                            if (phase >= ratio) {
-                                                phase -= ratio;
-                                                resampleBuf[resampleCount++] = 0;
+                    pAudioClient->Start();
+                    
+                    bool isFloat = false;
+                    if (pwfx->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) isFloat = true;
+                    else if (pwfx->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
+                        WAVEFORMATEXTENSIBLE* pEx = (WAVEFORMATEXTENSIBLE*)pwfx;
+                        if (IsEqualGUID(pEx->SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT)) isFloat = true;
+                    }
+                    
+                    float ratio = pwfx->nSamplesPerSec / 16000.0f;
+                    int inChannels = pwfx->nChannels;
+                    
+                    short resampleBuf[320];
+                    int resampleCount = 0;
+                    float phase = 0.0f;
+                    
+                    UINT32 packetLength = 0;
+                    while (g_runAudioLoopback && g_sock != INVALID_SOCKET) {
+                        Sleep(10);
+                        hr = pCaptureClient->GetNextPacketSize(&packetLength);
+                        while (packetLength != 0 && g_runAudioLoopback) {
+                            BYTE* pData;
+                            UINT32 numFramesAvailable;
+                            DWORD flags;
+                            hr = pCaptureClient->GetBuffer(&pData, &numFramesAvailable, &flags, NULL, NULL);
+                            if (SUCCEEDED(hr)) {
+                                if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
+                                    for (UINT32 i = 0; i < numFramesAvailable; i++) {
+                                        phase += 1.0f;
+                                        if (phase >= ratio) {
+                                            phase -= ratio;
+                                            resampleBuf[resampleCount++] = 0;
+                                            
+                                            if (resampleCount >= 320) {
+                                                g_currentMicVolume = 0;
+                                                InvalidateRect(g_hVolumeIndicator, NULL, FALSE);
                                                 
-                                                if (resampleCount >= 320) {
-                                                    // Compute volume
-                                                    g_currentMicVolume = 0;
-                                                    InvalidateRect(g_hVolumeIndicator, NULL, FALSE);
-                                                    
-                                                    if (GetTickCount() - g_lastVoiceActiveTime <= 500) {
-                                                        if (g_opusEncoder) {
-                                                            char udpPkt[2048];
-                                                            MediaHeader* mhdr = (MediaHeader*)udpPkt;
-                                                            mhdr->sessionId = g_sessionId;
-                                                            mhdr->seqNum = 0;
-                                                            mhdr->payloadType = 1;
-                                                            mhdr->flags = 0;
-                                                            mhdr->timestamp = GetTickCount();
-                                                            wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
-                                                            
-                                                            unsigned char* payloadData = (unsigned char*)(udpPkt + sizeof(MediaHeader));
-                                                            int opusBytes = opus_encode(g_opusEncoder, resampleBuf, 320, payloadData, sizeof(udpPkt) - sizeof(MediaHeader));
-                                                            if (opusBytes > 0) {
-                                                                sockaddr_in serverUdp = {0};
-                                                                serverUdp.sin_family = AF_INET;
-                                                                serverUdp.sin_port = htons(4001);
-                                                                if (!g_isServerUdpAddrResolved) {
-                                                                    g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
-                                                                }
-                                                                serverUdp.sin_addr = g_serverUdpAddr;
-                                                                
-                                                                sendto(g_sock, udpPkt, sizeof(MediaHeader) + opusBytes, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
-                                                            }
+                                                if (GetTickCount() - g_lastVoiceActiveTime <= 500) {
+                                                    if (g_opusEncoder) {
+                                                        char udpPkt[2048];
+                                                        MediaHeader* mhdr = (MediaHeader*)udpPkt;
+                                                        mhdr->sessionId = g_sessionId;
+                                                        mhdr->seqNum = 0;
+                                                        mhdr->payloadType = 1;
+                                                        mhdr->flags = 0;
+                                                        mhdr->timestamp = GetTickCount();
+                                                        wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
+                                                        
+                                                        unsigned char* payloadData = (unsigned char*)(udpPkt + sizeof(MediaHeader));
+                                                        int opusBytes = opus_encode(g_opusEncoder, resampleBuf, 320, payloadData, sizeof(udpPkt) - sizeof(MediaHeader));
+                                                        if (opusBytes > 0) {
+                                                            sockaddr_in serverUdp = {0};
+                                                            serverUdp.sin_family = AF_INET;
+                                                            serverUdp.sin_port = htons(4001);
+                                                            if (!g_isServerUdpAddrResolved) g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                                                            serverUdp.sin_addr = g_serverUdpAddr;
+                                                            sendto(g_sock, udpPkt, sizeof(MediaHeader) + opusBytes, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
                                                         }
                                                     }
-                                                    resampleCount = 0;
                                                 }
-                                            }
-                                        }
-                                    } else {
-                                        float* fSamples = (float*)pData;
-                                        short* sSamples = (short*)pData;
-                                        
-                                        for (UINT32 i = 0; i < numFramesAvailable; i++) {
-                                            phase += 1.0f;
-                                            if (phase >= ratio) {
-                                                phase -= ratio;
-                                                
-                                                float sum = 0.0f;
-                                                if (isFloat) {
-                                                    for (int c = 0; c < inChannels; c++) sum += fSamples[i * inChannels + c];
-                                                } else {
-                                                    for (int c = 0; c < inChannels; c++) sum += (sSamples[i * inChannels + c] / 32768.0f);
-                                                }
-                                                sum /= inChannels;
-                                                
-                                                if (sum > 1.0f) sum = 1.0f;
-                                                if (sum < -1.0f) sum = -1.0f;
-                                                resampleBuf[resampleCount++] = (short)(sum * 32767.0f);
-                                                
-                                                if (resampleCount >= 320) {
-                                                    // Compute volume
-                                                    long long sumSquares = 0;
-                                                    for (int s = 0; s < 320; s++) {
-                                                        sumSquares += resampleBuf[s] * resampleBuf[s];
-                                                    }
-                                                    int rms = (int)sqrt(sumSquares / 320);
-                                                    g_currentMicVolume = (rms * 100) / 32768;
-                                                    if (g_currentMicVolume > 100) g_currentMicVolume = 100;
-                                                    if (g_currentMicVolume < 0) g_currentMicVolume = 0;
-                                                    
-                                                    if (rms > 150) g_lastVoiceActiveTime = GetTickCount();
-                                                    
-                                                    g_currentMicVolume *= 3;
-                                                    if (g_currentMicVolume > 100) g_currentMicVolume = 100;
-                                                    InvalidateRect(g_hVolumeIndicator, NULL, FALSE);
-                                                    
-                                                    if (GetTickCount() - g_lastVoiceActiveTime <= 500) {
-                                                        if (g_opusEncoder) {
-                                                            char udpPkt[2048];
-                                                            MediaHeader* mhdr = (MediaHeader*)udpPkt;
-                                                            mhdr->sessionId = g_sessionId;
-                                                            mhdr->seqNum = 0;
-                                                            mhdr->payloadType = 1;
-                                                            mhdr->flags = 0;
-                                                            mhdr->timestamp = GetTickCount();
-                                                            wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
-                                                            
-                                                            unsigned char* payloadData = (unsigned char*)(udpPkt + sizeof(MediaHeader));
-                                                            int opusBytes = opus_encode(g_opusEncoder, resampleBuf, 320, payloadData, sizeof(udpPkt) - sizeof(MediaHeader));
-                                                            if (opusBytes > 0) {
-                                                                sockaddr_in serverUdp = {0};
-                                                                serverUdp.sin_family = AF_INET;
-                                                                serverUdp.sin_port = htons(4001);
-                                                                if (!g_isServerUdpAddrResolved) g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
-                                                                serverUdp.sin_addr = g_serverUdpAddr;
-                                                                sendto(g_sock, udpPkt, sizeof(MediaHeader) + opusBytes, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
-                                                            }
-                                                        }
-                                                    }
-                                                    resampleCount = 0;
-                                                }
+                                                resampleCount = 0;
                                             }
                                         }
                                     }
-                                    pCaptureClient->ReleaseBuffer(numFramesAvailable);
+                                } else {
+                                    float* fSamples = (float*)pData;
+                                    short* sSamples = (short*)pData;
+                                    
+                                    for (UINT32 i = 0; i < numFramesAvailable; i++) {
+                                        phase += 1.0f;
+                                        if (phase >= ratio) {
+                                            phase -= ratio;
+                                            
+                                            float sum = 0.0f;
+                                            if (isFloat) {
+                                                for (int c = 0; c < inChannels; c++) sum += fSamples[i * inChannels + c];
+                                            } else {
+                                                for (int c = 0; c < inChannels; c++) sum += (sSamples[i * inChannels + c] / 32768.0f);
+                                            }
+                                            sum /= inChannels;
+                                            
+                                            if (sum > 1.0f) sum = 1.0f;
+                                            if (sum < -1.0f) sum = -1.0f;
+                                            resampleBuf[resampleCount++] = (short)(sum * 32767.0f);
+                                            
+                                            if (resampleCount >= 320) {
+                                                long long sumSquares = 0;
+                                                for (int s = 0; s < 320; s++) {
+                                                    sumSquares += resampleBuf[s] * resampleBuf[s];
+                                                }
+                                                int rms = (int)sqrt(sumSquares / 320);
+                                                g_currentMicVolume = (rms * 100) / 32768;
+                                                if (g_currentMicVolume > 100) g_currentMicVolume = 100;
+                                                if (g_currentMicVolume < 0) g_currentMicVolume = 0;
+                                                
+                                                if (rms > 150) g_lastVoiceActiveTime = GetTickCount();
+                                                
+                                                g_currentMicVolume *= 3;
+                                                if (g_currentMicVolume > 100) g_currentMicVolume = 100;
+                                                InvalidateRect(g_hVolumeIndicator, NULL, FALSE);
+                                                
+                                                if (GetTickCount() - g_lastVoiceActiveTime <= 500) {
+                                                    if (g_opusEncoder) {
+                                                        char udpPkt[2048];
+                                                        MediaHeader* mhdr = (MediaHeader*)udpPkt;
+                                                        mhdr->sessionId = g_sessionId;
+                                                        mhdr->seqNum = 0;
+                                                        mhdr->payloadType = 1;
+                                                        mhdr->flags = 0;
+                                                        mhdr->timestamp = GetTickCount();
+                                                        wcsncpy_s(mhdr->userId, 40, g_userId.c_str(), _TRUNCATE);
+                                                        
+                                                        unsigned char* payloadData = (unsigned char*)(udpPkt + sizeof(MediaHeader));
+                                                        int opusBytes = opus_encode(g_opusEncoder, resampleBuf, 320, payloadData, sizeof(udpPkt) - sizeof(MediaHeader));
+                                                        if (opusBytes > 0) {
+                                                            sockaddr_in serverUdp = {0};
+                                                            serverUdp.sin_family = AF_INET;
+                                                            serverUdp.sin_port = htons(4001);
+                                                            if (!g_isServerUdpAddrResolved) g_isServerUdpAddrResolved = ResolveIP(g_serverIp, g_serverUdpAddr);
+                                                            serverUdp.sin_addr = g_serverUdpAddr;
+                                                            sendto(g_sock, udpPkt, sizeof(MediaHeader) + opusBytes, 0, (sockaddr*)&serverUdp, sizeof(serverUdp));
+                                                        }
+                                                    }
+                                                }
+                                                resampleCount = 0;
+                                            }
+                                        }
+                                    }
                                 }
-                                pCaptureClient->GetNextPacketSize(&packetLength);
+                                pCaptureClient->ReleaseBuffer(numFramesAvailable);
                             }
+                            pCaptureClient->GetNextPacketSize(&packetLength);
                         }
-                        pAudioClient->Stop();
-                        pCaptureClient->Release();
                     }
+                    pAudioClient->Stop();
+                    pCaptureClient->Release();
                 }
-                CoTaskMemFree(pwfx);
-                pAudioClient->Release();
             }
-            pDevice->Release();
+            CoTaskMemFree(pwfx);
         }
-        pEnumerator->Release();
+        pAudioClient->Release();
     }
+    if (pDevice) pDevice->Release();
+    if (pEnumerator) pEnumerator->Release();
+    
     CoUninitialize();
 }
 
