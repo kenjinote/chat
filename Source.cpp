@@ -1,6 +1,7 @@
 // Visual styles removed for classic look
 
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
+#define _SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
