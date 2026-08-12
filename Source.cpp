@@ -2225,24 +2225,47 @@ void AudioLoopbackThreadFunc() {
     
     IMMDeviceEnumerator* pEnumerator = nullptr;
     IMMDevice* pDevice = nullptr;
+    IAudioClient* pDefaultAudioClient = nullptr;
+    DWORD streamFlags = 0;
     
-    // Fallback to legacy loopback
-    if (FAILED(hr) || !pAudioClient) {
+    if (SUCCEEDED(hr) && pAudioClient) {
+        // Process loopback requires these flags and a standard PCM format
+        streamFlags = AUDCLNT_STREAMFLAGS_LOOPBACK | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
+        pwfx = (WAVEFORMATEX*)CoTaskMemAlloc(sizeof(WAVEFORMATEX));
+        pwfx->wFormatTag = WAVE_FORMAT_PCM;
+        pwfx->nChannels = 2;
+        pwfx->nSamplesPerSec = 48000;
+        pwfx->wBitsPerSample = 16;
+        pwfx->nBlockAlign = (pwfx->nChannels * pwfx->wBitsPerSample) / 8;
+        pwfx->nAvgBytesPerSec = pwfx->nSamplesPerSec * pwfx->nBlockAlign;
+        pwfx->cbSize = 0;
+    } else {
+        // Fallback to legacy loopback
         if (pAudioClient) { pAudioClient->Release(); pAudioClient = nullptr; }
-        hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
-        if (SUCCEEDED(hr)) {
-            hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
-            if (SUCCEEDED(hr)) {
-                hr = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&pAudioClient);
+        
+        HRESULT hrEnum = CoCreateInstance(__uuidof(MMDeviceEnumerator), NULL, CLSCTX_ALL, __uuidof(IMMDeviceEnumerator), (void**)&pEnumerator);
+        if (SUCCEEDED(hrEnum)) {
+            hrEnum = pEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &pDevice);
+            if (SUCCEEDED(hrEnum)) {
+                hrEnum = pDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, NULL, (void**)&pDefaultAudioClient);
+                if (SUCCEEDED(hrEnum)) {
+                    pDefaultAudioClient->GetMixFormat(&pwfx);
+                    pAudioClient = pDefaultAudioClient;
+                    pDefaultAudioClient = nullptr; // Take ownership
+                    hr = S_OK;
+                    streamFlags = AUDCLNT_STREAMFLAGS_LOOPBACK;
+                }
             }
         }
     }
-
-    if (SUCCEEDED(hr) && pAudioClient) {
-        hr = pAudioClient->GetMixFormat(&pwfx);
-        if (SUCCEEDED(hr)) {
+    
+    if (pDefaultAudioClient) pDefaultAudioClient->Release();
+    if (pDevice) pDevice->Release();
+    if (pEnumerator) pEnumerator->Release();
+    
+    if (SUCCEEDED(hr) && pAudioClient && pwfx) {
             static const GUID GUID_ChatLoopbackSession = { 0x5a1b3d2c, 0x9f8e, 0x47a1, { 0xb2, 0xc3, 0xd4, 0xe5, 0xf6, 0x07, 0x18, 0x29 } };
-            hr = pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_LOOPBACK, 10000000, 0, pwfx, &GUID_ChatLoopbackSession);
+            hr = pAudioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, streamFlags, 10000000, 0, pwfx, &GUID_ChatLoopbackSession);
             if (SUCCEEDED(hr)) {
                 IAudioCaptureClient* pCaptureClient = nullptr;
                 hr = pAudioClient->GetService(__uuidof(IAudioCaptureClient), (void**)&pCaptureClient);
@@ -2386,9 +2409,9 @@ void AudioLoopbackThreadFunc() {
                 }
             }
             CoTaskMemFree(pwfx);
-        }
         pAudioClient->Release();
     }
+    
     if (pDevice) pDevice->Release();
     if (pEnumerator) pEnumerator->Release();
     
