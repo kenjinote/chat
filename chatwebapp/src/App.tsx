@@ -432,7 +432,6 @@ const App: React.FC = () => {
   const [volume, setVolume] = useState<number>(50);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const scriptProcessorRef = useRef<ScriptProcessorNode | null>(null);
-  
   const [micLevel, setMicLevel] = useState(0);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const rafRef = useRef<number>(0);
@@ -446,14 +445,14 @@ const App: React.FC = () => {
   const videoIntervalRef = useRef<number | null>(null);
   const videoCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoElRef = useRef<HTMLVideoElement | null>(null);
-
+  // Audio playback queue
+  const nextPlayTimeRef = useRef<Record<string, number>>({});
   // Incoming Video State (Map of userId -> image URL or canvas ref)
   const [videoFrames, setVideoFrames] = useState<Record<string, string>>({});
   const [talkingUsers, setTalkingUsers] = useState<Record<string, number>>({});
   const jmuxersRef = useRef<Map<string, any>>(new Map());
 
   // Audio playback queue
-  const nextPlayTimeRef = useRef<Record<string, number>>({});
 
   const updateMicLevel = () => {
     if (!analyserRef.current) return;
@@ -525,12 +524,11 @@ const App: React.FC = () => {
     
     setRoomId(targetRoom);
     if (featureFlags.showSystemMessages) {
-      setMessages([
+      setMessages(prev => [
+        ...prev,
         { id: crypto.randomUUID(), userId: '', userName: '', msg: t.joinedNetwork(finalName.split('#')[0]), clr: 0, sz: 9, isSystem: true, systemColor: '#808080' },
         { id: crypto.randomUUID(), userId: '', userName: '', msg: t.movingTo(targetRoom), clr: 0, sz: 9, isSystem: true, systemColor: '#808080' }
       ]);
-    } else {
-      setMessages([]);
     }
     setUsers([]);
     
@@ -555,6 +553,21 @@ const App: React.FC = () => {
     chatInputRef.current?.focus();
     // We intentionally only run this on mount, so no dependencies
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Unlock audio context on any user interaction (Browser Autoplay Policy)
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (audioContextRef.current?.state === 'suspended') {
+        audioContextRef.current.resume();
+      }
+    };
+    document.addEventListener('click', unlockAudio, { passive: true });
+    document.addEventListener('keydown', unlockAudio, { passive: true });
+    return () => {
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('keydown', unlockAudio);
+    };
   }, []);
 
   // Sync current room and settings to URL
@@ -730,11 +743,6 @@ const App: React.FC = () => {
     });
 
     socket.on('audio-receive', (buf: ArrayBuffer) => {
-      // Decode Opus to PCM (this is done on server, so we just receive raw PCM here)
-      
-      // We need AudioContext to play
-      if (!audioContextRef.current) return;
-      
       const textDecoder = new TextDecoder('utf8');
       const senderUserId = textDecoder.decode(new Uint8Array(buf, 0, 80)).replace(/\0/g, '');
       if (ignoredUsersRef.current.includes(senderUserId)) return;
@@ -749,6 +757,7 @@ const App: React.FC = () => {
         float32Array[i] = int16Array[i] / 32768.0;
       }
       
+      if (!audioContextRef.current) return;
       const audioCtx = audioContextRef.current;
       const audioBuffer = audioCtx.createBuffer(1, float32Array.length, 16000);
       audioBuffer.copyToChannel(float32Array, 0);
@@ -761,14 +770,32 @@ const App: React.FC = () => {
         source.connect(audioCtx.destination);
       }
       
-      let startTime = nextPlayTimeRef.current[senderUserId] || audioCtx.currentTime;
-      const MAX_LATENCY = 0.5; // 500ms max latency buffer
-      if (startTime < audioCtx.currentTime || startTime > audioCtx.currentTime + MAX_LATENCY) {
-        // If we are falling behind, or if we accumulated too much buffer, reset
-        startTime = audioCtx.currentTime + 0.1; // 100ms jitter buffer
+      let startTime = nextPlayTimeRef.current[senderUserId] || 0;
+      const currentLatency = startTime - audioCtx.currentTime;
+      
+      if (currentLatency < 0.05) {
+          // Underrun! Re-buffer 150ms
+          startTime = audioCtx.currentTime + 0.15;
+          source.playbackRate.value = 1.0;
+      } else if (currentLatency > 0.4) {
+          // Overrun! Snap back to 150ms
+          startTime = audioCtx.currentTime + 0.15;
+          source.playbackRate.value = 1.0;
+      } else if (currentLatency > 0.2) {
+          // Buffer growing, speed up slightly (1% pitch increase, unnoticeable)
+          source.playbackRate.value = 1.01;
+      } else if (currentLatency < 0.1) {
+          // Buffer shrinking, slow down slightly (1% pitch decrease)
+          source.playbackRate.value = 0.99;
+      } else {
+          source.playbackRate.value = 1.0;
       }
+      
       source.start(startTime);
-      nextPlayTimeRef.current[senderUserId] = startTime + audioBuffer.duration;
+      
+      // Calculate duration factoring in playbackRate to ensure next packet is scheduled correctly!
+      const actualDuration = audioBuffer.duration / source.playbackRate.value;
+      nextPlayTimeRef.current[senderUserId] = startTime + actualDuration;
     });
 
     socket.on('video-receive-jpeg', (buf: ArrayBuffer) => {

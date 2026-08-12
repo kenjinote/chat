@@ -80,14 +80,19 @@ udpSocket.on('message', (msg, rinfo) => {
       const nullIdx = senderUserId.indexOf('\0');
       if (nullIdx !== -1) senderUserId = senderUserId.substring(0, nullIdx);
     
-    const fragIdx = (payloadType === 2 || payloadType === 5 || payloadType === 4) ? msg.readUInt32LE(8) : 0;
-    
-    // Deduplicate packets (skip audio since C++ server may not increment seq for audio)
-    if (payloadType !== 1) {
-      const packetKey = `${senderUserId}_${payloadType}_${seq}_${fragIdx}`;
-      if (seenUdpPackets.has(packetKey)) return;
-      seenUdpPackets.add(packetKey);
+    // Deduplicate packets (Audio uses timestamp at offset 8, Video uses seq + fragIdx)
+    let packetKey = '';
+    let timestamp = 0;
+    if (payloadType === 1) {
+      timestamp = msg.readUInt32LE(8);
+      packetKey = `${senderUserId}_${payloadType}_${timestamp}`;
+    } else {
+      const fragIdx = (payloadType === 2 || payloadType === 5 || payloadType === 4) ? msg.readUInt32LE(8) : 0;
+      packetKey = `${senderUserId}_${payloadType}_${seq}_${fragIdx}`;
     }
+    
+    if (seenUdpPackets.has(packetKey)) return;
+    seenUdpPackets.add(packetKey);
 
     if (payloadType === 1) { // Audio
       const opusData = msg.subarray(92);
