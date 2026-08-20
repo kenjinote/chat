@@ -1733,7 +1733,7 @@ const App: React.FC = () => {
         const hasFrame = !!videoFrames[userId];
         const pos = videoPositions[userId] || { x: 0, y: 0 };
         return (
-          <div key={userId} className="window" style={{ position: 'fixed', top: '50px', right: '20px', width: '324px', height: 'auto', zIndex: 1000, boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', transform: `translate(${pos.x}px, ${pos.y}px)` }}>
+          <div key={userId} className="window video-window" style={{ position: 'fixed', top: '50px', right: '20px', zIndex: 1000, boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', transform: `translate(${pos.x}px, ${pos.y}px)` }}>
             <div className="title-bar" onPointerDown={(e) => handleVideoDragStart(e, userId)} style={{ cursor: 'move' }}>
               <div className="title-bar-text">{cleanName} - {t.videoStream} ({viewerCounts[userId] || 0})</div>
               <div className="title-bar-controls">
@@ -1774,7 +1774,7 @@ const App: React.FC = () => {
 
       {/* Self Preview Video Window */}
       {showSelfPreview && (
-        <div className="window" style={{ position: 'fixed', top: '50px', left: '20px', width: '324px', height: 'auto', zIndex: 1000, boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', transform: `translate(${videoPositions['self']?.x || 0}px, ${videoPositions['self']?.y || 0}px)` }}>
+        <div className="window video-window" style={{ position: 'fixed', top: '50px', left: '20px', zIndex: 1000, boxShadow: '2px 2px 5px rgba(0,0,0,0.5)', transform: `translate(${videoPositions['self']?.x || 0}px, ${videoPositions['self']?.y || 0}px)` }}>
           <div className="title-bar" onPointerDown={(e) => handleVideoDragStart(e, 'self')} style={{ cursor: 'move' }}>
             <div className="title-bar-text">{t.self} - {t.videoStream} {t.viewingCount.replace('%d', (viewerCounts[localUserIdRef.current] || 0).toString())}</div>
             <div className="title-bar-controls">

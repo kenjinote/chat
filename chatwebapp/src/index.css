@@ -467,15 +467,24 @@ button {
 }
 
 
+
+.video-window {
+  width: 324px;
+}
+
 /* Mobile Responsive - General Fullscreen Overrides */
 @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
-  .window {
+  .window:not(.video-window) {
     width: 100%;
     height: 100dvh;
     max-height: 100dvh;
     border: none;
     box-shadow: none;
   }
+  .window.video-window {
+    width: 200px;
+  }
+
   .toolbar {
     flex-wrap: wrap;
   }
