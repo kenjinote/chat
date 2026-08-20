@@ -139,7 +139,7 @@ public:
     HRESULT STDMETHODCALLTYPE OnChannelVolumeChanged(DWORD, float[], DWORD, LPCGUID) { return S_OK; }
     HRESULT STDMETHODCALLTYPE OnGroupingParamChanged(LPCGUID, LPCGUID) { return S_OK; }
     HRESULT STDMETHODCALLTYPE OnStateChanged(AudioSessionState) { return S_OK; }
-    HRESULT STDMETHODCALLTYPE OnSessionDisconnected(AudioSessionDisconnectReason) { return S_OK; }
+    HRESULT STDMETHODCALLTYPE OnSessionDisconnected(AudioSessionDisconnectReason);
 };
 CAudioSessionEvents* g_pAudioEvents = nullptr;
 
@@ -147,10 +147,18 @@ CAudioSessionEvents* g_pAudioEvents = nullptr;
 #define WM_APP_MAINTENANCE_MSG (WM_APP + 5)
 #define WM_APP_CONNECT_SERVER (WM_APP + 6)
 #define WM_APP_SORT_USERLIST (WM_APP + 7)
+#define WM_APP_REINIT_VOLUME (WM_APP + 8)
 
 HRESULT STDMETHODCALLTYPE CAudioSessionEvents::OnSimpleVolumeChanged(float NewVolume, BOOL NewMute, LPCGUID EventContext) {
     if (g_hVolumeSlider) {
         PostMessage(GetParent(g_hVolumeSlider), WM_APP_VOLUME_CHANGED, (WPARAM)(NewVolume * 100), (LPARAM)NewMute);
+    }
+    return S_OK;
+}
+
+HRESULT STDMETHODCALLTYPE CAudioSessionEvents::OnSessionDisconnected(AudioSessionDisconnectReason DisconnectReason) {
+    if (g_hVolumeSlider) {
+        PostMessage(GetParent(g_hVolumeSlider), WM_APP_REINIT_VOLUME, 0, 0);
     }
     return S_OK;
 }
@@ -2107,6 +2115,21 @@ void CALLBACK waveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR
                 g_hWaveIn = NULL;
             }
         }
+    }
+}
+
+void CleanupVolumeSync() {
+    if (g_pAudioSessionControl && g_pAudioEvents) {
+        g_pAudioSessionControl->UnregisterAudioSessionNotification(g_pAudioEvents);
+        g_pAudioEvents->Release();
+        g_pAudioEvents = nullptr;
+    }
+    if (g_pAudioSessionControl) { g_pAudioSessionControl->Release(); g_pAudioSessionControl = nullptr; }
+    if (g_pSimpleAudioVolume) { g_pSimpleAudioVolume->Release(); g_pSimpleAudioVolume = nullptr; }
+    if (g_pAudioClient) {
+        g_pAudioClient->Stop();
+        g_pAudioClient->Release();
+        g_pAudioClient = nullptr;
     }
 }
 
@@ -9039,6 +9062,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         return 0;
     }
 
+    case WM_APP_REINIT_VOLUME: {
+        CleanupVolumeSync();
+        InitVolumeSync(hWnd);
+        return 0;
+    }
+
     case WM_APP_VOLUME_CHANGED: {
         if (g_hVolumeSlider) {
             BOOL isMuted = (BOOL)lParam;
@@ -9499,13 +9528,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
         DeleteObject(g_hFontU_btn);
         DeleteObject(g_hFontB_btn);
         DeleteObject(g_hFontCombo);
-        if (g_pAudioSessionControl && g_pAudioEvents) {
-            g_pAudioSessionControl->UnregisterAudioSessionNotification(g_pAudioEvents);
-            g_pAudioEvents->Release();
-            g_pAudioEvents = nullptr;
-        }
-        if (g_pAudioSessionControl) { g_pAudioSessionControl->Release(); g_pAudioSessionControl = nullptr; }
-        if (g_pSimpleAudioVolume) { g_pSimpleAudioVolume->Release(); g_pSimpleAudioVolume = nullptr; }
+        CleanupVolumeSync();
         MFShutdown();
         CoUninitialize();
 
