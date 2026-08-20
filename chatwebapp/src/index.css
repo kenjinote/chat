@@ -470,6 +470,7 @@ button {
 
 .video-window {
   width: 324px;
+  height: auto !important;
 }
 
 /* Mobile Responsive - General Fullscreen Overrides */
@@ -483,6 +484,7 @@ button {
   }
   .window.video-window {
     width: 200px;
+    height: auto !important;
   }
 
   .toolbar {

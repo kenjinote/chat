@@ -438,6 +438,7 @@ const App: React.FC = () => {
 
   // Video state
   const [isWebcamActive, setIsWebcamActive] = useState(false);
+  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [isScreenActive, setIsScreenActive] = useState(false);
   const [showSelfPreview, setShowSelfPreview] = useState(false);
   const selfVideoRef = useRef<HTMLVideoElement>(null);
@@ -952,6 +953,21 @@ const App: React.FC = () => {
     }
   }, [isWebcamActive, isScreenActive]);
 
+  const refreshDevices = async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setVideoDevices(devices.filter(d => d.kind === 'videoinput'));
+    } catch (e) {
+      console.error('Failed to enumerate devices:', e);
+    }
+  };
+
+  useEffect(() => {
+    refreshDevices();
+    navigator.mediaDevices.addEventListener('devicechange', refreshDevices);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', refreshDevices);
+  }, []);
+
   useEffect(() => {
     if (showSelfPreview && selfVideoRef.current && videoStreamRef.current) {
       selfVideoRef.current.srcObject = videoStreamRef.current;
@@ -1219,24 +1235,48 @@ const App: React.FC = () => {
     }
   };
 
-  const toggleWebcam = async () => {
+  const toggleWebcam = async (deviceId?: string): Promise<'started' | 'stopped' | 'prompted_multicam' | 'error'> => {
     initAudio();
-    if (isWebcamActive) {
+    if (isWebcamActive && !deviceId) {
       stopVideoEncodeLoop();
       setIsWebcamActive(false);
+      return 'stopped';
     } else {
       try {
         if (isScreenActive) {
           stopVideoEncodeLoop();
           setIsScreenActive(false);
         }
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+        if (isWebcamActive) {
+          stopVideoEncodeLoop();
+        }
+        const constraints: MediaStreamConstraints = { 
+          video: deviceId 
+            ? { deviceId: { exact: deviceId }, width: 640, height: 480 } 
+            : { facingMode: 'user', width: 640, height: 480 } 
+        };
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoInputDevices = devices.filter(d => d.kind === 'videoinput');
+        setVideoDevices(videoInputDevices);
+        
+        if (!deviceId && videoInputDevices.length > 1 && !videoDevices.some(d => d.label)) {
+          // We got permission, but the user hasn't explicitly chosen a camera and there are multiple.
+          // Stop this temporary stream so they can choose from the menu.
+          stream.getTracks().forEach(t => t.stop());
+          setIsWebcamActive(false);
+          return 'prompted_multicam';
+        }
+
         videoStreamRef.current = stream;
         startVideoEncodeLoop(stream);
         setIsWebcamActive(true);
+        return 'started';
       } catch (err) {
         console.error('Webcam error:', err);
         alert(t.noCameraAccess);
+        return 'error';
       }
     }
   };
@@ -1479,7 +1519,7 @@ const App: React.FC = () => {
                           e.stopPropagation();
                           setSelectedUserId(u.userId);
                           const x = Math.min(e.clientX, window.innerWidth - 180);
-                          const y = Math.min(e.clientY, window.innerHeight - 150);
+                          const y = e.clientY;
                           setContextMenu({ x, y, userId: u.userId, isSelf });
                         }}
                         onClick={(e) => {
@@ -1487,7 +1527,7 @@ const App: React.FC = () => {
                           e.stopPropagation();
                           setSelectedUserId(u.userId);
                           const x = Math.min(e.clientX, window.innerWidth - 180);
-                          const y = Math.min(e.clientY, window.innerHeight - 150);
+                          const y = e.clientY;
                           setContextMenu({ x, y, userId: u.userId, isSelf });
                         }}
                       >
@@ -1532,15 +1572,39 @@ const App: React.FC = () => {
       {contextMenu && (
         <div 
           className="context-menu" 
-          style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y, zIndex: 1000 }}
+          style={{ position: 'fixed', left: contextMenu.x, top: contextMenu.y > window.innerHeight / 2 ? 'auto' : contextMenu.y, bottom: contextMenu.y > window.innerHeight / 2 ? window.innerHeight - contextMenu.y : 'auto', maxHeight: '80vh', overflowY: 'auto', zIndex: 1000 }}
           onContextMenu={(e) => e.preventDefault()}
         >
           {contextMenu.isSelf ? (
             <>
               {featureFlags.enableCamera && (
-                <div className="context-menu-item" onClick={() => { toggleWebcam(); setContextMenu(null); }}>
-                  {isWebcamActive ? t.stopCamera : t.startCamera}
-                </div>
+                <>
+                  {!isWebcamActive && (videoDevices.length === 0 || (videoDevices.length === 1 && !videoDevices[0].label) || (videoDevices.length > 1 && !videoDevices.some(d => d.label))) && (
+                    <div className="context-menu-item" onClick={async () => { 
+                      const res = await toggleWebcam();
+                      if (res !== 'prompted_multicam') {
+                        setContextMenu(null);
+                      }
+                    }}>
+                      {t.startCamera}
+                    </div>
+                  )}
+                  {!isWebcamActive && videoDevices.length > 0 && videoDevices.some(d => d.label) && videoDevices.map((device, i) => (
+                    <div key={device.deviceId} className="context-menu-item" onClick={() => { toggleWebcam(device.deviceId); setContextMenu(null); }}>
+                      {t.startCamera} ({device.label || `Camera ${i+1}`})
+                    </div>
+                  ))}
+                  {isWebcamActive && (
+                    <div className="context-menu-item" onClick={() => { toggleWebcam(); setContextMenu(null); }}>
+                      {t.stopCamera}
+                    </div>
+                  )}
+                  {isWebcamActive && videoDevices.length > 1 && videoDevices.some(d => d.label) && videoDevices.map((device, i) => (
+                    <div key={device.deviceId} className="context-menu-item" onClick={() => { toggleWebcam(device.deviceId); setContextMenu(null); }}>
+                      カメラ切替: {device.label || `Camera ${i+1}`}
+                    </div>
+                  ))}
+                </>
               )}
               {featureFlags.enableScreen && (
                 <div className="context-menu-item" onClick={() => { toggleScreen(); setContextMenu(null); }}>
@@ -1752,17 +1816,17 @@ const App: React.FC = () => {
                 }}></button>
               </div>
             </div>
-            <div className="window-body" style={{ margin: 0, padding: 0, background: '#000', height: '180px', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+            <div className="window-body" style={{ margin: 0, padding: 0, background: '#000', minHeight: '120px', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
             
               <video 
                 id={`video-element-${userId}`} 
                 autoPlay 
                 muted 
                 playsInline
-                style={{ width: '100%', height: '100%', objectFit: 'contain', display: hasFrame && videoFrames[userId] === 'h264' ? 'block' : 'none' }} 
+                style={{ width: '100%', height: 'auto', objectFit: 'contain', display: hasFrame && videoFrames[userId] === 'h264' ? 'block' : 'none' }} 
               />
               {hasFrame && videoFrames[userId] !== 'h264' && videoFrames[userId].startsWith('blob:') && (
-                <img src={videoFrames[userId]} alt="video" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+                <img src={videoFrames[userId]} alt="video" style={{ width: '100%', height: 'auto', objectFit: 'contain', display: 'block' }} />
               )}
               {!hasFrame && (
                 <div style={{ color: '#fff', fontSize: '12px' }}>{t.loading}...</div>
@@ -1786,13 +1850,13 @@ const App: React.FC = () => {
               }}></button>
             </div>
           </div>
-          <div className="window-body" style={{ margin: 0, padding: 0, background: '#000', height: '180px', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+          <div className="window-body" style={{ margin: 0, padding: 0, background: '#000', minHeight: '120px', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
             <video 
               ref={selfVideoRef}
               autoPlay 
               muted 
               playsInline
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+              style={{ width: '100%', height: 'auto', objectFit: 'contain' }} 
             />
           </div>
         </div>
