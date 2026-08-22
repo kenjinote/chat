@@ -97,6 +97,7 @@ HWND g_hBtnB, g_hBtnI, g_hBtnU, g_hComboSize, g_hBtnColor;
 HWND g_hBtnMoveRoom;
 HWND g_hBtnVoice, g_hBtnVoiceDrop, g_hBtnVideo, g_hVolumeIndicator, g_hSpeakerIcon, g_hVolumeSlider;
 int g_selectedAudioDevice = -1; // -1: WAVE_MAPPER, -2: Loopback, >=0: Mic index
+int g_selectedCameraDevice = 0;
 HWND g_hMaintenanceText;
 std::wstring g_maintenanceMsg = L"";
 
@@ -888,6 +889,7 @@ bool g_lastInputFontI = false;
 IWICImagingFactory* g_pWICFactory = NULL;
 bool g_isMuted = false;
 bool g_isWebcamActive = false; // Kept for backwards compatibility (means any capture is active)
+bool g_webcamNeedsRestart = false;
 int g_captureSourceType = 0; // 0=None, 1=Webcam, 2=Monitor, 3=Window
 HMONITOR g_captureMonitor = NULL;
 HWND g_captureHwnd = NULL;
@@ -1466,8 +1468,15 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
     WgcCaptureSession wgcSession;
     
     static bool s_firstFrameEncoded = false;
-
+    
     while (g_isAppRunning) {
+        if (g_webcamNeedsRestart) {
+            if (pReader) {
+                pReader->Release();
+                pReader = NULL;
+            }
+            g_webcamNeedsRestart = false;
+        }
         if (!g_isWebcamActive || g_sock == INVALID_SOCKET) {
             if (wgcSession.IsActive()) {
                 wgcSession.Stop();
@@ -1505,7 +1514,11 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             IMFActivate** ppDevices = NULL;
             UINT32 count = 0;
             MFEnumDeviceSources(pAttributes, &ppDevices, &count);
-            if (count > 0) ppDevices[0]->ActivateObject(IID_PPV_ARGS(&pSource));
+            if (count > 0) {
+                int devIdx = g_selectedCameraDevice;
+                if (devIdx < 0 || devIdx >= (int)count) devIdx = 0;
+                ppDevices[devIdx]->ActivateObject(IID_PPV_ARGS(&pSource));
+            }
             for (UINT32 i = 0; i < count; i++) ppDevices[i]->Release();
             CoTaskMemFree(ppDevices);
             pAttributes->Release();
@@ -7504,7 +7517,40 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                 
                 if (clickedUser == g_userId) {
                     HMENU hMenu = CreatePopupMenu();
-                    AppendMenuW(hMenu, MF_STRING | ((g_isWebcamActive && g_captureSourceType == 1) ? MF_CHECKED : MF_UNCHECKED), 1, GetString(IDS_VIDEO_STREAM).c_str());
+                    
+                    std::vector<std::wstring> cameras;
+                    IMFAttributes* pAttributes = NULL;
+                    if (SUCCEEDED(MFCreateAttributes(&pAttributes, 1))) {
+                        if (SUCCEEDED(pAttributes->SetGUID(MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE, MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID))) {
+                            IMFActivate** ppDevices = NULL;
+                            UINT32 count = 0;
+                            if (SUCCEEDED(MFEnumDeviceSources(pAttributes, &ppDevices, &count))) {
+                                for (UINT32 i = 0; i < count; i++) {
+                                    WCHAR* name = NULL;
+                                    UINT32 length = 0;
+                                    if (SUCCEEDED(ppDevices[i]->GetAllocatedString(MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME, &name, &length))) {
+                                        cameras.push_back(name);
+                                        CoTaskMemFree(name);
+                                    } else {
+                                        cameras.push_back(GetString(IDS_CAMERA) + std::to_wstring(i + 1));
+                                    }
+                                    ppDevices[i]->Release();
+                                }
+                                CoTaskMemFree(ppDevices);
+                            }
+                        }
+                        pAttributes->Release();
+                    }
+
+                    if (cameras.size() > 1) {
+                        HMENU hCamMenu = CreatePopupMenu();
+                        for (size_t i = 0; i < cameras.size(); ++i) {
+                            AppendMenuW(hCamMenu, MF_STRING | ((g_isWebcamActive && g_captureSourceType == 1 && g_selectedCameraDevice == (int)i) ? MF_CHECKED : MF_UNCHECKED), 50000 + (UINT_PTR)i, cameras[i].c_str());
+                        }
+                        AppendMenuW(hMenu, MF_POPUP, (UINT_PTR)hCamMenu, GetString(IDS_VIDEO_STREAM).c_str());
+                    } else {
+                        AppendMenuW(hMenu, MF_STRING | ((g_isWebcamActive && g_captureSourceType == 1) ? MF_CHECKED : MF_UNCHECKED), 1, GetString(IDS_VIDEO_STREAM).c_str());
+                    }
                     
                     HMENU hShareMenu = CreatePopupMenu();
                     g_shareMonitors.clear();
@@ -7529,14 +7575,22 @@ LRESULT CALLBACK ListBoxSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM 
                     int cmd = TrackPopupMenu3D(hMenu, TPM_RETURNCMD | TPM_NONOTIFY, pt.x, pt.y, 0, hwnd, NULL);
                     DestroyMenu(hMenu);
                     g_menuThemeData.clear();
-                    if (cmd == 1) {
-                        if (g_isWebcamActive && g_captureSourceType == 1) {
+                    if (cmd == 1 || (cmd >= 50000 && cmd < 50100)) {
+                        bool wasActiveAndSameCamera = false;
+                        int newCamIdx = (cmd == 1) ? g_selectedCameraDevice : (cmd - 50000);
+                        if (g_isWebcamActive && g_captureSourceType == 1 && g_selectedCameraDevice == newCamIdx) {
+                            wasActiveAndSameCamera = true;
+                        }
+
+                        if (wasActiveAndSameCamera) {
                             g_isWebcamActive = false;
                             g_captureSourceType = 0;
                             if (g_videoWindows[g_userId] && IsWindow(g_videoWindows[g_userId])) {
                                 DestroyWindow(g_videoWindows[g_userId]);
                             }
                         } else {
+                            g_selectedCameraDevice = newCamIdx;
+                            g_webcamNeedsRestart = true;
                             if (!g_videoWindows[g_userId] || !IsWindow(g_videoWindows[g_userId])) {
                                 std::wstring titleName = g_username.substr(0, g_username.find(L'#'));
                                 int vidX = CW_USEDEFAULT, vidY = CW_USEDEFAULT;

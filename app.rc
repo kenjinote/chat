@@ -66,6 +66,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s is full, so you entered %s."
     IDS_DEFAULT_MIC "Default Microphone"
     IDS_PC_AUDIO_LOOPBACK "PC Audio (Loopback)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_JAPANESE, SUBLANG_DEFAULT
@@ -127,6 +128,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s が満室のため、%s に入室しました。"
     IDS_DEFAULT_MIC "既定のマイク"
     IDS_PC_AUDIO_LOOPBACK "PC音源（ループバック）"
+    IDS_CAMERA "カメラ "
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
@@ -188,6 +190,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "由于 %s 已满，您已进入 %s。"
     IDS_DEFAULT_MIC "默认麦克风"
     IDS_PC_AUDIO_LOOPBACK "PC音频 (回环)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
@@ -249,6 +252,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s 방이 가득 차서 %s에 입장했습니다."
     IDS_DEFAULT_MIC "기본 마이크"
     IDS_PC_AUDIO_LOOPBACK "PC 오디오 (루프백)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_TRADITIONAL
@@ -310,6 +314,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "由于 %s 已满，您已进入 %s。"
     IDS_DEFAULT_MIC "默认麦克风"
     IDS_PC_AUDIO_LOOPBACK "PC音频 (回环)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_FRENCH, SUBLANG_FRENCH
@@ -371,6 +376,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s est plein, vous êtes entré dans %s."
     IDS_DEFAULT_MIC "Microphone par défaut"
     IDS_PC_AUDIO_LOOPBACK "Audio du PC (Loopback)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_GERMAN, SUBLANG_GERMAN
@@ -432,6 +438,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Da %s voll ist, haben Sie %s betreten."
     IDS_DEFAULT_MIC "Standard-Mikrofon"
     IDS_PC_AUDIO_LOOPBACK "PC-Audio (Loopback)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_SPANISH, SUBLANG_SPANISH_MODERN
@@ -493,6 +500,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Como %s está lleno, entraste a %s."
     IDS_DEFAULT_MIC "Micrófono predeterminado"
     IDS_PC_AUDIO_LOOPBACK "Audio de PC (Loopback)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_HINDI, SUBLANG_DEFAULT
@@ -554,6 +562,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "चूंकि %s भरा हुआ है, आपने %s में प्रवेश किया。"
     IDS_DEFAULT_MIC "डिफ़ॉल्ट माइक्रोफ़ोन"
     IDS_PC_AUDIO_LOOPBACK "पीसी ऑडियो (लूपबैक)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_PORTUGUESE, SUBLANG_DEFAULT
@@ -615,6 +624,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Como %s está cheio, você entrou em %s."
     IDS_DEFAULT_MIC "Microfone padrão"
     IDS_PC_AUDIO_LOOPBACK "Áudio do PC (Loopback)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_RUSSIAN, SUBLANG_DEFAULT
@@ -676,6 +686,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Так как %s заполнен, вы вошли в %s."
     IDS_DEFAULT_MIC "Микрофон по умолчанию"
     IDS_PC_AUDIO_LOOPBACK "Звук ПК (Loopback)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_ARABIC, SUBLANG_DEFAULT
@@ -737,6 +748,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "بما أن %s ممتلئة، فقد دخلت %s."
     IDS_DEFAULT_MIC "الميكروفون الافتراضي"
     IDS_PC_AUDIO_LOOPBACK "صوت الكمبيوتر (استرجاع)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_BENGALI, SUBLANG_DEFAULT
@@ -798,6 +810,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "যেহেতু %s পূর্ণ, আপনি %s এ প্রবেশ করেছেন。"
     IDS_DEFAULT_MIC "ডিফল্ট মাইক্রোফোন"
     IDS_PC_AUDIO_LOOPBACK "পিসি অডিও (লুপব্যাক)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_INDONESIAN, SUBLANG_DEFAULT
@@ -859,6 +872,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Karena %s penuh, Anda masuk ke %s."
     IDS_DEFAULT_MIC "Mikrofon Bawaan"
     IDS_PC_AUDIO_LOOPBACK "Audio PC (Loopback)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_ITALIAN, SUBLANG_DEFAULT
@@ -920,6 +934,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Poiché %s è pieno, sei entrato in %s."
     IDS_DEFAULT_MIC "Microfono predefinito"
     IDS_PC_AUDIO_LOOPBACK "Audio del PC (Loopback)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_TURKISH, SUBLANG_DEFAULT
@@ -981,6 +996,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "%s dolu olduğundan %s odasına girdiniz."
     IDS_DEFAULT_MIC "Varsayılan Mikrofon"
     IDS_PC_AUDIO_LOOPBACK "PC Sesi (Loopback)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_VIETNAMESE, SUBLANG_DEFAULT
@@ -1042,6 +1058,7 @@ BEGIN
     IDS_SYSMSG_ROOM_OVERFLOW_FMT "Vì %s đã đầy, bạn đã vào %s."
     IDS_DEFAULT_MIC "Micrô mặc định"
     IDS_PC_AUDIO_LOOPBACK "Âm thanh PC (Loopback)"
+    IDS_CAMERA "Camera "
 END
 
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
@@ -1057,8 +1074,8 @@ END
 
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,1,3
- PRODUCTVERSION 1,0,1,3
+ FILEVERSION 1,0,1,4
+ PRODUCTVERSION 1,0,1,4
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS 0x40004L
@@ -1069,8 +1086,8 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "FileVersion", "1.0.1.3"
-            VALUE "ProductVersion", "1.0.1.3"
+            VALUE "FileVersion", "1.0.1.4"
+            VALUE "ProductVersion", "1.0.1.4"
         END
     END
     BLOCK "VarFileInfo"
@@ -1078,4 +1095,6 @@ BEGIN
         VALUE "Translation", 0x409, 1200
     END
 END
+
+
 
