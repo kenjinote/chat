@@ -930,10 +930,17 @@ std::map<std::wstring, std::map<std::wstring, DWORD>> g_videoViewers;
 std::mutex g_videoMutex;
 
 struct VideoFrameBuffer {
-    std::map<int, std::vector<uint8_t>> fragments;
+    std::map<uint16_t, std::vector<uint8_t>> fragments;
     int totalFragments = 0;
     DWORD lastUpdate = 0;
     bool isComplete = false;
+    
+    struct FecGroup {
+        int startFrag;
+        int count;
+        std::vector<uint8_t> parityData;
+    };
+    std::vector<FecGroup> fecGroups;
 };
 std::map<std::wstring, std::map<uint16_t, VideoFrameBuffer>> g_videoBuffers;
 std::map<std::wstring, uint16_t> g_videoExpectedSeq;
@@ -1406,10 +1413,10 @@ DWORD WINAPI UdpSenderThread(LPVOID) {
     QueryPerformanceFrequency(&freq);
     
     // Token Bucket Settings
-    DWORD targetBitrate = 24000000; // 24 Mbps (increased to allow fast transmission of I-frames without pacing delays)
+    DWORD targetBitrate = 8000000; // 8 Mbps (reduced from 24 Mbps for smooth pacing and avoiding router buffer overflow)
     double targetBytesPerSec = targetBitrate / 8.0;
-    // Reduce burst size to prevent cheap home router buffers from overflowing, and to align with Windows Sleep(1) max resolution (~15.6ms)
-    double maxTokens = targetBytesPerSec * 0.015; 
+    // Buffer for ~30ms of tokens
+    double maxTokens = targetBytesPerSec * 0.030; 
     double currentTokens = maxTokens;
     
     LARGE_INTEGER lastTime;
@@ -1918,28 +1925,67 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         if (!skipFrame && totalFragments > 0) {
                             g_videoSeq++;
                             if (hasViewers) {
-                                for (int pass = 0; pass < 2; pass++) {
-                                    for (int i = 0; i < totalFragments; i++) {
-                                        int offset = i * MAX_PAYLOAD;
-                                        int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
-                                        
-                                        MediaHeader mhdr = {0};
-                                        mhdr.sessionId = g_sessionId;
-                                        mhdr.seqNum = g_videoSeq;
-                                        mhdr.payloadType = 5; 
-                                        mhdr.flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
-                                        mhdr.timestamp = i; 
-                                        wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
-                                        
-                                        std::vector<uint8_t> packet(sizeof(MediaHeader) + len);
-                                        memcpy(packet.data(), &mhdr, sizeof(MediaHeader));
-                                        memcpy(packet.data() + sizeof(MediaHeader), h264.data() + offset, len);
-                                        
+                                std::vector<std::vector<uint8_t>> fecGroup;
+                                const int FEC_GROUP_SIZE = 4;
+                                for (int i = 0; i < totalFragments; i++) {
+                                    int offset = i * MAX_PAYLOAD;
+                                    int len = min(MAX_PAYLOAD, (int)h264.size() - offset);
+                                    
+                                    MediaHeader mhdr = {0};
+                                    mhdr.sessionId = g_sessionId;
+                                    mhdr.seqNum = g_videoSeq;
+                                    mhdr.payloadType = 5; 
+                                    mhdr.flags = (i == 0 ? 1 : 0) | (i == totalFragments - 1 ? 2 : 0);
+                                    mhdr.timestamp = i; 
+                                    wcsncpy_s(mhdr.userId, 40, g_userId.c_str(), _TRUNCATE);
+                                    
+                                    std::vector<uint8_t> packet(sizeof(MediaHeader) + len);
+                                    memcpy(packet.data(), &mhdr, sizeof(MediaHeader));
+                                    memcpy(packet.data() + sizeof(MediaHeader), h264.data() + offset, len);
+                                    
+                                    fecGroup.push_back(packet);
+                                    
+                                    {
                                         std::unique_lock<std::mutex> lock(g_udpSendMutex);
-                                        g_udpSendQueue.push(std::move(packet));
+                                        g_udpSendQueue.push(packet);
                                         g_udpSendCv.notify_one();
                                     }
-                                    if (totalFragments <= 2) break; // Do not duplicate tiny frames
+                                    
+                                    if (fecGroup.size() == FEC_GROUP_SIZE || i == totalFragments - 1) {
+                                        MediaHeader fecHdr = {0};
+                                        fecHdr.sessionId = g_sessionId;
+                                        fecHdr.seqNum = g_videoSeq;
+                                        fecHdr.payloadType = 6; // FEC
+                                        fecHdr.timestamp = ((i + 1 - (int)fecGroup.size()) & 0xFFFF) | (((int)fecGroup.size() & 0xFFFF) << 16);
+                                        wcsncpy_s(fecHdr.userId, 40, g_userId.c_str(), _TRUNCATE);
+                                        
+                                        size_t maxPayload = 0;
+                                        for (auto& p : fecGroup) {
+                                            size_t payloadSize = p.size() - sizeof(MediaHeader);
+                                            if (payloadSize > maxPayload) maxPayload = payloadSize;
+                                        }
+                                        
+                                        std::vector<uint8_t> fecPacket(sizeof(MediaHeader) + 2 + maxPayload, 0);
+                                        memcpy(fecPacket.data(), &fecHdr, sizeof(MediaHeader));
+                                        
+                                        uint16_t tot = (uint16_t)totalFragments;
+                                        memcpy(fecPacket.data() + sizeof(MediaHeader), &tot, 2);
+                                        
+                                        uint8_t* parityPtr = fecPacket.data() + sizeof(MediaHeader) + 2;
+                                        for (auto& p : fecGroup) {
+                                            const uint8_t* payloadPtr = p.data() + sizeof(MediaHeader);
+                                            size_t payloadSize = p.size() - sizeof(MediaHeader);
+                                            for (size_t j = 0; j < payloadSize; j++) {
+                                                parityPtr[j] ^= payloadPtr[j];
+                                            }
+                                        }
+                                        
+                                        std::unique_lock<std::mutex> lock(g_udpSendMutex);
+                                        g_udpSendQueue.push(std::move(fecPacket));
+                                        g_udpSendCv.notify_one();
+                                        
+                                        fecGroup.clear();
+                                    }
                                 }
                             }
                         } else if (!hasViewers) {
@@ -1988,6 +2034,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                         if (!skipFrame) {
                             g_videoSeq++;
                             if (hasViewers) {
+                                std::vector<std::vector<uint8_t>> fecGroup;
+                                const int FEC_GROUP_SIZE = 4;
                                 for (int i = 0; i < totalFragments; i++) {
                                     int offset = i * MAX_PAYLOAD;
                                     int len = min(MAX_PAYLOAD, (int)jpegData.size() - offset);
@@ -2004,9 +2052,49 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                                     memcpy(packet.data(), &mhdr, sizeof(MediaHeader));
                                     memcpy(packet.data() + sizeof(MediaHeader), jpegData.data() + offset, len);
                                     
-                                    std::unique_lock<std::mutex> lock(g_udpSendMutex);
-                                    g_udpSendQueue.push(std::move(packet));
-                                    g_udpSendCv.notify_one();
+                                    fecGroup.push_back(packet);
+                                    
+                                    {
+                                        std::unique_lock<std::mutex> lock(g_udpSendMutex);
+                                        g_udpSendQueue.push(packet);
+                                        g_udpSendCv.notify_one();
+                                    }
+                                    
+                                    if (fecGroup.size() == FEC_GROUP_SIZE || i == totalFragments - 1) {
+                                        MediaHeader fecHdr = {0};
+                                        fecHdr.sessionId = g_sessionId;
+                                        fecHdr.seqNum = g_videoSeq;
+                                        fecHdr.payloadType = 6; // FEC
+                                        fecHdr.timestamp = ((i + 1 - (int)fecGroup.size()) & 0xFFFF) | (((int)fecGroup.size() & 0xFFFF) << 16);
+                                        wcsncpy_s(fecHdr.userId, 40, g_userId.c_str(), _TRUNCATE);
+                                        
+                                        size_t maxPayload = 0;
+                                        for (auto& p : fecGroup) {
+                                            size_t payloadSize = p.size() - sizeof(MediaHeader);
+                                            if (payloadSize > maxPayload) maxPayload = payloadSize;
+                                        }
+                                        
+                                        std::vector<uint8_t> fecPacket(sizeof(MediaHeader) + 2 + maxPayload, 0);
+                                        memcpy(fecPacket.data(), &fecHdr, sizeof(MediaHeader));
+                                        
+                                        uint16_t tot = (uint16_t)totalFragments;
+                                        memcpy(fecPacket.data() + sizeof(MediaHeader), &tot, 2);
+                                        
+                                        uint8_t* parityPtr = fecPacket.data() + sizeof(MediaHeader) + 2;
+                                        for (auto& p : fecGroup) {
+                                            const uint8_t* payloadPtr = p.data() + sizeof(MediaHeader);
+                                            size_t payloadSize = p.size() - sizeof(MediaHeader);
+                                            for (size_t j = 0; j < payloadSize; j++) {
+                                                parityPtr[j] ^= payloadPtr[j];
+                                            }
+                                        }
+                                        
+                                        std::unique_lock<std::mutex> lock(g_udpSendMutex);
+                                        g_udpSendQueue.push(std::move(fecPacket));
+                                        g_udpSendCv.notify_one();
+                                        
+                                        fecGroup.clear();
+                                    }
                                 }
                             }
                         } else {
@@ -6470,6 +6558,34 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 vbuf.totalFragments = fragIdx + 1;
                             }
                             
+                            // Try FEC recovery
+                            if (vbuf.totalFragments > 0 && !vbuf.isComplete) {
+                                for (auto& fg : vbuf.fecGroups) {
+                                    int missingCount = 0;
+                                    int missingFrag = -1;
+                                    for (int i = 0; i < fg.count; i++) {
+                                        if (vbuf.fragments.find(fg.startFrag + i) == vbuf.fragments.end()) {
+                                            missingCount++;
+                                            missingFrag = fg.startFrag + i;
+                                        }
+                                    }
+                                    if (missingCount == 1) {
+                                        std::vector<uint8_t> recovered = fg.parityData;
+                                        for (int i = 0; i < fg.count; i++) {
+                                            if (fg.startFrag + i != missingFrag) {
+                                                auto& frag = vbuf.fragments[fg.startFrag + i];
+                                                for (size_t j = 0; j < frag.size(); j++) {
+                                                    if (j < recovered.size()) {
+                                                        recovered[j] ^= frag[j];
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        vbuf.fragments[missingFrag] = recovered;
+                                    }
+                                }
+                            }
+                            
                             if (vbuf.totalFragments > 0 && vbuf.fragments.size() == (size_t)vbuf.totalFragments) {
                                 vbuf.isComplete = true;
                             }
@@ -6547,6 +6663,69 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                             ++it;
                                         }
                                     }
+                                }
+                            }
+                        }
+                        else if (mhdr->payloadType == 6) {
+                            std::wstring wname = mhdr->userId;
+                            if (wname == g_userId) continue;
+                            uint16_t seq = mhdr->seqNum;
+                            
+                            int len = res - (int)sizeof(MediaHeader);
+                            if (len >= 2) {
+                                std::lock_guard<std::mutex> lock(g_videoMutex);
+                                auto& vbuf = g_videoBuffers[wname][seq];
+                                vbuf.lastUpdate = GetTickCount();
+                                
+                                uint16_t totalFragments = 0;
+                                memcpy(&totalFragments, udpBuf + sizeof(MediaHeader), 2);
+                                if (totalFragments > 0) vbuf.totalFragments = totalFragments;
+                                
+                                int startFrag = mhdr->timestamp & 0xFFFF;
+                                int count = (mhdr->timestamp >> 16) & 0xFFFF;
+                                
+                                VideoFrameBuffer::FecGroup fg;
+                                fg.startFrag = startFrag;
+                                fg.count = count;
+                                fg.parityData.assign(udpBuf + sizeof(MediaHeader) + 2, udpBuf + sizeof(MediaHeader) + len);
+                                vbuf.fecGroups.push_back(fg);
+                                
+                                // Try FEC recovery
+                                if (vbuf.totalFragments > 0 && !vbuf.isComplete) {
+                                    for (auto& fgrp : vbuf.fecGroups) {
+                                        int missingCount = 0;
+                                        int missingFrag = -1;
+                                        for (int i = 0; i < fgrp.count; i++) {
+                                            if (vbuf.fragments.find(fgrp.startFrag + i) == vbuf.fragments.end()) {
+                                                missingCount++;
+                                                missingFrag = fgrp.startFrag + i;
+                                            }
+                                        }
+                                        if (missingCount == 1) {
+                                            std::vector<uint8_t> recovered = fgrp.parityData;
+                                            for (int i = 0; i < fgrp.count; i++) {
+                                                if (fgrp.startFrag + i != missingFrag) {
+                                                    auto& frag = vbuf.fragments[fgrp.startFrag + i];
+                                                    for (size_t j = 0; j < frag.size(); j++) {
+                                                        if (j < recovered.size()) {
+                                                            recovered[j] ^= frag[j];
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            vbuf.fragments[missingFrag] = recovered;
+                                        }
+                                    }
+                                }
+                                
+                                if (vbuf.totalFragments > 0 && vbuf.fragments.size() == (size_t)vbuf.totalFragments) {
+                                    vbuf.isComplete = true;
+                                }
+                                
+                                // Initialize expected sequence if this is the first frame
+                                if (g_videoExpectedSeq.find(wname) == g_videoExpectedSeq.end()) {
+                                    g_videoExpectedSeq[wname] = seq;
+                                    g_videoLastProcessedSeq[wname] = seq - 1;
                                 }
                             }
                         }
