@@ -39,8 +39,8 @@ const C_SERVER_IP = 'chat-lb-2026.japaneast.cloudapp.azure.com';
 const C_SERVER_PORT = 4000;
 const C_UDP_PORT = 4001;
 
-// Global UDP Socket for this Proxy Server instance
-const udpSocket = dgram.createSocket('udp4');
+// Global UDP Socket for this Proxy Server instance (4MB recv buffer for large H.264 I-frame bursts)
+const udpSocket = dgram.createSocket({ type: 'udp4', recvBufferSize: 4 * 1024 * 1024 });
 udpSocket.on('error', (err) => {
   console.error(`[UDP] Socket error: ${err.message}`);
 });
@@ -48,9 +48,74 @@ udpSocket.on('error', (err) => {
 // We map userId -> socket to know who to send decoded audio to
 const connectedClients = new Map<string, Socket>();
 
+interface VideoReassemblyBuffer {
+  fragments: Buffer[];
+  total: number;
+  lastUpdate: number;
+  payloadType: number;
+  fecPackets: Map<number, { count: number; parity: Buffer }>;
+}
+
 // Video Reassembly Buffer
-// Key: `${userId}_${seq}`, Value: { fragments: Buffer[], total: number, lastUpdate: number, payloadType: number }
-const videoBuffers = new Map<string, { fragments: Buffer[], total: number, lastUpdate: number, payloadType: number }>();
+// Key: `${userId}_${seq}`
+const videoBuffers = new Map<string, VideoReassemblyBuffer>();
+
+function tryRecoverFecGroup(vbuf: VideoReassemblyBuffer, baseIdx: number) {
+  const fec = vbuf.fecPackets.get(baseIdx);
+  if (!fec || fec.count <= 0) return;
+
+  let missingCount = 0;
+  let missingIdx = -1;
+  for (let i = 0; i < fec.count; i++) {
+    const idx = baseIdx + i;
+    if (!vbuf.fragments[idx]) {
+      missingCount++;
+      missingIdx = idx;
+    }
+  }
+
+  if (missingCount === 1 && missingIdx >= 0) {
+    const recovered = Buffer.from(fec.parity);
+    for (let i = 0; i < fec.count; i++) {
+      const idx = baseIdx + i;
+      if (idx === missingIdx) continue;
+      const frag = vbuf.fragments[idx];
+      if (frag) {
+        const len = Math.min(recovered.length, frag.length);
+        for (let j = 0; j < len; j++) {
+          recovered[j] ^= frag[j];
+        }
+      }
+    }
+    vbuf.fragments[missingIdx] = recovered;
+  }
+}
+
+function tryEmitCompleteVideoFrame(key: string, senderUserId: string, vbuf: VideoReassemblyBuffer) {
+  if (vbuf.total <= 0) return;
+  for (let i = 0; i < vbuf.total; i++) {
+    if (!vbuf.fragments[i]) return;
+  }
+
+  const fullFrame = Buffer.concat(vbuf.fragments.slice(0, vbuf.total));
+  const finalPayloadType = vbuf.payloadType;
+  videoBuffers.delete(key);
+
+  // Format: 80 bytes (senderUserId) + raw frame
+  const outBuf = Buffer.alloc(80 + fullFrame.length);
+  Buffer.from(senderUserId, 'utf8').copy(outBuf, 0);
+  fullFrame.copy(outBuf, 80);
+
+  for (const [, clientSocket] of connectedClients.entries()) {
+    if (clientSocket.data.userId !== senderUserId && clientSocket.data.roomUsers && clientSocket.data.roomUsers.has(senderUserId)) {
+      if (finalPayloadType === 2) {
+        clientSocket.emit('video-receive-jpeg', outBuf);
+      } else if (finalPayloadType === 5) {
+        clientSocket.emit('video-receive-h264', outBuf);
+      }
+    }
+  }
+}
 
 const seenUdpPackets = new Set<string>();
 
@@ -80,14 +145,14 @@ udpSocket.on('message', (msg, rinfo) => {
       const nullIdx = senderUserId.indexOf('\0');
       if (nullIdx !== -1) senderUserId = senderUserId.substring(0, nullIdx);
     
-    // Deduplicate packets (Audio uses timestamp at offset 8, Video uses seq + fragIdx)
+    // Deduplicate packets (Audio uses timestamp at offset 8, Video/FEC uses seq + fragIdx/timestamp)
     let packetKey = '';
     let timestamp = 0;
     if (payloadType === 1) {
       timestamp = msg.readUInt32LE(8);
       packetKey = `${senderUserId}_${payloadType}_${timestamp}`;
     } else {
-      const fragIdx = (payloadType === 2 || payloadType === 5 || payloadType === 4) ? msg.readUInt32LE(8) : 0;
+      const fragIdx = (payloadType === 2 || payloadType === 5 || payloadType === 6 || payloadType === 4) ? msg.readUInt32LE(8) : 0;
       packetKey = `${senderUserId}_${payloadType}_${seq}_${fragIdx}`;
     }
     
@@ -147,53 +212,50 @@ udpSocket.on('message', (msg, rinfo) => {
       const seq = msg.readUInt16LE(4);
       const flags = msg.readUInt8(7);
       const fragIdx = msg.readUInt32LE(8);
-      const payloadData = msg.subarray(92);
+      const payloadData = Buffer.from(msg.subarray(92));
       
       const key = `${senderUserId}_${seq}`;
       let vbuf = videoBuffers.get(key);
       if (!vbuf) {
-        vbuf = { fragments: [], total: -1, lastUpdate: Date.now(), payloadType };
+        vbuf = { fragments: [], total: -1, lastUpdate: Date.now(), payloadType, fecPackets: new Map() };
         videoBuffers.set(key, vbuf);
       }
       
       vbuf.lastUpdate = Date.now();
+      vbuf.payloadType = payloadType;
       vbuf.fragments[fragIdx] = payloadData;
       
       if ((flags & 2) !== 0) { // Last fragment
         vbuf.total = fragIdx + 1;
       }
       
-      // Check if complete
-      if (vbuf.total > 0) {
-        let complete = true;
-        for (let i = 0; i < vbuf.total; i++) {
-          if (!vbuf.fragments[i]) {
-            complete = false;
-            break;
-          }
-        }
-        if (complete) {
-          // Reassemble
-          const fullFrame = Buffer.concat(vbuf.fragments.slice(0, vbuf.total));
-          videoBuffers.delete(key);
-          
-          // Emit to WebSockets
-          // Format: 80 bytes (senderUserId) + raw frame
-          const outBuf = Buffer.alloc(80 + fullFrame.length);
-          Buffer.from(senderUserId, 'utf8').copy(outBuf, 0);
-          fullFrame.copy(outBuf, 80);
-          
-          for (const [id, clientSocket] of connectedClients.entries()) {
-            if (clientSocket.data.userId !== senderUserId && clientSocket.data.roomUsers && clientSocket.data.roomUsers.has(senderUserId)) {
-              if (payloadType === 2) {
-                clientSocket.emit('video-receive-jpeg', outBuf);
-              } else if (payloadType === 5) {
-                clientSocket.emit('video-receive-h264', outBuf);
-              }
-            }
-          }
+      const baseIdx = Math.floor(fragIdx / 4) * 4;
+      tryRecoverFecGroup(vbuf, baseIdx);
+      tryEmitCompleteVideoFrame(key, senderUserId, vbuf);
+    } else if (payloadType === 6) { // FEC XOR Parity Packet
+      if (msg.length < 94) return;
+      const seq = msg.readUInt16LE(4);
+      const ts = msg.readUInt32LE(8);
+      const baseIdx = ts & 0xFFFF;
+      const count = (ts >>> 16) & 0xFFFF;
+      const tot = msg.readUInt16LE(92);
+      const parity = Buffer.from(msg.subarray(94));
+
+      const key = `${senderUserId}_${seq}`;
+      let vbuf = videoBuffers.get(key);
+      if (!vbuf) {
+        vbuf = { fragments: [], total: tot > 0 ? tot : -1, lastUpdate: Date.now(), payloadType: 5, fecPackets: new Map() };
+        videoBuffers.set(key, vbuf);
+      } else {
+        vbuf.lastUpdate = Date.now();
+        if (vbuf.total <= 0 && tot > 0) {
+          vbuf.total = tot;
         }
       }
+
+      vbuf.fecPackets.set(baseIdx, { count, parity });
+      tryRecoverFecGroup(vbuf, baseIdx);
+      tryEmitCompleteVideoFrame(key, senderUserId, vbuf);
     }
   }
 });

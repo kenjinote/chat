@@ -25,6 +25,7 @@ class H264Encoder {
     IMFTransform* pEncoder = NULL;
     IMFTransform* pColorConv = NULL;
     IMFDXGIDeviceManager* pDXGIManager = NULL;
+    ID3D11Texture2D* pStagingNv12 = NULL;
     UINT m_dxgiToken = 0;
     DWORD inputId = 0;
     DWORD outputId = 0;

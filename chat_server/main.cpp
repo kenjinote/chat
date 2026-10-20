@@ -260,8 +260,11 @@ public:
     }
 
     void disconnect() {
-        asio::error_code ec;
-        m_socket.close(ec);
+        auto self(shared_from_this());
+        asio::post(m_socket.get_executor(), [this, self]() {
+            asio::error_code ec;
+            m_socket.close(ec);
+        });
     }
 
     std::string getIp() {
@@ -285,26 +288,35 @@ public:
     }
 
     void deliver(const std::string& msg) {
-        if (m_writeQueue.size() > 1000) {
-            // Client is too slow or unresponsive, force disconnect to save memory
-            asio::error_code ec;
-            m_socket.close(ec);
-            return;
-        }
-        
-        bool write_in_progress = !m_writeQueue.empty();
-        m_writeQueue.push_back(msg);
-        if (!write_in_progress) {
-            doWrite();
-        }
+        auto self(shared_from_this());
+        asio::post(m_socket.get_executor(), [this, self, msg]() {
+            if (m_writeQueue.size() > 1000) {
+                // Client is too slow or unresponsive, force disconnect to save memory
+                asio::error_code ec;
+                m_socket.close(ec);
+                return;
+            }
+            
+            bool write_in_progress = !m_writeQueue.empty();
+            m_writeQueue.push_back(msg);
+            if (!write_in_progress) {
+                doWrite();
+            }
+        });
     }
 
     std::string getUserId() const { 
         std::lock_guard<std::mutex> lock(m_stateMutex);
         return m_userId; 
     }
-    std::string getUserName() const { return m_userName; }
-    int getNclr() const { return m_nclr; }
+    std::string getUserName() const {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        return m_userName;
+    }
+    int getNclr() const {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        return m_nclr;
+    }
     std::shared_ptr<Room> getRoom() const { 
         std::lock_guard<std::mutex> lock(m_stateMutex);
         return m_room; 
@@ -314,6 +326,31 @@ public:
     udp::endpoint m_udpEndpoint;
     bool m_hasUdpEndpoint;
     std::unordered_map<std::string, std::chrono::steady_clock::time_point> m_watching;
+
+    bool updateUdpEndpoint(const udp::endpoint& ep) {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        if (!m_hasUdpEndpoint || m_udpEndpoint != ep) {
+            m_udpEndpoint = ep;
+            m_hasUdpEndpoint = true;
+            return true;
+        }
+        return false;
+    }
+
+    bool getUdpEndpoint(udp::endpoint& outEp) const {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        if (!m_hasUdpEndpoint) return false;
+        outEp = m_udpEndpoint;
+        return true;
+    }
+
+    void recordWatching(const std::string& targetUserId) {
+        std::lock_guard<std::mutex> lock(m_stateMutex);
+        if (m_watching.size() >= 100) {
+            m_watching.clear();
+        }
+        m_watching[targetUserId] = std::chrono::steady_clock::now();
+    }
     
     void subscribeVideo(const std::string& targetUserId) {
         std::lock_guard<std::mutex> lock(m_stateMutex);
@@ -453,9 +490,12 @@ private:
                 } catch (...) {}
             }
 
-            m_userName = json["userName"].string_value();
-            if (m_userName.empty() || !isValidText(m_userName)) m_userName = m_userId; // fallback
-            m_nclr = json["nclr"].int_value();
+            {
+                std::lock_guard<std::mutex> lock(m_stateMutex);
+                m_userName = json["userName"].string_value();
+                if (m_userName.empty() || !isValidText(m_userName)) m_userName = m_userId; // fallback
+                m_nclr = json["nclr"].int_value();
+            }
             std::string originalRoomName = json["roomName"].string_value();
             if (originalRoomName.empty()) originalRoomName = "Public";
 
@@ -678,8 +718,11 @@ private:
             if (newName.empty() || !isValidText(newName)) {
                 newName = m_userId; // fallback or ignore? Let's just fallback.
             }
-            m_userName = newName;
-            m_nclr = json["nclr"].int_value();
+            {
+                std::lock_guard<std::mutex> lock(m_stateMutex);
+                m_userName = newName;
+                m_nclr = json["nclr"].int_value();
+            }
             if (m_room) {
                 json11::Json renameBroadcast = json11::Json::object {
                     {"type", "rename"},
@@ -934,16 +977,18 @@ void Room::broadcastMedia(const std::shared_ptr<ChatSession>& sender, const uint
     asio::error_code ec;
     auto now = std::chrono::steady_clock::now();
     for (auto& p : m_participants) {
-        if (p != sender && p->m_hasUdpEndpoint) {
+        if (p != sender) {
+            udp::endpoint targetEp;
+            if (!p->getUdpEndpoint(targetEp)) continue;
             bool shouldSend = true;
-            if (payloadType == 2 || payloadType == 5) { // JPEG or H264
+            if (payloadType == 2 || payloadType == 5 || payloadType == 6) { // JPEG, H264, or Video FEC
                 if (!p->isSubscribedToVideo(sender->getUserId())) {
                     shouldSend = false;
                 }
             }
             if (shouldSend) {
                 // Synchronous send for low latency, zero-heap allocation forwarding
-                udpSocket.send_to(asio::buffer(data, length), p->m_udpEndpoint, 0, ec);
+                udpSocket.send_to(asio::buffer(data, length), targetEp, 0, ec);
             }
         }
     }
@@ -1024,19 +1069,14 @@ private:
                     auto session = ServerManager::get().getSession(sessionId);
                     if (session) {
                         // NAT Traversal / UDP Hole Punching: register their UDP port
-                        if (!session->m_hasUdpEndpoint || session->m_udpEndpoint != m_remoteEndpoint) {
-                            session->m_udpEndpoint = m_remoteEndpoint;
-                            session->m_hasUdpEndpoint = true;
+                        if (session->updateUdpEndpoint(m_remoteEndpoint)) {
                             std::cout << "UDP Endpoint locked for Session " << sessionId << ": " << m_remoteEndpoint << std::endl;
                         }
 
                         uint8_t payloadType = header->payloadType;
                         if (payloadType == 3 && bytes_recvd > 92) {
-                            if (session->m_watching.size() >= 100) {
-                                session->m_watching.clear();
-                            }
                             std::string targetA(reinterpret_cast<const char*>(m_recvBuffer.data()) + 92, bytes_recvd - 92);
-                            session->m_watching[targetA] = std::chrono::steady_clock::now();
+                            session->recordWatching(targetA);
                         }
 
                         // Broadcast to the room using Zero-copy fast path

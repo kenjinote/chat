@@ -1475,6 +1475,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
     WgcCaptureSession wgcSession;
     
     static bool s_firstFrameEncoded = false;
+    static std::set<std::wstring> s_activeViewersH264;
+    static int s_burstFrames = 0;
     
     while (g_isAppRunning) {
         if (g_webcamNeedsRestart) {
@@ -1496,6 +1498,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 delete g_pH264Encoder;
                 g_pH264Encoder = nullptr;
             }
+            s_activeViewersH264.clear();
+            s_burstFrames = 0;
             {
                 std::lock_guard<std::mutex> lock(g_videoMutex);
                 g_videoPixelsMap[g_userId].clear();
@@ -1595,8 +1599,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
         LONGLONG timestamp;
         HRESULT hr = E_FAIL;
         std::vector<uint8_t> rgb32Data;
+        winrt::com_ptr<ID3D11Texture2D> gpuTexture;
         UINT32 width = 0, height = 0;
-        // isScreenShare already evaluated above
         // isScreenShare already evaluated above
         
         if (!isScreenShare) {
@@ -1640,19 +1644,49 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 
                 if (!s_firstFrameEncoded || g_pH264Encoder == nullptr) {
                     s_hasPendingFrame = true;
+                    if (s_burstFrames < 5) s_burstFrames = 5;
+                }
+
+                DWORD now = GetTickCount();
+                {
+                    std::lock_guard<std::mutex> lock(g_videoMutex);
+                    for (auto& pair : g_videoViewers[g_userId]) {
+                        if (pair.first == g_userId) continue;
+                        if (now - pair.second < 5000 && s_activeViewersH264.find(pair.first) == s_activeViewersH264.end()) {
+                            s_hasPendingFrame = true;
+                            if (s_burstFrames < 5) s_burstFrames = 5;
+                            break;
+                        }
+                    }
                 }
 
                 DWORD maxFps = 30;
                 DWORD minDelay = 1000 / maxFps;
                 static DWORD lastEncodeTime = 0;
-                DWORD now = GetTickCount();
 
                 if (isScreenShare) {
-                    if (s_hasPendingFrame || now - lastEncodeTime >= 1000) {
-                        if (wgcSession.GetLatestFrame(rgb32Data, width, height)) {
+                    if (s_hasPendingFrame || (s_burstFrames > 0 && now - lastEncodeTime >= minDelay) || now - lastEncodeTime >= 250) {
+                        bool gotFrame = false;
+                        if (g_useH264 && wgcSession.GetLatestTexture(gpuTexture, width, height)) {
+                            gotFrame = true;
+                            // Only read back to CPU if the local user has their own preview window open
+                            HWND hLocalView = NULL;
+                            {
+                                std::lock_guard<std::mutex> lock(g_videoMutex);
+                                auto it = g_videoWindows.find(g_userId);
+                                if (it != g_videoWindows.end()) hLocalView = it->second;
+                            }
+                            if (hLocalView && IsWindow(hLocalView)) {
+                                wgcSession.GetLatestFrame(rgb32Data, width, height);
+                            }
+                        } else if (wgcSession.GetLatestFrame(rgb32Data, width, height)) {
+                            gotFrame = true;
+                        }
+                        if (gotFrame) {
                             hr = S_OK;
                             lastEncodeTime = now;
                             s_hasPendingFrame = false;
+                            if (s_burstFrames > 0) s_burstFrames--;
                         } else {
                             hr = E_FAIL;
                         }
@@ -1698,34 +1732,55 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
             std::vector<uint8_t> nv12DataForEncoder;
             IMFMediaBuffer* pLockedBuffer = nullptr;
 
-            if (isScreenShare) {
-                int targetW = width;
-                int targetH = height;
+            UINT32 cpuEncW = width;
+            UINT32 cpuEncH = height;
+            static UINT32 s_lastCaptureW = 0, s_lastCaptureH = 0;
+            static bool s_gpuEncodeFailed = false;
+            if (width != s_lastCaptureW || height != s_lastCaptureH) {
+                s_lastCaptureW = width;
+                s_lastCaptureH = height;
+                s_gpuEncodeFailed = false;
+            }
+
+            auto prepareScreenShareCpuInput = [&]() {
+                if (rgb32Data.empty()) {
+                    wgcSession.GetLatestFrame(rgb32Data, width, height);
+                }
+                if (rgb32Data.empty()) return;
+                int targetW = max(16, (int)width & ~15);
+                int targetH = max(16, (int)height & ~15);
                 if (width > 848 || height > 480) {
                     float ratio = min(848.0f / width, 480.0f / height);
                     targetW = max(16, (int)(width * ratio) & ~15);
                     targetH = max(16, (int)(height * ratio) & ~15);
-                    
-                    std::vector<uint8_t> scaledRgb;
-                    scaledRgb.resize(targetW * targetH * 4);
+                }
+                
+                if (targetW != (int)width || targetH != (int)height) {
+                    std::vector<uint8_t> scaledRgb(targetW * targetH * 4);
                     const uint32_t* s = (const uint32_t*)rgb32Data.data();
                     uint32_t* d = (uint32_t*)scaledRgb.data();
                     for (int y = 0; y < targetH; y++) {
-                        int sy = min(y * height / targetH, height - 1);
+                        int sy = min(y * (int)height / targetH, (int)height - 1);
                         int dstOffset = y * targetW;
                         int srcOffset = sy * width;
                         for (int x = 0; x < targetW; x++) {
-                            d[dstOffset + x] = s[srcOffset + min(x * width / targetW, width - 1)];
+                            d[dstOffset + x] = s[srcOffset + min(x * (int)width / targetW, (int)width - 1)];
                         }
                     }
-                    rgb32Data.swap(scaledRgb);
-                    width = targetW;
-                    height = targetH;
+                    ConvertRGB32ToNV12(scaledRgb.data(), targetW, targetH, nv12DataForEncoder, false);
+                } else {
+                    ConvertRGB32ToNV12(rgb32Data.data(), targetW, targetH, nv12DataForEncoder, false);
                 }
-                
-                ConvertRGB32ToNV12(rgb32Data.data(), width, height, nv12DataForEncoder, false);
+                cpuEncW = (UINT32)targetW;
+                cpuEncH = (UINT32)targetH;
                 pEncoderInput = nv12DataForEncoder.data();
                 cbEncoderInput = (DWORD)nv12DataForEncoder.size();
+            };
+
+            if (isScreenShare) {
+                if (!g_useH264 || !gpuTexture || s_gpuEncodeFailed) {
+                    prepareScreenShareCpuInput();
+                }
             } else {
                 if (SUCCEEDED(pSample->ConvertToContiguousBuffer(&pLockedBuffer)) && pLockedBuffer) {
                     BYTE* pData = NULL;
@@ -1850,21 +1905,43 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 droppedFrameCount = 0;
             }
 
-            if (pEncoderInput) {
-                UINT32 encW = width & ~15;
-                UINT32 encH = height & ~15;
+            bool useGpuTextureEncode = (isScreenShare && g_useH264 && gpuTexture != nullptr && !s_gpuEncodeFailed);
+            if (pEncoderInput || useGpuTextureEncode) {
+                UINT32 encW = useGpuTextureEncode ? width : (isScreenShare ? cpuEncW : (width & ~15));
+                UINT32 encH = useGpuTextureEncode ? height : (isScreenShare ? cpuEncH : (height & ~15));
                 static UINT32 s_lastEncWidth = 0;
                 static UINT32 s_lastEncHeight = 0;
                 static ID3D11Device* s_lastDevice = nullptr;
 
+                std::set<std::wstring> currentViewers;
+                bool newViewerJoined = false;
+                {
+                    std::lock_guard<std::mutex> lock(g_videoMutex);
+                    DWORD now = GetTickCount();
+                    for (auto& pair : g_videoViewers[g_userId]) {
+                        if (pair.first == g_userId) continue;
+                        if (now - pair.second < 5000) {
+                            currentViewers.insert(pair.first);
+                            if (s_activeViewersH264.find(pair.first) == s_activeViewersH264.end()) {
+                                newViewerJoined = true;
+                            }
+                        }
+                    }
+                }
+                bool hasViewers = !currentViewers.empty();
+                s_activeViewersH264 = currentViewers;
+
                 if (g_useH264) {
-                    ID3D11Device* currentDevice = nullptr;
+                    ID3D11Device* currentDevice = useGpuTextureEncode ? wgcSession.GetDevice() : nullptr;
                     bool isSharingScreen = (g_captureSourceType == 2 || g_captureSourceType == 3);
                     static bool s_lastIsScreenShare = false;
                     
-                    if (g_pH264Encoder && (s_lastEncWidth != encW || s_lastEncHeight != encH || s_lastDevice != currentDevice || s_lastIsScreenShare != isSharingScreen)) {
+                    if (g_pH264Encoder && (newViewerJoined || s_lastEncWidth != encW || s_lastEncHeight != encH || s_lastDevice != currentDevice || s_lastIsScreenShare != isSharingScreen)) {
                         delete g_pH264Encoder;
                         g_pH264Encoder = nullptr;
+                        if (newViewerJoined) {
+                            s_burstFrames = 5;
+                        }
                     }
                     if (!g_pH264Encoder) {
                         g_pH264Encoder = new H264Encoder();
@@ -1882,10 +1959,32 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                 if (g_pH264Encoder) {
                     h264Success = true; // Never fallback to JPEG if H.264 is active
                     std::vector<uint8_t> h264;
-                    bool encSuccess = g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264);
+                    bool encSuccess = false;
+                    if (useGpuTextureEncode) {
+                        encSuccess = g_pH264Encoder->EncodeTexture(gpuTexture.get(), h264);
+                        if (!encSuccess) {
+                            // Fallback to CPU path if GPU texture encoding fails on this hardware
+                            s_gpuEncodeFailed = true;
+                            prepareScreenShareCpuInput();
+                            if (pEncoderInput) {
+                                UINT32 swW = cpuEncW;
+                                UINT32 swH = cpuEncH;
+                                if (g_pH264Encoder->Initialize(swW, swH, true, nullptr)) {
+                                    s_lastEncWidth = swW;
+                                    s_lastEncHeight = swH;
+                                    s_lastDevice = nullptr;
+                                    encSuccess = g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264);
+                                }
+                            }
+                        }
+                    } else if (pEncoderInput) {
+                        encSuccess = g_pH264Encoder->EncodeFrame(pEncoderInput, cbEncoderInput, h264);
+                    }
                     if (encSuccess) {
-                        s_firstFrameEncoded = true;
-                        std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
+                        if (!h264.empty()) {
+                            s_firstFrameEncoded = true;
+                            std::cout << "[Webcam] Encoded H.264 frame, size: " << h264.size() << " time: " << GetTickCount() << std::endl;
+                        }
                         const int MAX_PAYLOAD = 1300;
                         int totalFragments = (int)((h264.size() + MAX_PAYLOAD - 1) / MAX_PAYLOAD);
                         
@@ -1894,32 +1993,6 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             std::unique_lock<std::mutex> lock(g_udpSendMutex);
                             // Increase queue limit to 5000 (~6.5MB) to ensure huge 4K I-frames are never dropped
                             if (g_udpSendQueue.size() + totalFragments > 5000) skipFrame = true;
-                        }
-
-                        static bool s_hadViewersH264 = false;
-                        bool hasViewers = false;
-                        {
-                            std::lock_guard<std::mutex> lock(g_videoMutex);
-                            DWORD now = GetTickCount();
-                            for (auto& pair : g_videoViewers[g_userId]) {
-                                if (pair.first == g_userId) continue;
-                                if (now - pair.second < 5000) {
-                                    hasViewers = true;
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (hasViewers && !s_hadViewersH264) {
-                            // Someone just joined! Force I-frame by deleting encoder.
-                            delete g_pH264Encoder;
-                            g_pH264Encoder = nullptr;
-                            s_firstFrameEncoded = false;
-                            h264Success = false;
-                            s_hadViewersH264 = true;
-                            skipFrame = true; // Skip this frame, next will be I-frame
-                        } else {
-                            s_hadViewersH264 = hasViewers;
                         }
 
                         if (!skipFrame && totalFragments > 0) {
@@ -1988,8 +2061,8 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                                     }
                                 }
                             }
-                        } else if (!hasViewers) {
-                            // If we skip frame due to queue overflow but have no viewers, it's fine.
+                        } else if (!hasViewers || totalFragments == 0) {
+                            // If we have no viewers or MFT buffered the first sample, keep encoder alive.
                         } else {
                             std::cout << "[Webcam] Dropped entire H264 frame to prevent queue overflow! Forcing I-frame for next." << std::endl;
                             // Critical: If we drop a frame, the receiver's state will be corrupted (missing reference).
@@ -1997,7 +2070,7 @@ DWORD WINAPI WebcamThread(LPVOID lpParam) {
                             delete g_pH264Encoder;
                             g_pH264Encoder = nullptr;
                             s_firstFrameEncoded = false;
-                            h264Success = false;
+                            s_burstFrames = 5;
                         }
                     } else {
                         delete g_pH264Encoder;
@@ -2777,6 +2850,24 @@ int g_caretPos = 0;
 int g_anchorPos = 0;
 float g_inputScrollY = 0.0f;
 bool g_caretVisible = true;
+
+struct InputUndoState {
+    std::wstring text;
+    int caretPos = 0;
+    int anchorPos = 0;
+};
+std::vector<InputUndoState> g_inputUndoStack;
+std::vector<InputUndoState> g_inputRedoStack;
+void PushInputUndoState() {
+    g_inputRedoStack.clear();
+    if (!g_inputUndoStack.empty() && g_inputUndoStack.back().text == g_inputText) {
+        return;
+    }
+    if (g_inputUndoStack.size() >= 100) {
+        g_inputUndoStack.erase(g_inputUndoStack.begin());
+    }
+    g_inputUndoStack.push_back({ g_inputText, g_caretPos, g_anchorPos });
+}
 bool g_isIMEComposing = false;
 UINT_PTR g_caretTimer = 0;
 bool g_isDragging = false;
@@ -3603,6 +3694,10 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     ImmGetCompositionStringW(hImc, GCS_RESULTSTR, buf, size);
                     buf[size / 2] = 0;
                     
+                    std::wstring pasted = SanitizeText(buf);
+                    if (g_caretPos != g_anchorPos || (!pasted.empty() && g_inputText.length() + pasted.length() < 1024)) {
+                        PushInputUndoState();
+                    }
                     if (g_caretPos != g_anchorPos) {
                         int start = min(g_caretPos, g_anchorPos);
                         int end = max(g_caretPos, g_anchorPos);
@@ -3610,10 +3705,9 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         g_caretPos = start;
                         g_anchorPos = start;
                     }
-                    std::wstring pasted = SanitizeText(buf);
                     if (g_inputText.length() + pasted.length() < 1024) {
                         g_inputText.insert(g_caretPos, pasted);
-                        g_caretPos += (int)wcslen(buf);
+                        g_caretPos += (int)pasted.length();
                         g_anchorPos = g_caretPos;
                         g_caretVisible = true;
                     } else {
@@ -3784,6 +3878,10 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         return 0;
     case WM_CHAR: {
         if (wParam >= 0x20) {
+            std::wstring ch = SanitizeText(std::wstring(1, (WCHAR)wParam));
+            if (g_caretPos != g_anchorPos || (!ch.empty() && g_inputText.length() < 1024)) {
+                PushInputUndoState();
+            }
             if (g_caretPos != g_anchorPos) {
                 int start = min(g_caretPos, g_anchorPos);
                 int end = max(g_caretPos, g_anchorPos);
@@ -3791,10 +3889,9 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                 g_caretPos = start;
                 g_anchorPos = start;
             }
-            std::wstring ch = SanitizeText(std::wstring(1, (WCHAR)wParam));
             if (!ch.empty() && g_inputText.length() < 1024) {
                 g_inputText.insert(g_caretPos, ch);
-                g_caretPos++;
+                g_caretPos += (int)ch.length();
                 g_anchorPos = g_caretPos;
                 g_caretVisible = true;
                 InvalidateRect(hWnd, NULL, FALSE);
@@ -3900,12 +3997,14 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (!shift) g_anchorPos = g_caretPos;
         } else if (wParam == VK_BACK) {
             if (hasSelection) {
+                PushInputUndoState();
                 int start = min(g_caretPos, g_anchorPos);
                 int end = max(g_caretPos, g_anchorPos);
                 g_inputText.erase(start, end - start);
                 g_caretPos = start;
                 g_anchorPos = start;
             } else if (g_caretPos > 0) {
+                PushInputUndoState();
                 if (pLayout && g_inputText.length() > 0) {
                     DWRITE_HIT_TEST_METRICS hm = {0}; float cx, cy;
                     pLayout->HitTestTextPosition((UINT32)g_caretPos - 1, FALSE, &cx, &cy, &hm);
@@ -3920,12 +4019,14 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             }
         } else if (wParam == VK_DELETE) {
             if (hasSelection) {
+                PushInputUndoState();
                 int start = min(g_caretPos, g_anchorPos);
                 int end = max(g_caretPos, g_anchorPos);
                 g_inputText.erase(start, end - start);
                 g_caretPos = start;
                 g_anchorPos = start;
             } else if (g_caretPos < (int)g_inputText.length()) {
+                PushInputUndoState();
                 if (pLayout && g_inputText.length() > 0) {
                     DWRITE_HIT_TEST_METRICS hm = {0}; float cx, cy;
                     pLayout->HitTestTextPosition((UINT32)g_caretPos, FALSE, &cx, &cy, &hm);
@@ -3937,6 +4038,9 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         } else if (wParam == VK_RETURN) {
             bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
             if (ctrl) {
+                if (hasSelection || g_inputText.length() < 1024) {
+                    PushInputUndoState();
+                }
                 if (hasSelection) {
                     int start = min(g_caretPos, g_anchorPos);
                     int end = max(g_caretPos, g_anchorPos);
@@ -3958,6 +4062,11 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                     SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWPARAM(1001, BN_CLICKED), 0);
                 }
             }
+        } else if (wParam == 'Z' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+            if (shift) SendMessage(hWnd, 0x0454 /* EM_REDO */, 0, 0);
+            else SendMessage(hWnd, WM_UNDO, 0, 0);
+        } else if (wParam == 'Y' && (GetKeyState(VK_CONTROL) & 0x8000)) {
+            SendMessage(hWnd, 0x0454 /* EM_REDO */, 0, 0);
         } else if (wParam == 'V' && (GetKeyState(VK_CONTROL) & 0x8000)) {
             SendMessage(hWnd, WM_PASTE, 0, 0);
         } else if (wParam == 'C' && (GetKeyState(VK_CONTROL) & 0x8000)) {
@@ -3986,8 +4095,45 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         InvalidateRect(hWnd, NULL, FALSE);
         return 0;
     }
+    case 0x0454 /* EM_REDO */: {
+        if (!g_inputRedoStack.empty()) {
+            if (g_inputUndoStack.size() >= 100) {
+                g_inputUndoStack.erase(g_inputUndoStack.begin());
+            }
+            g_inputUndoStack.push_back({ g_inputText, g_caretPos, g_anchorPos });
+            InputUndoState next = g_inputRedoStack.back();
+            g_inputRedoStack.pop_back();
+            g_inputText = next.text;
+            g_caretPos = min(max(0, next.caretPos), (int)g_inputText.length());
+            g_anchorPos = min(max(0, next.anchorPos), (int)g_inputText.length());
+            g_caretVisible = true;
+            UpdateSendBtnState();
+            InvalidateRect(hWnd, NULL, FALSE);
+        }
+        return 0;
+    }
+    case WM_UNDO: {
+        if (!g_inputUndoStack.empty()) {
+            if (g_inputRedoStack.size() >= 100) {
+                g_inputRedoStack.erase(g_inputRedoStack.begin());
+            }
+            g_inputRedoStack.push_back({ g_inputText, g_caretPos, g_anchorPos });
+            InputUndoState prev = g_inputUndoStack.back();
+            g_inputUndoStack.pop_back();
+            g_inputText = prev.text;
+            g_caretPos = min(max(0, prev.caretPos), (int)g_inputText.length());
+            g_anchorPos = min(max(0, prev.anchorPos), (int)g_inputText.length());
+            g_caretVisible = true;
+            UpdateSendBtnState();
+            InvalidateRect(hWnd, NULL, FALSE);
+        }
+        return 0;
+    }
     case WM_CONTEXTMENU: {
         HMENU hMenu = CreatePopupMenu();
+        AppendMenuW(hMenu, MF_STRING | (g_inputUndoStack.empty() ? MF_GRAYED : 0), 6, GetString(IDS_UNDO).c_str());
+        AppendMenuW(hMenu, MF_STRING | (g_inputRedoStack.empty() ? MF_GRAYED : 0), 7, GetString(IDS_REDO).c_str());
+        AppendMenuW(hMenu, MF_SEPARATOR, 0, NULL);
         AppendMenuW(hMenu, MF_STRING, 1, GetString(IDS_CUT).c_str());
         AppendMenuW(hMenu, MF_STRING, 2, GetString(IDS_COPY).c_str());
         AppendMenuW(hMenu, MF_STRING, 3, GetString(IDS_PASTE).c_str());
@@ -4004,7 +4150,9 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         DestroyMenu(hMenu);
         g_menuThemeData.clear();
         
-        if (cmd == 1) SendMessage(hWnd, WM_CUT, 0, 0);
+        if (cmd == 6) SendMessage(hWnd, WM_UNDO, 0, 0);
+        else if (cmd == 7) SendMessage(hWnd, 0x0454 /* EM_REDO */, 0, 0);
+        else if (cmd == 1) SendMessage(hWnd, WM_CUT, 0, 0);
         else if (cmd == 2) SendMessage(hWnd, WM_COPY, 0, 0);
         else if (cmd == 3) SendMessage(hWnd, WM_PASTE, 0, 0);
         else if (cmd == 4) {
@@ -4022,6 +4170,12 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             if (hData) {
                 WCHAR* pszText = static_cast<WCHAR*>(GlobalLock(hData));
                 if (pszText) {
+                    std::wstring pasteText = pszText;
+                    pasteText.erase(std::remove(pasteText.begin(), pasteText.end(), L'\r'), pasteText.end());
+                    pasteText = SanitizeText(pasteText);
+                    if (g_caretPos != g_anchorPos || !pasteText.empty()) {
+                        PushInputUndoState();
+                    }
                     if (g_caretPos != g_anchorPos) {
                         int start = min(g_caretPos, g_anchorPos);
                         int end = max(g_caretPos, g_anchorPos);
@@ -4029,8 +4183,6 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
                         g_caretPos = start;
                         g_anchorPos = start;
                     }
-                    std::wstring pasteText = pszText;
-                    pasteText.erase(std::remove(pasteText.begin(), pasteText.end(), L'\r'), pasteText.end());
                     
                     if (g_inputText.length() + pasteText.length() > 1024) {
                         pasteText = pasteText.substr(0, 1024 - g_inputText.length());
@@ -4073,6 +4225,7 @@ LRESULT CALLBACK D2DInputProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         int start = min(g_caretPos, g_anchorPos);
         int end = max(g_caretPos, g_anchorPos);
         if (start != end) {
+            PushInputUndoState();
             g_inputText.erase(start, end - start);
             g_caretPos = start;
             g_anchorPos = start;
@@ -6538,17 +6691,22 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 InvalidateRect(g_hUserList, NULL, FALSE);
                             }
                             
+                            std::lock_guard<std::mutex> videoLock(g_videoMutex);
                             bool isWindowOpen = false;
-                            {
-                                std::lock_guard<std::mutex> lock(g_videoMutex);
-                                if (g_videoWindows.count(wname) && g_videoWindows[wname] && IsWindow(g_videoWindows[wname])) {
-                                    isWindowOpen = true;
-                                }
-                                g_videoIsSWMap[wname] = !isH264 || !IsHardwareAccelerationEnabled();
-                                g_videoIsH264Map[wname] = isH264;
+                            if (g_videoWindows.count(wname) && g_videoWindows[wname] && IsWindow(g_videoWindows[wname])) {
+                                isWindowOpen = true;
                             }
+                            g_videoIsSWMap[wname] = !isH264 || !IsHardwareAccelerationEnabled();
+                            g_videoIsH264Map[wname] = isH264;
                             if (!isWindowOpen) continue; // Skip buffering and decoding if the window is closed
 
+                            // Ignore duplicate packets for already processed frames
+                            if (g_videoExpectedSeq.find(wname) != g_videoExpectedSeq.end()) {
+                                int16_t diffProcessed = (int16_t)(seq - g_videoLastProcessedSeq[wname]);
+                                if (diffProcessed <= 0 && diffProcessed > -100) {
+                                    continue;
+                                }
+                            }
 
                             auto& vbuf = g_videoBuffers[wname][seq];
                             vbuf.lastUpdate = GetTickCount();
@@ -6595,10 +6753,6 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 g_videoExpectedSeq[wname] = seq;
                                 g_videoLastProcessedSeq[wname] = seq - 1;
                             } else {
-                                int16_t diffProcessed = (int16_t)(seq - g_videoLastProcessedSeq[wname]);
-                                if (diffProcessed <= 0 && diffProcessed > -100) {
-                                    continue; // We already processed this frame. Ignore duplicate!
-                                }
                                 int16_t diffInit = (int16_t)(seq - g_videoExpectedSeq[wname]);
                                 if (diffInit < 0 && diffInit > -100) {
                                     // An older frame packet arrived. If the current expected sequence 
@@ -6613,14 +6767,12 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             DWORD now = GetTickCount();
                             
                             // Jitter buffer timeout: If expectedSeq is missing for 200ms, skip to the next available completed frame
-                            bool advanced = false;
                             for (auto it = g_videoBuffers[wname].begin(); it != g_videoBuffers[wname].end(); ++it) {
                                 uint16_t seqIt = it->first;
                                 int16_t diff = (int16_t)(seqIt - g_videoExpectedSeq[wname]);
                                 if (diff > 0 && it->second.isComplete) {
                                     if (now - it->second.lastUpdate > 200) {
                                         g_videoExpectedSeq[wname] = seqIt; // Skip missing frames
-                                        advanced = true;
                                         break;
                                     }
                                 }
@@ -6638,9 +6790,11 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         taskData->mediaData.insert(taskData->mediaData.end(), completeBuf.fragments[i].begin(), completeBuf.fragments[i].end());
                                     }
                                     
-                                    std::lock_guard<std::mutex> lock(g_decodeQueueMutex);
-                                    g_decodeQueue.push(taskData);
-                                    g_decodeQueueCV.notify_one();
+                                    {
+                                        std::lock_guard<std::mutex> lock(g_decodeQueueMutex);
+                                        g_decodeQueue.push(taskData);
+                                        g_decodeQueueCV.notify_one();
+                                    }
                                     
                                     g_videoBuffers[wname].erase(expSeq);
                                     g_videoLastProcessedSeq[wname] = expSeq;
@@ -6674,6 +6828,20 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             int len = res - (int)sizeof(MediaHeader);
                             if (len >= 2) {
                                 std::lock_guard<std::mutex> lock(g_videoMutex);
+                                bool isWindowOpen = false;
+                                if (g_videoWindows.count(wname) && g_videoWindows[wname] && IsWindow(g_videoWindows[wname])) {
+                                    isWindowOpen = true;
+                                }
+                                if (!isWindowOpen) continue;
+
+                                // Ignore FEC packet if this frame was already processed
+                                if (g_videoExpectedSeq.find(wname) != g_videoExpectedSeq.end()) {
+                                    int16_t diffProcessed = (int16_t)(seq - g_videoLastProcessedSeq[wname]);
+                                    if (diffProcessed <= 0 && diffProcessed > -100) {
+                                        continue;
+                                    }
+                                }
+
                                 auto& vbuf = g_videoBuffers[wname][seq];
                                 vbuf.lastUpdate = GetTickCount();
                                 
@@ -6726,6 +6894,52 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 if (g_videoExpectedSeq.find(wname) == g_videoExpectedSeq.end()) {
                                     g_videoExpectedSeq[wname] = seq;
                                     g_videoLastProcessedSeq[wname] = seq - 1;
+                                } else {
+                                    int16_t diffInit = (int16_t)(seq - g_videoExpectedSeq[wname]);
+                                    if (diffInit < 0 && diffInit > -100) {
+                                        if (g_videoBuffers[wname].count(g_videoExpectedSeq[wname])) {
+                                            g_videoExpectedSeq[wname] = seq;
+                                        }
+                                    }
+                                }
+
+                                DWORD now = GetTickCount();
+                                for (auto it = g_videoBuffers[wname].begin(); it != g_videoBuffers[wname].end(); ++it) {
+                                    uint16_t seqIt = it->first;
+                                    int16_t diff = (int16_t)(seqIt - g_videoExpectedSeq[wname]);
+                                    if (diff > 0 && it->second.isComplete) {
+                                        if (now - it->second.lastUpdate > 200) {
+                                            g_videoExpectedSeq[wname] = seqIt;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                bool isH264 = g_videoIsH264Map.count(wname) ? g_videoIsH264Map[wname] : true;
+                                while (true) {
+                                    uint16_t expSeq = g_videoExpectedSeq[wname];
+                                    if (g_videoBuffers[wname].count(expSeq) && g_videoBuffers[wname][expSeq].isComplete) {
+                                        auto& completeBuf = g_videoBuffers[wname][expSeq];
+                                        
+                                        DecodeTaskData* taskData = new DecodeTaskData();
+                                        taskData->username = wname;
+                                        taskData->isH264 = isH264;
+                                        for (int i = 0; i < completeBuf.totalFragments; i++) {
+                                            taskData->mediaData.insert(taskData->mediaData.end(), completeBuf.fragments[i].begin(), completeBuf.fragments[i].end());
+                                        }
+                                        
+                                        {
+                                            std::lock_guard<std::mutex> qlock(g_decodeQueueMutex);
+                                            g_decodeQueue.push(taskData);
+                                            g_decodeQueueCV.notify_one();
+                                        }
+                                        
+                                        g_videoBuffers[wname].erase(expSeq);
+                                        g_videoLastProcessedSeq[wname] = expSeq;
+                                        g_videoExpectedSeq[wname] = expSeq + 1;
+                                    } else {
+                                        break;
+                                    }
                                 }
                             }
                         }
@@ -6734,12 +6948,23 @@ DWORD WINAPI RecvThread(LPVOID param) {
                             std::wstring viewer = mhdr->userId;
                             int len = res - (int)sizeof(MediaHeader);
                             if (len > 0) {
-                                std::string targetA((char*)(udpBuf + sizeof(MediaHeader)), len);
-                                int wsize = MultiByteToWideChar(CP_UTF8, 0, targetA.c_str(), -1, NULL, 0);
-                                if (wsize > 0) {
-                                    std::wstring target;
-                                    target.resize(wsize - 1);
-                                    MultiByteToWideChar(CP_UTF8, 0, targetA.c_str(), -1, &target[0], wsize - 1);
+                                const char* rawPtr = (const char*)(udpBuf + sizeof(MediaHeader));
+                                std::wstring target;
+                                if (len >= 2 && rawPtr[1] == 0) {
+                                    const wchar_t* wptr = (const wchar_t*)rawPtr;
+                                    size_t wlen = wcsnlen(wptr, len / sizeof(wchar_t));
+                                    target.assign(wptr, wlen);
+                                } else {
+                                    size_t slen = strnlen(rawPtr, len);
+                                    if (slen > 0) {
+                                        int wsize = MultiByteToWideChar(CP_UTF8, 0, rawPtr, (int)slen, NULL, 0);
+                                        if (wsize > 0) {
+                                            target.resize(wsize);
+                                            MultiByteToWideChar(CP_UTF8, 0, rawPtr, (int)slen, &target[0], wsize);
+                                        }
+                                    }
+                                }
+                                if (!target.empty()) {
                                     std::lock_guard<std::mutex> lock(g_videoMutex);
                                     g_videoViewers[target][viewer] = GetTickCount();
                                 }
@@ -9338,6 +9563,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 std::wstring msg = g_inputText;
                 SendChatMessage(msg);
                 g_inputText.clear();
+                g_inputUndoStack.clear();
+                g_inputRedoStack.clear();
                 g_caretPos = 0;
                 g_anchorPos = 0;
                 UpdateInputFormat();

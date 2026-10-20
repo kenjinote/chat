@@ -338,6 +338,57 @@ function filterProfanity(text: string, userId: string, onIgnore: (uid: string) =
   return filteredText;
 }
 
+function parseH264FrameInfo(data: Uint8Array): { hasSps: boolean; hasIdr: boolean; spsHex: string } {
+  let hasSps = false;
+  let hasIdr = false;
+  let spsHex = '';
+  const len = data.length;
+  let i = 0;
+  while (i < len - 4) {
+    let startCodeLen = 0;
+    if (data[i] === 0 && data[i + 1] === 0) {
+      if (data[i + 2] === 1) {
+        startCodeLen = 3;
+      } else if (data[i + 2] === 0 && data[i + 3] === 1) {
+        startCodeLen = 4;
+      }
+    }
+    if (startCodeLen > 0) {
+      const nalStart = i + startCodeLen;
+      if (nalStart < len) {
+        const nalType = data[nalStart] & 0x1f;
+        if (nalType === 7) {
+          hasSps = true;
+          let nalEnd = nalStart + 1;
+          while (nalEnd < len - 3) {
+            if (
+              data[nalEnd] === 0 &&
+              data[nalEnd + 1] === 0 &&
+              (data[nalEnd + 2] === 1 || (data[nalEnd + 2] === 0 && data[nalEnd + 3] === 1))
+            ) {
+              break;
+            }
+            nalEnd++;
+          }
+          if (nalEnd >= len - 3) nalEnd = len;
+          const spsSlice = data.subarray(nalStart, Math.min(nalEnd, nalStart + 64));
+          spsHex = Array.from(spsSlice)
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join('');
+          i = nalEnd;
+          continue;
+        } else if (nalType === 5) {
+          hasIdr = true;
+        }
+      }
+      i += startCodeLen + 1;
+    } else {
+      i++;
+    }
+  }
+  return { hasSps, hasIdr, spsHex };
+}
+
 const App: React.FC = () => {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [localUserId, setLocalUserId] = useState<string>('');
@@ -812,7 +863,7 @@ const App: React.FC = () => {
       const url = URL.createObjectURL(blob);
       
       setVideoFrames(prev => {
-        if (prev[senderUserId]) URL.revokeObjectURL(prev[senderUserId]);
+        if (prev[senderUserId] && prev[senderUserId].startsWith('blob:')) URL.revokeObjectURL(prev[senderUserId]);
         return { ...prev, [senderUserId]: url };
       });
     });
@@ -827,39 +878,111 @@ const App: React.FC = () => {
       const pcmByteLength = buf.byteLength - 80;
       if (pcmByteLength <= 0) return;
       
-      const uint8 = new Uint8Array(buf, 80, pcmByteLength);
+      const uint8 = new Uint8Array(buf.slice(80));
       const userIdBuf = new Uint8Array(buf, 0, 80);
       const senderUserId = new TextDecoder('utf-8').decode(userIdBuf).replace(/\0/g, '');
       if (ignoredUsersRef.current.includes(senderUserId)) return;
       
-      // Just mark as received so Loading... disappears and the video element mounts
+      const { hasSps, hasIdr, spsHex } = parseH264FrameInfo(uint8);
+
+      // Mark as received so Loading... disappears and the video element is displayed
       setVideoFrames(prev => {
         if (prev[senderUserId] !== 'h264') {
+          if (prev[senderUserId] && prev[senderUserId].startsWith('blob:')) {
+            URL.revokeObjectURL(prev[senderUserId]);
+          }
           return { ...prev, [senderUserId]: 'h264' };
         }
         return prev;
       });
 
       setTimeout(() => {
+        const videoEl = document.getElementById(`video-element-${senderUserId}`) as HTMLVideoElement | null;
+        if (!videoEl) return;
+
         let jmuxer = jmuxersRef.current.get(senderUserId);
+        if (jmuxer) {
+          const domNodeChanged = jmuxer.node !== videoEl;
+          const spsChanged = hasSps && spsHex && jmuxer._spsHex && jmuxer._spsHex !== spsHex;
+          const recoverFromError = jmuxer._hasError && hasSps;
+          if (domNodeChanged || spsChanged || recoverFromError) {
+            jmuxer._destroyed = true;
+            try { jmuxer.destroy(); } catch (e) {}
+            jmuxersRef.current.delete(senderUserId);
+            jmuxer = null;
+          }
+        }
+
+        const feedFrame = (muxer: any, frame: Uint8Array) => {
+          try {
+            muxer.feed({
+              video: frame,
+              duration: 33,
+              isLastVideoFrameComplete: true
+            });
+            if (videoEl.paused) {
+              videoEl.play().catch(() => {});
+            }
+          } catch (e) {
+            console.error('JMuxer feed error:', e);
+            muxer._hasError = true;
+          }
+        };
+
         if (!jmuxer) {
-          const videoEl = document.getElementById(`video-element-${senderUserId}`);
-          if (!videoEl) return;
-          
-          jmuxer = new JMuxer({
+          // Wait for a keyframe containing SPS/PPS before initializing JMuxer
+          if (!hasSps) return;
+
+          const pendingFrames: Uint8Array[] = [uint8];
+          let jmuxerInstance: any = null;
+          jmuxerInstance = new JMuxer({
             node: videoEl,
             mode: 'video',
             flushingTime: 0,
             fps: 30,
-            debug: false
+            clearBuffer: true,
+            debug: false,
+            onReady: () => {
+              if (!jmuxerInstance || jmuxerInstance._destroyed) return;
+              jmuxerInstance._isReady = true;
+              while (pendingFrames.length > 0) {
+                const f = pendingFrames.shift()!;
+                feedFrame(jmuxerInstance, f);
+              }
+            },
+            onError: (err: any) => {
+              console.error('JMuxer error:', err);
+              if (jmuxerInstance) {
+                jmuxerInstance._hasError = true;
+              }
+            }
           });
-          jmuxersRef.current.set(senderUserId, jmuxer);
+          jmuxerInstance._spsHex = spsHex;
+          jmuxerInstance._isReady = false;
+          jmuxerInstance._hasError = false;
+          jmuxerInstance._destroyed = false;
+          jmuxerInstance._pendingFrames = pendingFrames;
+          jmuxersRef.current.set(senderUserId, jmuxerInstance);
+          return;
         }
-        try {
-          jmuxer.feed({ video: uint8 });
-        } catch (e) {
-          console.error('JMuxer feed error:', e);
+
+        if (!jmuxer._isReady && !jmuxer.mseReady) {
+          if (hasSps && hasIdr) {
+            jmuxer._pendingFrames.length = 0;
+            jmuxer._spsHex = spsHex;
+          }
+          if (jmuxer._pendingFrames.length < 60) {
+            jmuxer._pendingFrames.push(uint8);
+          }
+          return;
         }
+
+        jmuxer._isReady = true;
+        while (jmuxer._pendingFrames && jmuxer._pendingFrames.length > 0) {
+          const f = jmuxer._pendingFrames.shift()!;
+          feedFrame(jmuxer, f);
+        }
+        feedFrame(jmuxer, uint8);
       }, 0);
     });
 
@@ -930,6 +1053,12 @@ const App: React.FC = () => {
         if (next[userId] && !streamingUsers[userId]) {
           next[userId] = false;
           changed = true;
+          const jmuxer = jmuxersRef.current.get(userId);
+          if (jmuxer) {
+            jmuxer._destroyed = true;
+            try { jmuxer.destroy(); } catch (e) {}
+            jmuxersRef.current.delete(userId);
+          }
         }
       }
       return changed ? next : prev;

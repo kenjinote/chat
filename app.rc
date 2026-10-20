@@ -51,6 +51,7 @@ BEGIN
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Screen Share"
     IDS_UNDO                "Undo(&U)"
+    IDS_REDO                "Redo(&R)"
     IDS_ROOM_ENTER_FMT      "%s entered %s."
     IDS_ROOM_LEAVE_FMT      "%s left %s."
     IDS_DISPLAY_ALL_FMT     "Entire Display(%s,%dx%d)"
@@ -113,6 +114,7 @@ BEGIN
     IDS_USER_LIST_FMT       "ユーザ一覧 (%d)"
     IDS_SCREEN_SHARE        "画面共有"
     IDS_UNDO                "元に戻す(&U)"
+    IDS_REDO                "やり直し(&R)"
     IDS_ROOM_ENTER_FMT      "%sが%sに入室しました。"
     IDS_ROOM_LEAVE_FMT      "%sが%sから退室しました。"
     IDS_DISPLAY_ALL_FMT     "ディスプレイ全体(%s,%dx%d)"
@@ -175,6 +177,7 @@ BEGIN
     IDS_USER_LIST_FMT       "用户列表 (%d)"
     IDS_SCREEN_SHARE        "屏幕共享"
     IDS_UNDO                "撤销(&U)"
+    IDS_REDO                "重做(&R)"
     IDS_ROOM_ENTER_FMT      "%s 进入了 %s。"
     IDS_ROOM_LEAVE_FMT      "%s 离开了 %s。"
     IDS_DISPLAY_ALL_FMT     "整个显示器(%s,%dx%d)"
@@ -237,6 +240,7 @@ BEGIN
     IDS_USER_LIST_FMT       "사용자 목록 (%d)"
     IDS_SCREEN_SHARE        "화면 공유"
     IDS_UNDO                "실행 취소(&U)"
+    IDS_REDO                "다시 실행(&R)"
     IDS_ROOM_ENTER_FMT      "%s(이)가 %s에 입장했습니다."
     IDS_ROOM_LEAVE_FMT      "%s(이)가 %s에서 퇴장했습니다."
     IDS_DISPLAY_ALL_FMT     "전체 디스플레이(%s,%dx%d)"
@@ -299,6 +303,7 @@ BEGIN
     IDS_USER_LIST_FMT       "使用者清單 (%d)"
     IDS_SCREEN_SHARE        "螢幕分享"
     IDS_UNDO                "復原(&U)"
+    IDS_REDO                "重做(&R)"
     IDS_ROOM_ENTER_FMT      "%s 進入了 %s。"
     IDS_ROOM_LEAVE_FMT      "%s 離開了 %s。"
     IDS_DISPLAY_ALL_FMT     "整個顯示器(%s,%dx%d)"
@@ -361,6 +366,7 @@ BEGIN
     IDS_USER_LIST_FMT       "Liste des utilisateurs (%d)"
     IDS_SCREEN_SHARE        "Partage d'écran"
     IDS_UNDO                "Annuler(&U)"
+    IDS_REDO                "Rétablir(&R)"
     IDS_ROOM_ENTER_FMT      "%s est entré(e) dans %s."
     IDS_ROOM_LEAVE_FMT      "%s a quitté %s."
     IDS_DISPLAY_ALL_FMT     "Écran entier(%s,%dx%d)"
@@ -423,6 +429,7 @@ BEGIN
     IDS_USER_LIST_FMT       "Benutzerliste (%d)"
     IDS_SCREEN_SHARE        "Bildschirmfreigabe"
     IDS_UNDO                "Rückgängig(&U)"
+    IDS_REDO                "Wiederholen(&R)"
     IDS_ROOM_ENTER_FMT      "%s hat den Raum %s betreten."
     IDS_ROOM_LEAVE_FMT      "%s hat den Raum %s verlassen."
     IDS_DISPLAY_ALL_FMT     "Gesamter Bildschirm(%s,%dx%d)"
@@ -485,6 +492,7 @@ BEGIN
     IDS_USER_LIST_FMT       "Lista de usuarios (%d)"
     IDS_SCREEN_SHARE        "Compartir pantalla"
     IDS_UNDO                "Deshacer(&U)"
+    IDS_REDO                "Rehacer(&R)"
     IDS_ROOM_ENTER_FMT      "%s ha entrado en %s."
     IDS_ROOM_LEAVE_FMT      "%s ha salido de %s."
     IDS_DISPLAY_ALL_FMT     "Pantalla completa(%s,%dx%d)"
@@ -547,6 +555,7 @@ BEGIN
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "स्क्रीन शेयर"
     IDS_UNDO                "पूर्ववत करें(&U)"
+    IDS_REDO                "फिर से करें(&R)"
     IDS_ROOM_ENTER_FMT      "%s ने %s में प्रवेश किया।"
     IDS_ROOM_LEAVE_FMT      "%s ने %s छोड़ दिया।"
     IDS_DISPLAY_ALL_FMT     "संपूर्ण प्रदर्शन(%s,%dx%d)"
@@ -609,6 +618,7 @@ BEGIN
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Compartilhamento de tela"
     IDS_UNDO                "Desfazer(&U)"
+    IDS_REDO                "Refazer(&R)"
     IDS_ROOM_ENTER_FMT      "%s entrou em %s."
     IDS_ROOM_LEAVE_FMT      "%s saiu de %s."
     IDS_DISPLAY_ALL_FMT     "Tela inteira(%s,%dx%d)"
@@ -671,6 +681,7 @@ BEGIN
     IDS_USER_LIST_FMT       "Список пользователей (%d)"
     IDS_SCREEN_SHARE        "Демонстрация экрана"
     IDS_UNDO                "Отменить(&U)"
+    IDS_REDO                "Повторить(&R)"
     IDS_ROOM_ENTER_FMT      "%s вошел(ла) в %s."
     IDS_ROOM_LEAVE_FMT      "%s покинул(а) %s."
     IDS_DISPLAY_ALL_FMT     "Весь экран(%s,%dx%d)"
@@ -733,6 +744,7 @@ BEGIN
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "مشاركة الشاشة"
     IDS_UNDO                "تراجع(&U)"
+    IDS_REDO                "إعادة(&R)"
     IDS_ROOM_ENTER_FMT      "دخل %s إلى %s."
     IDS_ROOM_LEAVE_FMT      "غادر %s %s."
     IDS_DISPLAY_ALL_FMT     "الشاشة بأكملها(%s,%dx%d)"
@@ -795,6 +807,7 @@ BEGIN
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "স্ক্রিন শেয়ার"
     IDS_UNDO                "আনডু(&U)"
+    IDS_REDO                "রিডু(&R)"
     IDS_ROOM_ENTER_FMT      "%s %s-এ প্রবেশ করেছে।"
     IDS_ROOM_LEAVE_FMT      "%s %s ছেড়ে গেছে।"
     IDS_DISPLAY_ALL_FMT     "পুরো ডিসপ্লে(%s,%dx%d)"
@@ -857,6 +870,7 @@ BEGIN
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Berbagi Layar"
     IDS_UNDO                "Batal(&U)"
+    IDS_REDO                "Ulangi(&R)"
     IDS_ROOM_ENTER_FMT      "%s memasuki %s."
     IDS_ROOM_LEAVE_FMT      "%s meninggalkan %s."
     IDS_DISPLAY_ALL_FMT     "Seluruh Tampilan(%s,%dx%d)"
@@ -919,6 +933,7 @@ BEGIN
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Condivisione schermo"
     IDS_UNDO                "Annulla(&U)"
+    IDS_REDO                "Ripeti(&R)"
     IDS_ROOM_ENTER_FMT      "%s è entrato/a in %s."
     IDS_ROOM_LEAVE_FMT      "%s ha lasciato %s."
     IDS_DISPLAY_ALL_FMT     "Intero schermo(%s,%dx%d)"
@@ -981,6 +996,7 @@ BEGIN
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Ekran Paylaşımı"
     IDS_UNDO                "Geri Al(&U)"
+    IDS_REDO                "Yinele(&R)"
     IDS_ROOM_ENTER_FMT      "%s %s odasına girdi."
     IDS_ROOM_LEAVE_FMT      "%s %s odasından ayrıldı."
     IDS_DISPLAY_ALL_FMT     "Tüm Ekran(%s,%dx%d)"
@@ -1043,6 +1059,7 @@ BEGIN
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Chia sẻ màn hình"
     IDS_UNDO                "Hoàn tác(&U)"
+    IDS_REDO                "Làm lại(&R)"
     IDS_ROOM_ENTER_FMT      "%s đã vào %s."
     IDS_ROOM_LEAVE_FMT      "%s đã rời khỏi %s."
     IDS_DISPLAY_ALL_FMT     "Toàn bộ màn hình(%s,%dx%d)"
@@ -1105,6 +1122,7 @@ BEGIN
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "แชร์หน้าจอ"
     IDS_UNDO                "Undo(&U)"
+    IDS_REDO                "Redo(&R)"
     IDS_ROOM_ENTER_FMT      "%s เข้าสู่ %s"
     IDS_ROOM_LEAVE_FMT      "%s ออกจาก %s"
     IDS_DISPLAY_ALL_FMT     "เต็มหน้าจอ(%s,%dx%d)"
@@ -1167,6 +1185,7 @@ BEGIN
     IDS_USER_LIST_FMT       "User List (%d)"
     IDS_SCREEN_SHARE        "Udostepnij ekran"
     IDS_UNDO                "Cofnij(&U)"
+    IDS_REDO                "Ponów(&R)"
     IDS_ROOM_ENTER_FMT      "%s wszedl do %s."
     IDS_ROOM_LEAVE_FMT      "%s opuscil %s."
     IDS_DISPLAY_ALL_FMT     "Pelny ekran(%s,%dx%d)"
@@ -1198,8 +1217,8 @@ END
 
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,1,5
- PRODUCTVERSION 1,0,1,5
+ FILEVERSION 1,0,1,6
+ PRODUCTVERSION 1,0,1,6
  FILEFLAGSMASK 0x3fL
  FILEFLAGS 0x0L
  FILEOS 0x40004L
@@ -1210,8 +1229,8 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "FileVersion", "1.0.1.5"
-            VALUE "ProductVersion", "1.0.1.5"
+            VALUE "FileVersion", "1.0.1.6"
+            VALUE "ProductVersion", "1.0.1.6"
         END
     END
     BLOCK "VarFileInfo"

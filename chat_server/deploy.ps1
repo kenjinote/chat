@@ -3,12 +3,25 @@ param (
     [string]$ImageTag
 )
 
-$RedisUrl = "tcp://default:REDACTED_REDIS_PASSWORD@your-redis-host.example.com:6379"
+$EnvFile = Join-Path $PSScriptRoot "..\tools\.env.store"
+if (Test-Path $EnvFile) {
+    Get-Content $EnvFile | ForEach-Object {
+        if ($_ -match "^\s*([^#][^=]+)=(.*)$") {
+            [System.Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), "Process")
+        }
+    }
+}
 
-$vms = "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"
-foreach ($vm in $vms) {
-    $vmName = "chat-vm-$vm"
-    $hostName = "chat-vm-$vm-2026.japaneast.cloudapp.azure.com"
+$RedisUrl = $env:REDIS_URL
+if (-not $RedisUrl) {
+    throw "REDIS_URL is not set. Please set REDIS_URL in tools/.env.store or environment variables."
+}
+
+$vmNames = az vm list -g CHAT --query "[].name" -o tsv
+foreach ($vmName in $vmNames) {
+    $vmName = $vmName.Trim()
+    if (-not $vmName) { continue }
+    $hostName = "${vmName}-2026.japaneast.cloudapp.azure.com"
     
     # We pass the env variables to docker run instead of positional arguments
     $script = "sudo docker stop `$(`sudo docker ps -q); sudo docker rm `$(`sudo docker ps -aq); sudo docker run -d --net host --restart always -e REDIS_URL='$RedisUrl' -e ENDPOINT='${hostName}:4000' your-registry.azurecr.io/chat-server:$ImageTag"
@@ -16,4 +29,4 @@ foreach ($vm in $vms) {
     Write-Host "Deploying $ImageTag to $vmName..."
     az vm run-command invoke -g CHAT -n $vmName --command-id RunShellScript --scripts $script --no-wait
 }
-Write-Host "Deployment initiated for all 26 VMs ($ImageTag)."
+Write-Host "Deployment initiated for all active VMs ($ImageTag)."

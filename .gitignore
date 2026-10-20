@@ -364,3 +364,8 @@ FodyWeavers.xsd
 /android_chat/.gradle
 /android_chat/.idea
 /android_chat/app/build
+.env*
+tools/.env*
+package/package_TemporaryKey.pfx
+*.pfx
+*.cer

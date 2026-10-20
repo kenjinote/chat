@@ -75,14 +75,15 @@ H264Encoder::~H264Encoder() {
     SafeReleaseMFT(&pEncoder);
     SafeReleaseMFT(&pColorConv);
     SafeReleaseDXGI(&pDXGIManager);
+    if (pStagingNv12) { pStagingNv12->Release(); pStagingNv12 = NULL; }
 }
 
 bool H264Encoder::Initialize(UINT32 width, UINT32 height, bool isScreenShare, ID3D11Device* pD3D11Device) {
-    if (IsHardwareAccelerationEnabled()) {
+    if (IsHardwareAccelerationEnabled() || pD3D11Device != nullptr) {
         if (InitializeInternal(width, height, isScreenShare, true, pD3D11Device)) return true;
         Log("H264Encoder HW init failed, falling back to SW");
     }
-    return InitializeInternal(width, height, isScreenShare, false, nullptr);
+    return InitializeInternal(width, height, isScreenShare, false, pD3D11Device);
 }
 
 static HRESULT SafeCoCreateH264Encoder(IMFTransform** ppEncoder) {
@@ -95,8 +96,10 @@ static HRESULT SafeCoCreateH264Encoder(IMFTransform** ppEncoder) {
 
 bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenShare, bool useHW, ID3D11Device* pD3DDevice) {
     Log("H264Encoder::InitializeInternal");
-    if (pEncoder) { pEncoder->Release(); pEncoder = NULL; }
-    if (pColorConv) { pColorConv->Release(); pColorConv = NULL; }
+    SafeReleaseMFT(&pEncoder);
+    SafeReleaseMFT(&pColorConv);
+    SafeReleaseDXGI(&pDXGIManager);
+    if (pStagingNv12) { pStagingNv12->Release(); pStagingNv12 = NULL; }
     m_origWidth = width;
     m_origHeight = height;
     m_isScreenShare = isScreenShare;
@@ -113,21 +116,26 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
         }
     }
 
-    // H264 requires even width and height
-    if (encWidth % 2 != 0) encWidth--;
-    if (encHeight % 2 != 0) encHeight--;
+    if (pD3DDevice) {
+        encWidth = max(16u, encWidth & ~15u);
+        encHeight = max(16u, encHeight & ~15u);
+    } else {
+        // H264 requires even width and height
+        if (encWidth % 2 != 0) encWidth--;
+        if (encHeight % 2 != 0) encHeight--;
+    }
 
     m_width = encWidth;
     m_height = encHeight;
     m_rtStart = 0;
     m_useHW = useHW;
 
-    if (useHW && g_pDXGIManager) {
-        pDXGIManager = g_pDXGIManager;
-        pDXGIManager->AddRef();
-    } else if (pD3DDevice) {
+    if (pD3DDevice) {
         MFCreateDXGIDeviceManager(&m_dxgiToken, &pDXGIManager);
         if (pDXGIManager) pDXGIManager->ResetDevice(pD3DDevice, m_dxgiToken);
+    } else if (useHW && g_pDXGIManager) {
+        pDXGIManager = g_pDXGIManager;
+        pDXGIManager->AddRef();
     }
 
     HRESULT hr = SafeCoCreateH264Encoder(&pEncoder);
@@ -139,7 +147,15 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
     IMFAttributes* pAttributes = NULL;
     if (SUCCEEDED(pEncoder->GetAttributes(&pAttributes))) {
         pAttributes->SetUINT32(MF_LOW_LATENCY, 1);
+        pAttributes->SetUINT32(MF_SA_D3D11_AWARE, 1);
         pAttributes->Release();
+    }
+
+    if (pDXGIManager && useHW) {
+        hr = pEncoder->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)pDXGIManager);
+        if (FAILED(hr)) {
+            Log("H264Encoder::InitializeInternal MFT_MESSAGE_SET_D3D_MANAGER note: hr=" + std::to_string(hr) + " (GPU VideoProcessorMFT remains active)");
+        }
     }
 
     IMFMediaType* pOutputType = NULL;
@@ -159,13 +175,23 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
     else targetBitrate = (pixels * 30 * 2) / 10; // Dynamic fallback (~1.5-2.0 bits per pixel)
     if (targetBitrate < 400000) targetBitrate = 400000; // Minimum 400Kbps
     
+    UINT32 gopSize = isScreenShare ? 60 : 90; // 2s for screen share, 3s for webcam
+
     pOutputType->SetUINT32(MF_MT_AVG_BITRATE, targetBitrate);
+    pOutputType->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Base);
+    pOutputType->SetUINT32(MF_MT_MAX_KEYFRAME_SPACING, gopSize);
     MFSetAttributeSize(pOutputType, MF_MT_FRAME_SIZE, encWidth, encHeight);
     MFSetAttributeRatio(pOutputType, MF_MT_FRAME_RATE, 30, 1);
     MFSetAttributeRatio(pOutputType, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
     pOutputType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
     
     hr = pEncoder->SetOutputType(0, pOutputType, 0);
+    if (FAILED(hr)) {
+        // Retry without explicit profile/keyframe spacing if a specific MFT rejects them
+        pOutputType->DeleteItem(MF_MT_MPEG2_PROFILE);
+        pOutputType->DeleteItem(MF_MT_MAX_KEYFRAME_SPACING);
+        hr = pEncoder->SetOutputType(0, pOutputType, 0);
+    }
     pOutputType->Release();
     if (FAILED(hr)) return false;
 
@@ -177,36 +203,37 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
         var.vt = VT_BOOL;
         var.boolVal = VARIANT_TRUE;
         pCodecAPI->SetValue(&CODECAPI_AVLowLatencyMode, &var);
+
+        var.vt = VT_UI4;
+        var.ulVal = 0;
+        pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);
         
+        // Periodic I-frames every 2-3 seconds for fast browser/client recovery
+        var.vt = VT_UI4;
+        var.ulVal = gopSize;
+        pCodecAPI->SetValue(&CODECAPI_AVEncMPVGOPSize, &var);
+        
+        // Set RateControlMode BEFORE BitRate/MaxBitRate/BufferSize so the encoder respects VBV caps
+        var.vt = VT_UI4;
+        var.ulVal = eAVEncCommonRateControlMode_PeakConstrainedVBR;
+        if (FAILED(pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var))) {
+            var.ulVal = eAVEncCommonRateControlMode_UnconstrainedVBR;
+            pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
+        }
+
         // Set dynamic bitrate to CodecAPI as well
         var.vt = VT_UI4;
         var.ulVal = targetBitrate;
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonMeanBitRate, &var);
 
         // Explicitly set MaxBitRate and BufferSize to prevent the initial I-frame from exploding in size
-        // A smaller VBV buffer forces the encoder to compress the I-frame heavily, keeping it under the network queue limit
         var.vt = VT_UI4;
-        var.ulVal = targetBitrate; 
+        var.ulVal = targetBitrate * 2;
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonMaxBitRate, &var);
         
         var.vt = VT_UI4;
         var.ulVal = targetBitrate; // VBV buffer size = 1 second of bitrate
         pCodecAPI->SetValue(&CODECAPI_AVEncCommonBufferSize, &var);
-
-        var.vt = VT_UI4;
-        var.ulVal = 0;
-        pCodecAPI->SetValue(&CODECAPI_AVEncMPVDefaultBPictureCount, &var);
-        
-        // Force periodic I-frames to allow recovery from packet loss (now very infrequent due to 2x FEC)
-        var.vt = VT_UI4;
-        var.ulVal = 900; // GOP size = 900 (I-frame every 30 seconds at 30fps)
-        pCodecAPI->SetValue(&CODECAPI_AVEncMPVGOPSize, &var);
-        
-        // Use VBR (Variable Bitrate) instead of CBR.
-        // CBR causes the hardware encoder to drop subsequent P-frames if an I-frame exceeds the bit budget, causing severe stuttering.
-        var.vt = VT_UI4;
-        var.ulVal = eAVEncCommonRateControlMode_UnconstrainedVBR;
-        pCodecAPI->SetValue(&CODECAPI_AVEncCommonRateControlMode, &var);
         
         pCodecAPI->Release();
     }
@@ -233,7 +260,10 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
             MFCreateMediaType(&pVpIn);
             pVpIn->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
             pVpIn->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_ARGB32);
+            pVpIn->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
             MFSetAttributeSize(pVpIn, MF_MT_FRAME_SIZE, width, height); // Native width/height
+            MFSetAttributeRatio(pVpIn, MF_MT_FRAME_RATE, 30, 1);
+            MFSetAttributeRatio(pVpIn, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
             pColorConv->SetInputType(0, pVpIn, 0);
             pVpIn->Release();
             
@@ -241,22 +271,16 @@ bool H264Encoder::InitializeInternal(UINT32 width, UINT32 height, bool isScreenS
             MFCreateMediaType(&pVpOut);
             pVpOut->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
             pVpOut->SetGUID(MF_MT_SUBTYPE, MFVideoFormat_NV12);
+            pVpOut->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
             MFSetAttributeSize(pVpOut, MF_MT_FRAME_SIZE, encWidth, encHeight); // Scaled width/height
+            MFSetAttributeRatio(pVpOut, MF_MT_FRAME_RATE, 30, 1);
+            MFSetAttributeRatio(pVpOut, MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
             pColorConv->SetOutputType(0, pVpOut, 0);
             pVpOut->Release();
             
             pColorConv->ProcessMessage(MFT_MESSAGE_COMMAND_FLUSH, NULL);
             pColorConv->ProcessMessage(MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, NULL);
             pColorConv->ProcessMessage(MFT_MESSAGE_NOTIFY_START_OF_STREAM, NULL);
-        }
-    }
-
-    Log("H264Encoder::InitializeInternal Setup D3D Manager for Encoder");
-    if (pDXGIManager && useHW) {
-        hr = pEncoder->ProcessMessage(MFT_MESSAGE_SET_D3D_MANAGER, (ULONG_PTR)pDXGIManager);
-        if (FAILED(hr)) {
-            Log("H264Encoder::InitializeInternal MFT_MESSAGE_SET_D3D_MANAGER FAILED hr=" + std::to_string(hr));
-            return false;
         }
     }
 
@@ -388,23 +412,40 @@ bool H264Encoder::EncodeFrame(const BYTE* pNv12Data, DWORD cbData, std::vector<u
 }
 
 bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>& outH264) {
-    if (!pEncoder || !pDXGIManager || !pColorConv) return false;
+    if (!pEncoder || !pDXGIManager || !pColorConv || !pTexture) return false;
     outH264.clear();
 
     IMFSample* pSample = NULL;
     MFCreateSample(&pSample);
     
     IMFMediaBuffer* pBuffer = NULL;
-    MFCreateDXGISurfaceBuffer(__uuidof(ID3D11Texture2D), pTexture, 0, FALSE, &pBuffer);
+    HRESULT hr = MFCreateDXGISurfaceBuffer(__uuidof(ID3D11Texture2D), pTexture, 0, FALSE, &pBuffer);
+    if (FAILED(hr) || !pBuffer) {
+        if (pSample) pSample->Release();
+        return false;
+    }
+    DWORD cbMaxObjLen = 0;
+    if (SUCCEEDED(pBuffer->GetMaxLength(&cbMaxObjLen)) && cbMaxObjLen > 0) {
+        pBuffer->SetCurrentLength(cbMaxObjLen);
+    }
     
+    LONGLONG sampleTime = m_rtStart;
     pSample->AddBuffer(pBuffer);
     pBuffer->Release();
-    pSample->SetSampleTime(m_rtStart);
+    pSample->SetSampleTime(sampleTime);
     pSample->SetSampleDuration(333333);
     m_rtStart += 333333;
 
-    // Process through Color Converter MFT (BGRA -> NV12)
-    HRESULT hr = pColorConv->ProcessInput(0, pSample, 0);
+    // Process through Color Converter MFT (BGRA -> NV12 & GPU scaling)
+    hr = pColorConv->ProcessInput(0, pSample, 0);
+    if (hr == MF_E_NOTACCEPTING) {
+        MFT_OUTPUT_DATA_BUFFER drainOutput = {0};
+        DWORD drainStatus = 0;
+        pColorConv->ProcessOutput(0, 1, &drainOutput, &drainStatus);
+        if (drainOutput.pSample) drainOutput.pSample->Release();
+        if (drainOutput.pEvents) drainOutput.pEvents->Release();
+        hr = pColorConv->ProcessInput(0, pSample, 0);
+    }
     pSample->Release();
     if (FAILED(hr)) return false;
     
@@ -420,7 +461,7 @@ bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>&
         IMFMediaBuffer* pVpBuffer = NULL;
         if (!vpProvides) {
             MFCreateSample(&pNv12Sample);
-            DWORD cbSize = vpInfo.cbSize > 0 ? vpInfo.cbSize : (m_width * m_height * 2); // NV12 is 1.5x but give some leeway
+            DWORD cbSize = vpInfo.cbSize > 0 ? vpInfo.cbSize : (m_width * m_height * 2); // NV12 is 1.5x
             DWORD cbAlignment = vpInfo.cbAlignment > 0 ? vpInfo.cbAlignment : MF_16_BYTE_ALIGNMENT;
             MFCreateAlignedMemoryBuffer(cbSize, cbAlignment, &pVpBuffer);
             pNv12Sample->AddBuffer(pVpBuffer);
@@ -430,6 +471,7 @@ bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>&
 
         DWORD vpStatus = 0;
         hr = pColorConv->ProcessOutput(0, 1, &vpOutput, &vpStatus);
+        if (vpOutput.pEvents) { vpOutput.pEvents->Release(); vpOutput.pEvents = NULL; }
         if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
             if (!vpProvides && pNv12Sample) { pNv12Sample->Release(); pNv12Sample = NULL; }
             break;
@@ -451,8 +493,6 @@ bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>&
                 pNv12Sample = vpOutput.pSample;
                 pNv12Sample->AddRef();
                 vpOutput.pSample->Release();
-            } else {
-                // pNv12Sample is already the one we allocated, refcount is 1
             }
             break; // We got our converted sample
         } else {
@@ -463,9 +503,90 @@ bool H264Encoder::EncodeTexture(ID3D11Texture2D* pTexture, std::vector<uint8_t>&
     }
     
     if (!pNv12Sample) return false;
+    pNv12Sample->SetSampleTime(sampleTime);
+    pNv12Sample->SetSampleDuration(333333);
     
-    // Now pass NV12 sample to H.264 Encoder
+    // Pass NV12 sample to H.264 Encoder
     hr = pEncoder->ProcessInput(0, pNv12Sample, 0);
+    if (FAILED(hr)) {
+        // If the encoder MFT cannot directly map the GPU-resident DXGI texture array subresource,
+        // copy the GPU-scaled/converted NV12 subresource via a cached NV12 staging texture into a 2D buffer.
+        IMFMediaBuffer* pMediaBuf = NULL;
+        if (SUCCEEDED(pNv12Sample->GetBufferByIndex(0, &pMediaBuf)) && pMediaBuf) {
+            IMFDXGIBuffer* pDXGIBuf = NULL;
+            if (SUCCEEDED(pMediaBuf->QueryInterface(IID_PPV_ARGS(&pDXGIBuf))) && pDXGIBuf) {
+                ID3D11Texture2D* pGpuNv12 = NULL;
+                UINT subresource = 0;
+                pDXGIBuf->GetSubresourceIndex(&subresource);
+                if (SUCCEEDED(pDXGIBuf->GetResource(IID_PPV_ARGS(&pGpuNv12))) && pGpuNv12) {
+                    ID3D11Device* pDev = NULL;
+                    pGpuNv12->GetDevice(&pDev);
+                    if (pDev) {
+                        ID3D11DeviceContext* pCtx = NULL;
+                        pDev->GetImmediateContext(&pCtx);
+                        if (pCtx) {
+                            if (!pStagingNv12) {
+                                D3D11_TEXTURE2D_DESC desc = {};
+                                desc.Width = m_width;
+                                desc.Height = m_height;
+                                desc.MipLevels = 1;
+                                desc.ArraySize = 1;
+                                desc.Format = DXGI_FORMAT_NV12;
+                                desc.SampleDesc.Count = 1;
+                                desc.Usage = D3D11_USAGE_STAGING;
+                                desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+                                pDev->CreateTexture2D(&desc, NULL, &pStagingNv12);
+                            }
+                            if (pStagingNv12) {
+                                pCtx->CopySubresourceRegion(pStagingNv12, 0, 0, 0, 0, pGpuNv12, subresource, NULL);
+                                D3D11_MAPPED_SUBRESOURCE mapped = {};
+                                if (SUCCEEDED(pCtx->Map(pStagingNv12, 0, D3D11_MAP_READ, 0, &mapped))) {
+                                    IMFSample* pCpuSample = NULL;
+                                    IMFMediaBuffer* pCpuBuf = NULL;
+                                    if (SUCCEEDED(MFCreateSample(&pCpuSample)) &&
+                                        SUCCEEDED(MFCreate2DMediaBuffer(m_width, m_height, MFVideoFormat_NV12.Data1, FALSE, &pCpuBuf))) {
+                                        IMF2DBuffer* p2D = NULL;
+                                        if (SUCCEEDED(pCpuBuf->QueryInterface(IID_PPV_ARGS(&p2D)))) {
+                                            BYTE* pScanline0 = NULL;
+                                            LONG lPitch = 0;
+                                            if (SUCCEEDED(p2D->Lock2D(&pScanline0, &lPitch))) {
+                                                const BYTE* pSrcY = (const BYTE*)mapped.pData;
+                                                for (UINT32 y = 0; y < m_height; y++) {
+                                                    memcpy(pScanline0 + y * lPitch, pSrcY + y * mapped.RowPitch, m_width);
+                                                }
+                                                BYTE* pUVScanline0 = pScanline0 + m_height * lPitch;
+                                                const BYTE* pSrcUV = pSrcY + m_height * mapped.RowPitch;
+                                                for (UINT32 y = 0; y < m_height / 2; y++) {
+                                                    memcpy(pUVScanline0 + y * lPitch, pSrcUV + y * mapped.RowPitch, m_width);
+                                                }
+                                                p2D->Unlock2D();
+                                            }
+                                            p2D->Release();
+                                        }
+                                        DWORD cbMaxLength = 0;
+                                        pCpuBuf->GetMaxLength(&cbMaxLength);
+                                        pCpuBuf->SetCurrentLength(cbMaxLength);
+                                        pCpuSample->AddBuffer(pCpuBuf);
+                                        pCpuSample->SetSampleTime(sampleTime);
+                                        pCpuSample->SetSampleDuration(333333);
+                                        hr = pEncoder->ProcessInput(0, pCpuSample, 0);
+                                    }
+                                    if (pCpuBuf) pCpuBuf->Release();
+                                    if (pCpuSample) pCpuSample->Release();
+                                    pCtx->Unmap(pStagingNv12, 0);
+                                }
+                            }
+                            pCtx->Release();
+                        }
+                        pDev->Release();
+                    }
+                    pGpuNv12->Release();
+                }
+                pDXGIBuf->Release();
+            }
+            pMediaBuf->Release();
+        }
+    }
     pNv12Sample->Release();
     if (FAILED(hr)) return false;
 
