@@ -5243,7 +5243,9 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
         size_t pos = dispName.find(L'#');
         if (pos != std::wstring::npos) dispName = dispName.substr(0, pos);
         SetWindowTextW(hEdit, dispName.c_str());
+        SendMessage(hEdit, EM_LIMITTEXT, 32, 0);
         SetFocus(hEdit);
+        SendMessage(hEdit, EM_LIMITTEXT, 24, 0);
         SendMessage(hEdit, EM_SETSEL, 0, -1);
         return 0;
     }
@@ -5252,6 +5254,7 @@ LRESULT CALLBACK ChangeNameProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lPara
             WCHAR buf[256] = {0};
             GetWindowTextW(hEdit, buf, 255);
             std::wstring newName = buf;
+            if (newName.length() > 24) newName.resize(24);
             std::wstring oldBaseName = g_username;
             size_t hashPos = oldBaseName.find(L'#');
             std::wstring oldTag = L"";
@@ -5789,6 +5792,7 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
         SendMessage(hChk, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hBtnOK, WM_SETFONT, (WPARAM)hFont, FALSE);
         SendMessage(hBtnCancel, WM_SETFONT, (WPARAM)hFont, FALSE);
+        SendMessage(hEdit, EM_LIMITTEXT, 32, 0);
         SetFocus(hEdit);
 
         g_hMoveRoomDlg = hWnd;
@@ -5806,6 +5810,7 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             std::vector<WCHAR> buf(len + 1);
             GetWindowText(hEdit, buf.data(), len + 1);
             g_moveBoxResult = buf.data();
+            if (g_moveBoxResult.length() > 32) g_moveBoxResult.resize(32);
             g_moveBoxPrivate = SendMessage(hChk, BM_GETCHECK, 0, 0) == BST_CHECKED;
             g_moveBoxOK = true;
             DestroyWindow(hWnd);
@@ -5869,7 +5874,12 @@ LRESULT CALLBACK MoveRoomProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             SetBkMode(hdc, TRANSPARENT);
             
             WCHAR text[256];
-            SendMessage(pdis->hwndItem, LB_GETTEXT, pdis->itemID, (LPARAM)text);
+            int textLen = (int)SendMessage(pdis->hwndItem, LB_GETTEXTLEN, pdis->itemID, 0);
+            std::vector<WCHAR> textBuf(max(1, textLen) + 1, 0);
+            if (textLen > 0) {
+                SendMessage(pdis->hwndItem, LB_GETTEXT, pdis->itemID, (LPARAM)textBuf.data());
+            }
+            wcsncpy_s(text, _countof(text), textBuf.data(), _TRUNCATE);
             rc.left += Scale(2);
             DrawTextW(hdc, text, -1, &rc, DT_SINGLELINE | DT_VCENTER | DT_NOPREFIX);
             
@@ -6301,7 +6311,9 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         msg = GetString(IDS_SYSMSG_ROOM_OVERFLOW);
                                     } else {
                                         wchar_t buf[256];
-                                        swprintf_s(buf, GetString(IDS_SYSMSG_ROOM_OVERFLOW_FMT).c_str(), origW.c_str(), newW.c_str());
+                                        wchar_t overflowBuf[2048] = {0};
+                                        _snwprintf_s(overflowBuf, _countof(overflowBuf), _TRUNCATE, GetString(IDS_SYSMSG_ROOM_OVERFLOW_FMT).c_str(), origW.c_str(), newW.c_str());
+                                        wcsncpy_s(buf, _countof(buf), overflowBuf, _TRUNCATE);
                                         msg = buf;
                                     }
                                     MsgData* pData = new MsgData();
@@ -6413,7 +6425,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     pData->user = L"";
                                     std::wstring dispMyName = g_username.substr(0, g_username.find(L'#'));
                                     wchar_t msgBuf[1024];
-                                    swprintf_s(msgBuf, GetString(IDS_ROOM_ENTER_FMT).c_str(), dispMyName.c_str(), g_currentRoom.c_str());
+                                    _snwprintf_s(msgBuf, _countof(msgBuf), _TRUNCATE, GetString(IDS_ROOM_ENTER_FMT).c_str(), dispMyName.c_str(), g_currentRoom.c_str());
                                     pData->msg = msgBuf;
                                     pData->b = false; pData->i = false; pData->u = false;
                                     pData->size = 9;
@@ -6452,7 +6464,10 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                     int count = (int)SendMessage(g_hUserList, LB_GETCOUNT, 0, 0);
                                     for (int i = count - 1; i >= 0; i--) {
                                         wchar_t buf[256] = {0};
-                                        SendMessage(g_hUserList, LB_GETTEXT, i, (LPARAM)buf);
+                                        int uLen = (int)SendMessage(g_hUserList, LB_GETTEXTLEN, i, 0);
+                                        if (uLen > 0 && uLen < 255) {
+                                            SendMessage(g_hUserList, LB_GETTEXT, i, (LPARAM)buf);
+                                        }
                                         std::wstring existingUid = buf;
                                         if (existingUid != wuid && g_userNames[existingUid] == wname) {
                                             SendMessage(g_hUserList, LB_DELETESTRING, i, 0);
@@ -6474,7 +6489,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         pData->user = L"";
                                         std::wstring dispWname = wname.substr(0, wname.find(L'#'));
                                         wchar_t msgBuf[1024];
-                                        swprintf_s(msgBuf, GetString(IDS_ROOM_ENTER_FMT).c_str(), dispWname.c_str(), g_currentRoom.c_str());
+                                        _snwprintf_s(msgBuf, _countof(msgBuf), _TRUNCATE, GetString(IDS_ROOM_ENTER_FMT).c_str(), dispWname.c_str(), g_currentRoom.c_str());
                                         pData->msg = msgBuf;
                                         pData->b = false; pData->i = false; pData->u = false;
                                         pData->size = 9;
@@ -6550,7 +6565,7 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                         pData->user = L"";
                                         std::wstring dispLeaveName = g_userNames[wuid].substr(0, g_userNames[wuid].find(L'#'));
                                         wchar_t msgBuf[1024];
-                                        swprintf_s(msgBuf, GetString(IDS_ROOM_LEAVE_FMT).c_str(), dispLeaveName.c_str(), g_currentRoom.c_str());
+                                        _snwprintf_s(msgBuf, _countof(msgBuf), _TRUNCATE, GetString(IDS_ROOM_LEAVE_FMT).c_str(), dispLeaveName.c_str(), g_currentRoom.c_str());
                                         pData->msg = msgBuf;
                                         pData->b = false; pData->i = false; pData->u = false;
                                         pData->size = 9;
@@ -6567,7 +6582,11 @@ DWORD WINAPI RecvThread(LPVOID param) {
                                 for (auto& item : arr) {
                                     std::string name = item["name"].string_value();
                                     int count = item["count"].int_value();
-                                    g_publicRooms[a2w(name.c_str())] = count;
+                                    std::wstring wRoomName = SanitizeText(a2w(name.c_str()));
+                                    if (wRoomName.length() > 32) wRoomName.resize(32);
+                                    if (!wRoomName.empty()) {
+                                        g_publicRooms[wRoomName] = count;
+                                    }
                                 }
                                 if (g_hMoveRoomDlg && IsWindow(g_hMoveRoomDlg)) {
                                     PostMessage(g_hMoveRoomDlg, WM_USER_ROOM_LIST_UPDATED, 0, 0);
@@ -9128,7 +9147,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             SetWindowOrgEx(hdc, rc.left, rc.top, NULL);
             
             WCHAR szText[256] = {0};
-            SendMessage(lpdis->hwndItem, LB_GETTEXT, lpdis->itemID, (LPARAM)szText);
+            int itemLen = (int)SendMessage(lpdis->hwndItem, LB_GETTEXTLEN, lpdis->itemID, 0);
+            if (itemLen > 0 && itemLen < 255) {
+                SendMessage(lpdis->hwndItem, LB_GETTEXT, lpdis->itemID, (LPARAM)szText);
+            }
             std::wstring user(szText); // This is the userId
 
             std::wstring displayUser = user;
@@ -9717,7 +9739,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 MsgData sysMsg;
                 sysMsg.user = L"";
                 WCHAR moveBuf[512];
-                swprintf_s(moveBuf, GetString(IDS_MOVED_TO).c_str(), g_currentRoom.c_str());
+                _snwprintf_s(moveBuf, _countof(moveBuf), _TRUNCATE, GetString(IDS_MOVED_TO).c_str(), g_currentRoom.c_str());
                 sysMsg.msg = moveBuf;
                 sysMsg.b = false; sysMsg.i = false; sysMsg.u = false;
                 sysMsg.size = 9; sysMsg.color = RGB(128,128,128);
@@ -9763,7 +9785,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             AppendLog(sysMsg);
             
             wchar_t moveBuf[1024];
-            swprintf_s(moveBuf, GetString(IDS_MOVED_TO).c_str(), g_currentRoom.c_str());
+            _snwprintf_s(moveBuf, _countof(moveBuf), _TRUNCATE, GetString(IDS_MOVED_TO).c_str(), g_currentRoom.c_str());
             sysMsg.msg = moveBuf;
             AppendLog(sysMsg);
         } else {

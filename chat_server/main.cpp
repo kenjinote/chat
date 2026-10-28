@@ -91,6 +91,58 @@ bool isValidText(const std::string& utf8str) {
     return true;
 }
 
+std::string truncateUtf8SingleLine(const std::string& utf8str, size_t maxCodepoints, size_t maxBytes) {
+    std::string out;
+    out.reserve(std::min(utf8str.size(), maxBytes));
+    size_t i = 0;
+    size_t codepoints = 0;
+    while (i < utf8str.size() && codepoints < maxCodepoints) {
+        unsigned char c = static_cast<unsigned char>(utf8str[i]);
+        size_t bytes = 1;
+        if (c <= 0x7F) {
+            bytes = 1;
+        } else if ((c & 0xE0) == 0xC0) {
+            if (i + 1 >= utf8str.size()) break;
+            bytes = 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            if (i + 2 >= utf8str.size()) break;
+            bytes = 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            if (i + 3 >= utf8str.size()) break;
+            bytes = 4;
+        } else {
+            i++;
+            continue;
+        }
+        if (bytes == 1 && (c < 0x20 || c == 0x7F)) {
+            i++;
+            continue;
+        }
+        if (out.size() + bytes > maxBytes) break;
+        out.append(utf8str, i, bytes);
+        i += bytes;
+        codepoints++;
+    }
+    return out;
+}
+
+std::string sanitizeUserName(const std::string& rawName, const std::string& fallbackId) {
+    std::string clean = truncateUtf8SingleLine(rawName, 32, 96);
+    if (clean.empty() || !isValidText(clean)) return fallbackId;
+    return clean;
+}
+
+std::string sanitizeRoomName(const std::string& rawRoom, bool isPublic) {
+    if (!isPublic || rawRoom.rfind("private_", 0) == 0) {
+        std::string clean = truncateUtf8SingleLine(rawRoom, 80, 80);
+        if (clean.empty() || !isValidText(clean)) return "Public";
+        return clean;
+    }
+    std::string clean = truncateUtf8SingleLine(rawRoom, 32, 96);
+    if (clean.empty() || !isValidText(clean)) return "Public";
+    return clean;
+}
+
 using asio::ip::udp;
 
 #pragma pack(push, 1)
@@ -490,14 +542,16 @@ private:
                 } catch (...) {}
             }
 
+            bool isPubReq = true;
+            if (json["pub"].is_bool()) {
+                isPubReq = json["pub"].bool_value();
+            }
             {
                 std::lock_guard<std::mutex> lock(m_stateMutex);
-                m_userName = json["userName"].string_value();
-                if (m_userName.empty() || !isValidText(m_userName)) m_userName = m_userId; // fallback
+                m_userName = sanitizeUserName(json["userName"].string_value(), m_userId);
                 m_nclr = json["nclr"].int_value();
             }
-            std::string originalRoomName = json["roomName"].string_value();
-            if (originalRoomName.empty()) originalRoomName = "Public";
+            std::string originalRoomName = sanitizeRoomName(json["roomName"].string_value(), isPubReq);
 
             if (ServerManager::get().getRedis()) {
                 try {
@@ -714,10 +768,7 @@ private:
                 m_room->deliver(json11::Json(chatObj).dump() + "\n", shared_from_this());
             }
         } else if (type == "rename") {
-            std::string newName = json["userName"].string_value();
-            if (newName.empty() || !isValidText(newName)) {
-                newName = m_userId; // fallback or ignore? Let's just fallback.
-            }
+            std::string newName = sanitizeUserName(json["userName"].string_value(), m_userId);
             {
                 std::lock_guard<std::mutex> lock(m_stateMutex);
                 m_userName = newName;
@@ -878,6 +929,13 @@ void ServerManager::doTimer() {
                         auto val = m_redis->get(key);
                         if (val) {
                             std::string roomName = key.substr(11); // remove "room_count:"
+                            if (roomName.empty() || roomName.length() > 96 || !isValidText(roomName)) {
+                                try {
+                                    m_redis->del(key);
+                                    m_redis->del("room_owner:" + roomName);
+                                } catch (...) {}
+                                continue;
+                            }
                             rmArray.push_back(json11::Json::object {
                                 {"name", roomName},
                                 {"count", std::stoi(*val)}
@@ -928,6 +986,13 @@ void ServerManager::sendRoomListTo(std::shared_ptr<ChatSession> session) {
                     auto val = m_redis->get(key);
                     if (val) {
                         std::string roomName = key.substr(11);
+                        if (roomName.empty() || roomName.length() > 96 || !isValidText(roomName)) {
+                            try {
+                                m_redis->del(key);
+                                m_redis->del("room_owner:" + roomName);
+                            } catch (...) {}
+                            continue;
+                        }
                         rmArray.push_back(json11::Json::object {
                             {"name", roomName},
                             {"count", std::stoi(*val)}
