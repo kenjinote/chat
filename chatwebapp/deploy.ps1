@@ -3,10 +3,19 @@ param(
     [switch]$backendOnly
 )
 
-$remoteUser = "azureuser"
-$remoteHost = "0.0.0.0"
-$remoteDistPath = "/home/azureuser/dist"
-$remoteServerPath = "/home/azureuser/server"
+$EnvFile = Join-Path $PSScriptRoot "..\tools\.env.store"
+if (Test-Path $EnvFile) {
+    Get-Content $EnvFile | ForEach-Object {
+        if ($_ -match "^\s*([^#][^=]+)=(.*)$") {
+            [System.Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), "Process")
+        }
+    }
+}
+
+$remoteUser = if ($env:WEBAPP_DEPLOY_USER) { $env:WEBAPP_DEPLOY_USER } else { "azureuser" }
+$remoteHost = if ($env:WEBAPP_DEPLOY_HOST) { $env:WEBAPP_DEPLOY_HOST } else { "0.0.0.0" }
+$remoteDistPath = "/home/${remoteUser}/dist"
+$remoteServerPath = "/home/${remoteUser}/server"
 
 Write-Host "Starting deployment to $remoteHost..." -ForegroundColor Cyan
 

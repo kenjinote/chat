@@ -27,7 +27,6 @@ def count_all_rooms():
             decode_responses=True
         )
         
-        # 'room_owner:*' は公開・非公開問わず全てのルームでセットされるキーです
         keys = r.keys('room_owner:*')
         
         print("=== 現在のルーム状況 ===")

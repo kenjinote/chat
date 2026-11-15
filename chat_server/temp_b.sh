@@ -1,1 +1,0 @@
-sudo docker pull your-registry.azurecr.io/chat-server:latest; sudo docker stop $(sudo docker ps -q); sudo docker rm $(sudo docker ps -aq); sudo docker run -d --net host --restart always your-registry.azurecr.io/chat-server:latest ./chat_server chat-vm-b-2026.japaneast.cloudapp.azure.com:4000 tcp://your-redis-host.example.com:6379
